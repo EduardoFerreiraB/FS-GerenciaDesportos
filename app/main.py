@@ -6,6 +6,8 @@ import models
 from routers import modalidades
 from routers import professores
 from routers import turmas
+from routers import alunos
+from routers import matriculas
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -17,6 +19,8 @@ app = FastAPI(
 app.include_router(modalidades.router)
 app.include_router(professores.router)
 app.include_router(turmas.router)
+app.include_router(alunos.router)
+app.include_router(matriculas.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():

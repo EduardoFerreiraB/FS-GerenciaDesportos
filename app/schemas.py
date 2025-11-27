@@ -80,7 +80,7 @@ class Turma(TurmaBase):
         from_attributes = True
 
 class AlunoBase(BaseModel):
-    nome_completo: str = Field(..., max_length=200)
+    nome_completo: str = Field(..., max_length=500)
     data_nascimento: date
     escola: Optional[str] = Field(None, max_length=100)
     serie_ano: Optional[str] = None
@@ -92,7 +92,7 @@ class AlunoBase(BaseModel):
     recomendacoes_medicas: Optional[str] = None
 
 class AlunoCreate(AlunoBase):
-    pass
+    id_turma: int
 
 class Aluno(AlunoBase):
     id_aluno: int

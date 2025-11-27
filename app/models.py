@@ -88,7 +88,7 @@ class Aluno(Base):
     telefone_1 = Column(String(20), nullable=False)
     telefone_2 = Column(String(20), nullable=True)
     endereco = Column(Text, nullable=False)
-    recomeendacoes_medicas = Column(Text, nullable=False)
+    recomendacoes_medicas = Column(Text, nullable=False)
     participante = relationship("Participante", back_populates="aluno")
     matriculas = relationship("Matricula", back_populates="aluno")
 
