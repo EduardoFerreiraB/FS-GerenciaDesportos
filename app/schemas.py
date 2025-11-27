@@ -18,6 +18,15 @@ class statusPresencaEnum(str, Enum):
     Ausente = "Ausente",
     Justificado = "Justificado" 
 
+class DiaSemanaEnum(str, Enum):
+    SEG = "SEG",
+    TER = "TER",
+    QUA = "QUA",
+    QUI = "QUI",
+    SEX = "SEX",
+    SAB = "SAB",
+    DOM = "DOM"
+
 class ModalidadeBase(BaseModel):
     nome: str = Field(..., max_length=100)
     descricao: Optional[str] = Field(None, max_length=500)
@@ -64,7 +73,7 @@ class TurmaBase(BaseModel):
     categoria_idade: str = Field(..., max_length=50)
     horario_inicio: time
     horario_fim: time
-    dias_semana: str = Field(..., max_length=200)
+    dias_semana: List[DiaSemanaEnum] = []
     id_modalidade: int
     id_professor: int
 
@@ -73,6 +82,7 @@ class TurmaCreate(TurmaBase):
 
 class Turma(TurmaBase):
     id_turma: int
+    dias_semana: str | List[DiaSemanaEnum]
     modalidade: Modalidade
     professor: Professor
 
