@@ -147,3 +147,31 @@ class Presenca(PresencaBase):
 
     class Config:
         from_attributes = True
+
+class LocalBase(BaseModel):
+    loca_nome: str = Field(..., max_length=200)
+    loca_descricao: Optional[str] = None
+    ativo: bool = True
+
+class LocalCreate(LocalBase):
+    pass
+
+class Local(LocalBase):
+    id_local: int
+
+    class Config:
+        from_attributes = True
+    
+class ArbitroBase(BaseModel):
+    apito_nome: str
+    apito_doc: Optional[str] = None
+    apito_tel: Optional[str] = None
+
+class ArbitroCreate(ArbitroBase):
+    pass
+
+class Arbitro(ArbitroBase):
+    id_arbitro: int
+    
+    class Config:
+        from_attributes = True

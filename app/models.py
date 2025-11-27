@@ -114,3 +114,19 @@ class Presenca(Base):
     status = Column(Enum("Presente", "Ausente", "Justificado"), default="Presente")
 
     matricula = relationship("Matricula", back_populates="presencas")
+
+class Local(Base):
+    __tablename__ = "locais"
+
+    id_local = Column(Integer, primary_key=True, index=True)
+    loca_nome = Column(String(200), nullable=False)
+    loca_descricao = Column(Text, nullable=True)
+    ativo = Column(Boolean, default=True)
+
+class Arbitro(Base):
+    __tablename__ = "arbitros"
+
+    id_arbitro = Column(Integer, primary_key=True, index=True)
+    apito_nome = Column(String(200), nullable=False)
+    apito_doc = Column(String(100), nullable=False)
+    apito_tel = Column(String(20), nullable=False)
