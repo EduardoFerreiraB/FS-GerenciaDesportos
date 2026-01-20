@@ -13,18 +13,21 @@ def listar_professor_cpf(db: Session, cpf: str):
     return db.query(models.Professor).filter(models.Professor.cpf == cpf).first()
 
 def criar_professor(db: Session, professor: schemas.ProfessorCreate):
-    senha_plana = professor.cpf[6:] if len(professor.cpf) >= 6 else "mudar123"
-
+    # Usa a senha fornecida pelo usuário
+    senha_plana = professor.password
+    
+    # Hash da senha
     senha_hash = security.get_password_hash(senha_plana)
 
+    # Cria o usuário com o username escolhido
     db_usuario = models.Usuario(
-        username=professor.cpf,
+        username=professor.username,
         password_hash=senha_hash,
         role="professor"
     )
 
     db.add(db_usuario)
-    db.flush()
+    db.flush() # Para gerar o id_usuario
 
     db_professor = models.Professor(
         nome=professor.nome,
@@ -37,17 +40,19 @@ def criar_professor(db: Session, professor: schemas.ProfessorCreate):
     db.commit()
     db.refresh(db_professor)
 
-    db_professor.senha_temporaria = senha_plana
+    # Retorna o objeto (senha_temporaria não é mais usada neste fluxo manual, mas mantemos compatibilidade)
+    db_professor.senha_temporaria = "" 
     return db_professor
 
-def atualizar_professor(db: Session, id_professor: int, professor_atualizado: schemas.ProfessorCreate):
+def atualizar_professor(db: Session, id_professor: int, professor_atualizado: schemas.ProfessorUpdate):
     db_professor = listar_professor(db=db, id_professor=id_professor)
     if not db_professor:
         return None
     
-    db_professor.nome = professor_atualizado.nome
-    db_professor.cpf = professor_atualizado.cpf
-    db_professor.contato = professor_atualizado.contato
+    dados = professor_atualizado.model_dump(exclude_unset=True)
+
+    for key, value in dados.items():
+        setattr(db_professor, key, value)
 
     db.commit()
     db.refresh(db_professor)
