@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gerencia_esporte_api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persistência do Banco de Dados SQLite
+      - ./gerencia_esporte.db:/app/gerencia_esporte.db
+      # Persistência dos Uploads
+      - ./uploads:/app/uploads
+    environment:
+      - DATABASE_URL=sqlite:///./gerencia_esporte.db
+      # - SECRET_KEY=sua_chave_secreta_aqui (defina em produção)
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gerencia_esporte_front
+    ports:
+      - "3000:3000"
+    environment:
+      # URL da API acessível pelo NAVEGADOR do usuário
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
