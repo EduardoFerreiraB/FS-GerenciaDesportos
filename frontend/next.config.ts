@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  output: "standalone",
+  // output: "standalone", // Comentado para deploy na Vercel
   eslint: {
     // Ignora erros de lint no build de produção para não travar o deploy por detalhes
     ignoreDuringBuilds: true,
