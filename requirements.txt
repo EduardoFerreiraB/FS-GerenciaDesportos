@@ -23,3 +23,8 @@ uvicorn==0.38.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==15.0.1
+pymysql==1.1.1
+cryptography==42.0.5
+python-multipart==0.0.9
+python-jose[cryptography]==3.3.0
+bcrypt==4.1.2
