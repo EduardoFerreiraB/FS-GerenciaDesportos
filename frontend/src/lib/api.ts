@@ -7,15 +7,18 @@ const api = axios.create({
   baseURL: apiURL,
 });
 
-// Interceptor para adicionar o token em todas as requisições se existir
-if (typeof window !== 'undefined') {
-  api.interceptors.request.use((config) => {
+// Interceptor para adicionar o token em todas as requisições
+api.interceptors.request.use((config) => {
+  // Sempre tenta pegar o token mais recente antes de qualquer request
+  if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    return config;
-  });
-}
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
 
 export default api;

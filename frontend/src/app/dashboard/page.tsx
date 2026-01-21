@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Users, 
@@ -29,14 +29,11 @@ const fetcher = (url: string) => api.get(url).then(res => res.data);
 const COLORS = ['#3072F0', '#0EA5E9', '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981'];
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const { user, isLoading: authLoading } = useAuth();
   
-  const shouldFetch = !!user;
+  // Só dispara as requisições se a autenticação já terminou
+  // Se user existir, dispara. Se não, espera (null).
+  const shouldFetch = !authLoading && !!user;
 
   const { data: alunos } = useSWR(shouldFetch ? '/alunos/' : null, fetcher);
   const { data: turmas } = useSWR(shouldFetch ? '/turmas/' : null, fetcher);
@@ -51,7 +48,6 @@ export default function DashboardPage() {
 
   const recentAlunos = alunos ? [...alunos].slice(-5).reverse() : [];
 
-  // Lógica do Gráfico
   const alunosPorModalidade: Record<string, number> = {};
 
   if (matriculas && matriculas.length > 0 && turmas && modalidades) {
@@ -137,36 +133,30 @@ export default function DashboardPage() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <h2 className="text-lg font-bold text-slate-800 mb-4">Alunos por Modalidade</h2>
           <div className="h-[250px] w-full" style={{ minHeight: '250px' }}>
-            {mounted ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={showChart ? dataGrafico : dataPlaceholder}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {showChart ? (
-                      dataGrafico.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))
-                    ) : (
-                      <Cell fill="#e2e8f0" />
-                    )}
-                  </Pie>
-                  <Tooltip />
-                  {showChart && <Legend verticalAlign="bottom" height={36}/>}
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-slate-300">
-                Carregando gráfico...
-              </div>
-            )}
-            {!showChart && mounted && (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={showChart ? dataGrafico : dataPlaceholder}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {showChart ? (
+                    dataGrafico.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))
+                  ) : (
+                    <Cell fill="#e2e8f0" />
+                  )}
+                </Pie>
+                <Tooltip />
+                {showChart && <Legend verticalAlign="bottom" height={36}/>}
+              </PieChart>
+            </ResponsiveContainer>
+            {!showChart && (
                 <p className="text-center text-xs text-slate-400 mt-2">Nenhuma matrícula registrada.</p>
             )}
           </div>
@@ -228,8 +218,12 @@ function KpiCard({ title, value, icon: Icon, color }: any) {
 
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group hover:shadow-md transition-all duration-300">
+      {/* Mancha arredondada (Blob) que invade o card - Agora com cor mais sólida */}
       <div className={`absolute -top-6 -right-6 w-24 h-24 ${blobColor} opacity-70 rounded-full transition-transform duration-500 group-hover:scale-150 group-hover:rotate-12 group-hover:opacity-100`} />
+      
+      {/* Detalhe extra de acento no topo */}
       <div className={`absolute top-0 right-0 w-16 h-1 ${color.split(' ')[1].replace('text', 'bg')} opacity-40`} />
+
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative z-10 ${color}`}>
         <Icon size={24} />
       </div>
@@ -243,9 +237,7 @@ function KpiCard({ title, value, icon: Icon, color }: any) {
 
 function ActionButton({ title, desc, icon: Icon }: any) {
   return (
-    <button 
-      className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 hover:border-primary/30 hover:bg-blue-50/50 transition-all text-left group w-full h-full"
-    >
+    <button className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 hover:border-primary/30 hover:bg-blue-50/50 transition-all text-left group w-full h-full">
       <div className="bg-blue-50 text-primary p-3 rounded-lg group-hover:bg-primary group-hover:text-white transition-colors">
         <Icon size={24} />
       </div>

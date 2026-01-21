@@ -30,14 +30,21 @@ export default function DetalhesTurmaPage() {
   const id = params.id;
   const [activeTab, setActiveTab] = useState<'alunos' | 'frequencia'>('alunos');
   
-  const { data: turma, error, isLoading } = useSWR(id ? `/turmas/${id}` : null, fetcher);
+  // Fetch da Turma
+  const { data: turma, error: errorTurma, isLoading: loadingTurma } = useSWR(id ? `/turmas/${id}` : null, fetcher);
+  
+  // Fetch das Matrículas desta turma (Correção do Bug)
+  const { data: matriculas, error: errorMatriculas, isLoading: loadingMatriculas } = useSWR(
+    id ? `/matriculas/?turma_id=${id}` : null, 
+    fetcher
+  );
   
   // Estado da Chamada
   const [chamada, setChamada] = useState<Record<number, 'P' | 'A' | null>>({});
   const [dataChamada, setDataChamada] = useState(new Date().toISOString().split('T')[0]);
 
-  // Extrair alunos das matrículas (assumindo que a API retorna turma.matriculas[].aluno)
-  const alunos = turma?.matriculas?.map((m: any) => m.aluno) || [];
+  // Extrair alunos das matrículas buscadas separadamente
+  const alunos = matriculas?.map((m: any) => m.aluno) || [];
 
   const handlePresenca = (alunoId: number, status: 'P' | 'A') => {
     setChamada(prev => ({
@@ -56,8 +63,6 @@ export default function DetalhesTurmaPage() {
 
   const saveChamada = async () => {
     try {
-      // Implementar chamada à API de Presenças aqui
-      // await api.post('/presencas/lote', { data: dataChamada, id_turma: id, presencas: chamada });
       console.log({ data: dataChamada, chamada });
       alert('Frequência salva com sucesso! (Simulado)');
     } catch (error) {
@@ -65,7 +70,7 @@ export default function DetalhesTurmaPage() {
     }
   };
 
-  if (isLoading) {
+  if (loadingTurma) {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
         <Loader2 size={48} className="animate-spin mb-4 text-indigo-600" />
@@ -74,7 +79,7 @@ export default function DetalhesTurmaPage() {
     );
   }
 
-  if (error) {
+  if (errorTurma) {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] text-red-500">
         <AlertTriangle size={48} className="mb-4" />
@@ -98,9 +103,9 @@ export default function DetalhesTurmaPage() {
         </button>
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-            {turma.descricao || `Turma #${turma.id_turma}`}
+            {turma?.descricao || `Turma #${turma?.id_turma}`}
             <span className="text-sm font-bold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
-              {turma.categoria_idade}
+              {turma?.categoria_idade}
             </span>
           </h1>
           <p className="text-slate-500">Detalhes e gestão da turma.</p>
@@ -117,14 +122,14 @@ export default function DetalhesTurmaPage() {
               Informações
             </h2>
             <div className="space-y-4">
-              <InfoItem label="Modalidade" value={turma.modalidade?.nome} />
-              <InfoItem label="Professor" value={turma.professor?.nome} icon={User} />
-              <InfoItem label="Dias" value={turma.dias_semana} icon={Calendar} />
-              <InfoItem label="Horário" value={`${turma.horario_inicio} - ${turma.horario_fim}`} icon={Clock} />
+              <InfoItem label="Modalidade" value={turma?.modalidade?.nome} />
+              <InfoItem label="Professor" value={turma?.professor?.nome} icon={User} />
+              <InfoItem label="Dias" value={turma?.dias_semana} icon={Calendar} />
+              <InfoItem label="Horário" value={`${turma?.horario_inicio} - ${turma?.horario_fim}`} icon={Clock} />
               
               <div className="pt-4 border-t border-slate-100">
                 <p className="text-sm text-slate-500 leading-relaxed">
-                  {turma.descricao}
+                  {turma?.descricao}
                 </p>
               </div>
             </div>
@@ -177,29 +182,34 @@ export default function DetalhesTurmaPage() {
                 <h2 className="font-bold text-slate-800 flex items-center gap-2">
                   Lista de Matriculados
                   <span className="ml-2 text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
-                    {alunos.length}
+                    {loadingMatriculas ? '...' : alunos.length}
                   </span>
                 </h2>
-                {/* Botão de Add Aluno removido aqui pois temos a tela de Matrículas dedicada */}
               </div>
               <div className="divide-y divide-slate-100">
-                {alunos.map((aluno: any) => (
-                  <div key={aluno.id_aluno} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
-                        {aluno.nome_completo.charAt(0)}
-                      </div>
-                      <span className="font-medium text-slate-700">{aluno.nome_completo}</span>
-                    </div>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                      Matriculado
-                    </span>
-                  </div>
-                ))}
-                {alunos.length === 0 && (
-                  <div className="p-8 text-center text-slate-400 italic">
-                    Nenhum aluno matriculado. Vá em Matrículas para adicionar.
-                  </div>
+                {loadingMatriculas ? (
+                    <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>
+                ) : (
+                    <>
+                        {alunos.map((aluno: any) => (
+                        <div key={aluno.id_aluno} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                            <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                                {aluno.nome_completo.charAt(0)}
+                            </div>
+                            <span className="font-medium text-slate-700">{aluno.nome_completo}</span>
+                            </div>
+                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                            Matriculado
+                            </span>
+                        </div>
+                        ))}
+                        {alunos.length === 0 && (
+                        <div className="p-8 text-center text-slate-400 italic">
+                            Nenhum aluno matriculado nesta turma.
+                        </div>
+                        )}
+                    </>
                 )}
               </div>
             </div>
@@ -233,63 +243,69 @@ export default function DetalhesTurmaPage() {
 
               {/* Lista de Chamada */}
               <div className="p-4 space-y-3">
-                {alunos.map((aluno: any) => {
-                  const status = chamada[aluno.id_aluno];
-                  const cardBg = status === 'P' ? 'bg-emerald-50 border-emerald-200' : 
-                                 status === 'A' ? 'bg-red-50 border-red-200' : 
-                                 'bg-white border-slate-100 hover:border-slate-300';
+                {loadingMatriculas ? (
+                    <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>
+                ) : (
+                    <>
+                        {alunos.map((aluno: any) => {
+                        const status = chamada[aluno.id_aluno];
+                        const cardBg = status === 'P' ? 'bg-emerald-50 border-emerald-200' : 
+                                        status === 'A' ? 'bg-red-50 border-red-200' : 
+                                        'bg-white border-slate-100 hover:border-slate-300';
 
-                  return (
-                    <div 
-                      key={aluno.id_aluno} 
-                      className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${cardBg}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${
-                          status === 'P' ? 'bg-emerald-200 text-emerald-700' :
-                          status === 'A' ? 'bg-red-200 text-red-700' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {aluno.nome_completo.charAt(0)}
-                        </div>
-                        <span className={`font-medium transition-colors ${
-                          status === 'P' ? 'text-emerald-900' :
-                          status === 'A' ? 'text-red-900' :
-                          'text-slate-700'
-                        }`}>
-                          {aluno.nome_completo}
-                        </span>
-                      </div>
+                        return (
+                            <div 
+                            key={aluno.id_aluno} 
+                            className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${cardBg}`}
+                            >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${
+                                status === 'P' ? 'bg-emerald-200 text-emerald-700' :
+                                status === 'A' ? 'bg-red-200 text-red-700' :
+                                'bg-slate-100 text-slate-500'
+                                }`}>
+                                {aluno.nome_completo.charAt(0)}
+                                </div>
+                                <span className={`font-medium transition-colors ${
+                                status === 'P' ? 'text-emerald-900' :
+                                status === 'A' ? 'text-red-900' :
+                                'text-slate-700'
+                                }`}>
+                                {aluno.nome_completo}
+                                </span>
+                            </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handlePresenca(aluno.id_aluno, 'P')}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                            status === 'P' 
-                              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200 scale-105' 
-                              : 'bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200'
-                          }`}
-                        >
-                          <CheckCircle size={16} />
-                          Presente
-                        </button>
-                        <button
-                          onClick={() => handlePresenca(aluno.id_aluno, 'A')}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                            status === 'A' 
-                              ? 'bg-red-500 text-white shadow-md shadow-red-200 scale-105' 
-                              : 'bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200'
-                          }`}
-                        >
-                          <XCircle size={16} />
-                          Ausente
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {alunos.length === 0 && (
-                  <p className="text-center text-slate-400 py-4 italic">Sem alunos para chamada.</p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                onClick={() => handlePresenca(aluno.id_aluno, 'P')}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                                    status === 'P' 
+                                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200 scale-105' 
+                                    : 'bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200'
+                                }`}
+                                >
+                                <CheckCircle size={16} />
+                                Presente
+                                </button>
+                                <button
+                                onClick={() => handlePresenca(aluno.id_aluno, 'A')}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                                    status === 'A' 
+                                    ? 'bg-red-500 text-white shadow-md shadow-red-200 scale-105' 
+                                    : 'bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200'
+                                }`}
+                                >
+                                <XCircle size={16} />
+                                Ausente
+                                </button>
+                            </div>
+                            </div>
+                        );
+                        })}
+                        {alunos.length === 0 && (
+                        <p className="text-center text-slate-400 py-4 italic">Sem alunos para chamada.</p>
+                        )}
+                    </>
                 )}
               </div>
 
