@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
 import schemas
+import models
 from services import alunos as servico_alunos
 from services import turmas as servico_turmas
 from services import matriculas as servico_matriculas
+from security import check_coordenador_role, get_current_active_user
 
 router = APIRouter(
     prefix="/matriculas",
@@ -13,7 +15,11 @@ router = APIRouter(
 )
 
 @router.post("/", summary="Criar uma nova matrícula", response_model=schemas.Matricula, status_code=status.HTTP_201_CREATED)
-def realizar_matricula(matricula: schemas.MatriculaCreate, db: Session = Depends(get_db)):
+def realizar_matricula(
+    matricula: schemas.MatriculaCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role)
+):
     aluno = servico_alunos.listar_aluno(db=db, id_aluno=matricula.id_aluno)
     
     if not aluno:
@@ -33,7 +39,44 @@ def realizar_matricula(matricula: schemas.MatriculaCreate, db: Session = Depends
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 @router.get("/", summary="Listar todas as matrículas", response_model=List[schemas.Matricula], status_code=status.HTTP_200_OK)
-def listar_matriculas(skip: int = 0, limit: int = 100, turma_id: Optional[int] = None, aluno_id: Optional[int] = None, db: Session = Depends(get_db)):
+def listar_matriculas(
+    skip: int = 0, 
+    limit: int = 100, 
+    turma_id: Optional[int] = None, 
+    aluno_id: Optional[int] = None, 
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_active_user)
+):
+    # Se for professor, deve ver apenas matrículas das SUAS turmas
+    if current_user.role == "professor":
+        if not current_user.professores:
+            return []
+        
+        # Pega IDs das turmas do professor
+        ids_turmas_prof = [t.id_turma for t in servico_turmas.listar_turmas_professor(db=db, id_professor=current_user.professores.id_professor)]
+        
+        # Se foi passado um turma_id específico, verifica se ele pertence ao professor
+        if turma_id:
+            if turma_id not in ids_turmas_prof:
+                raise HTTPException(status_code=403, detail="Acesso negado: Essa turma não é sua.")
+        
+        # Busca todas as matrículas
+        todas_matriculas = []
+        if turma_id:
+            todas_matriculas = servico_matriculas.listar_matriculas_turma(db=db, id_turma=turma_id)
+        elif aluno_id:
+            # Se buscar por aluno, filtra para mostrar apenas as matrículas desse aluno NAS TURMAS DO PROFESSOR
+            matriculas_aluno = servico_matriculas.listar_matriculas_aluno(db=db, id_aluno=aluno_id)
+            todas_matriculas = [m for m in matriculas_aluno if m.id_turma in ids_turmas_prof]
+        else:
+            # Lista geral (cuidado com performance aqui se tiver muita coisa, mas pro MVP ok)
+            # O ideal seria um filtro no DB, mas vamos filtrar em memória por enquanto
+            raw_matriculas = servico_matriculas.listar_matriculas(db=db, skip=skip, limit=limit)
+            todas_matriculas = [m for m in raw_matriculas if m.id_turma in ids_turmas_prof]
+            
+        return todas_matriculas
+
+    # Admin/Coordenador segue o fluxo normal
     if turma_id:
         return servico_matriculas.listar_matriculas_turma(db=db, id_turma=turma_id)
     
@@ -43,7 +86,11 @@ def listar_matriculas(skip: int = 0, limit: int = 100, turma_id: Optional[int] =
     return servico_matriculas.listar_matriculas(db=db, skip=skip, limit=limit)
 
 @router.delete("/{id_matricula}", summary="Cancelar uma matrícula", status_code=status.HTTP_204_NO_CONTENT)
-def cancelar_matricula(id_matricula: int, db: Session = Depends(get_db)):
+def cancelar_matricula(
+    id_matricula: int, 
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role)
+):
     sucesso = servico_matriculas.cancelar_matricula(db=db, id_matricula=id_matricula)
 
     if not sucesso:

@@ -44,7 +44,7 @@ def listar_turmas_professor(db: Session, id_professor: int):
 def listar_turmas_modalidade(db: Session, id_modalidade: int):
     return db.query(models.Turma).filter(models.Turma.id_modalidade == id_modalidade).all()
 
-def atualizar_turma(db: Session, id_turma: int, turma_atualizada: schemas.TurmaCreate):
+def atualizar_turma(db: Session, id_turma: int, turma_atualizada: schemas.TurmaUpdate):
     db_turma = listar_turma_id(db, id_turma)
 
     if not db_turma:

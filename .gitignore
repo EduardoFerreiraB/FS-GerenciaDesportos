@@ -1,3 +1,25 @@
+# Ambiente e Configurações Locais
 .env
 .venv/
+venv/
+env/
 __pycache__/
+*.pyc
+
+# Banco de Dados Local
+*.db
+*.sqlite3
+
+# Uploads de Usuários
+uploads/
+
+# IDEs e Editores
+.vscode/
+.idea/
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

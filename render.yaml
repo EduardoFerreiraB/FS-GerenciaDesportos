@@ -1,0 +1,17 @@
+services:
+  # Serviço do Backend (FastAPI)
+  - type: web
+    name: gerencia-esporte-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: DATABASE_URL
+        sync: false # Você deve preencher isso no dashboard do Render manualmente por segurança
+      - key: SECRET_KEY
+        generateValue: true # O Render gera uma chave segura pra você
+
+# (Opcional) Se quiser subir o front no Render também como site estático, 
+# mas a Vercel é melhor para Next.js.
