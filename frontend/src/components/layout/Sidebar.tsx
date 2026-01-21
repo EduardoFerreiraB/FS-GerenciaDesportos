@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Users, 
@@ -11,14 +11,15 @@ import {
   LogOut, 
   ClipboardList,
   UserCheck,
-  ShieldAlert
+  ShieldAlert,
+  Loader2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   
   const allMenuItems = [
     { 
@@ -57,7 +58,6 @@ export default function Sidebar() {
       href: '/dashboard/matriculas', 
       roles: ['admin', 'coordenador', 'assistente'] 
     },
-    // Novo item para Admins
     { 
       icon: ShieldAlert, 
       label: 'Usuários', 
@@ -66,7 +66,22 @@ export default function Sidebar() {
     },
   ];
 
-  // Filtra itens baseado na role do usuário
+  // Se ainda estiver carregando os dados do usuário, mostra um skeleton ou spinner na sidebar
+  if (isLoading) {
+    return (
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 z-10 p-6">
+         <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-slate-200 rounded w-3/4"></div>
+            <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+            <div className="mt-8 space-y-3">
+                {[1,2,3,4,5].map(i => <div key={i} className="h-10 bg-slate-100 rounded"></div>)}
+            </div>
+         </div>
+      </aside>
+    );
+  }
+
+  // Filtra itens baseado na role
   const menuItems = allMenuItems.filter(item => 
     user && item.roles.includes(user.role)
   );
@@ -117,8 +132,8 @@ export default function Sidebar() {
             {user?.username?.charAt(0) || '?'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-800 truncate">{user?.username || 'Carregando...'}</p>
-            <p className="text-xs text-slate-500 truncate capitalize">{user?.role || '...'}</p>
+            <p className="text-sm font-semibold text-slate-800 truncate">{user?.username || 'Usuário'}</p>
+            <p className="text-xs text-slate-500 truncate capitalize">{user?.role || 'Visitante'}</p>
           </div>
           <button 
             onClick={logout}

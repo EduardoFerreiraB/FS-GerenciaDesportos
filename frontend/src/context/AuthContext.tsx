@@ -22,20 +22,18 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Começa true para bloquear render inicial
   const router = useRouter();
   const pathname = usePathname();
 
-  // Verifica se estamos no browser antes de rodar lógica de auth
+  // Inicialização (F5 ou Load Inicial)
   useEffect(() => {
     const initAuth = async () => {
-      // Pequeno delay para garantir que o router esteja pronto
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       const token = localStorage.getItem('token');
       
       if (!token) {
         setIsLoading(false);
+        // Proteção de rota
         if (pathname.includes('/dashboard')) {
           router.push('/');
         }
@@ -48,31 +46,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await api.get('/users/me');
         setUser(response.data);
       } catch (error) {
-        console.error("Sessão inválida:", error);
-        logout();
+        console.error("Token inválido na inicialização:", error);
+        localStorage.removeItem('token');
+        setUser(null);
+        if (pathname.includes('/dashboard')) {
+          router.push('/');
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
     initAuth();
-  }, []); // Executa apenas uma vez na montagem
+  }, []);
 
+  // Login Manual (Formulário)
   const login = async (token: string) => {
-    setIsLoading(true);
+    setIsLoading(true); // Bloqueia a UI
     localStorage.setItem('token', token);
     api.defaults.headers.Authorization = `Bearer ${token}`;
     
     try {
+        // Busca o usuário ANTES de redirecionar
         const response = await api.get('/users/me');
+        
+        // Atualiza o estado
         setUser(response.data);
+        
+        // Pequeno delay ou verificação para garantir propagação? 
+        // Em teoria não precisa se usarmos isLoading corretamente nas páginas.
         router.push('/dashboard');
     } catch (error) {
-        console.error(error);
-        alert('Erro ao validar login.');
-        logout();
+        console.error("Erro no login:", error);
+        alert('Erro ao obter dados do usuário. Tente novamente.');
+        logout(); // Limpa tudo se falhar
     } finally {
-        setIsLoading(false);
+        setIsLoading(false); // Libera a UI
     }
   };
 
@@ -83,19 +92,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/');
   };
 
-  // Spinner de carregamento apenas para rotas protegidas
-  // Se estiver na home (login), não precisa bloquear tanto
-  if (isLoading && pathname.includes('/dashboard')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 size={48} className="animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, isLoading }}>
-      {children}
+      {/* Se estiver carregando E estivermos numa rota protegida, bloqueia tudo e mostra spinner global */}
+      {isLoading && pathname.includes('/dashboard') ? (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 size={48} className="animate-spin text-primary" />
+            <p className="text-slate-500 font-medium">Autenticando...</p>
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

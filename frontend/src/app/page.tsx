@@ -1,15 +1,13 @@
 'use client';
 
-
 import React, { useState } from 'react';
-
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const { login } = useAuth(); // Usa o hook de autenticação
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -25,12 +23,13 @@ export default function LoginPage() {
       formData.append('password', data.password);
 
       const response = await api.post('/token', formData);
+      const token = response.data.access_token;
+
+      // Chama o login do contexto e espera ele resolver (buscar usuário -> redirecionar)
+      await login(token);
       
-      localStorage.setItem('token', response.data.access_token);
-      router.push('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Usuário ou senha incorretos');
-    } finally {
       setIsLoading(false);
     }
   };
