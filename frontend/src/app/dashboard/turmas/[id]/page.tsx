@@ -30,20 +30,16 @@ export default function DetalhesTurmaPage() {
   const id = params.id;
   const [activeTab, setActiveTab] = useState<'alunos' | 'frequencia'>('alunos');
   
-  // Fetch da Turma
   const { data: turma, error: errorTurma, isLoading: loadingTurma } = useSWR(id ? `/turmas/${id}` : null, fetcher);
   
-  // Fetch das Matrículas desta turma (Correção do Bug)
   const { data: matriculas, error: errorMatriculas, isLoading: loadingMatriculas } = useSWR(
     id ? `/matriculas/?turma_id=${id}` : null, 
     fetcher
   );
   
-  // Estado da Chamada
   const [chamada, setChamada] = useState<Record<number, 'P' | 'A' | null>>({});
   const [dataChamada, setDataChamada] = useState(new Date().toISOString().split('T')[0]);
 
-  // Extrair alunos das matrículas buscadas separadamente
   const alunos = matriculas?.map((m: any) => m.aluno) || [];
 
   const handlePresenca = (alunoId: number, status: 'P' | 'A') => {

@@ -78,13 +78,12 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
     }
 
     try {
-      // Ajuste para bater com o Schema do Pydantic (TurmaCreate)
       const payload = {
         descricao: data.descricao,
         categoria_idade: data.categoria_idade,
-        horario_inicio: data.horario_inicio + ":00", // Garante formato HH:MM:SS se necessário
+        horario_inicio: data.horario_inicio + ":00",
         horario_fim: data.horario_fim + ":00",
-        dias_semana: selectedDias, // Envia o Array direto ['SEG', 'QUA']
+        dias_semana: selectedDias, 
         id_modalidade: parseInt(data.modalidade_id),
         id_professor: parseInt(data.professor_id)
       };
@@ -98,7 +97,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
       }
       router.push('/dashboard/turmas');
     } catch (error: any) {
-      console.error("Erro ao salvar:", error.response?.data); // Log detalhado para debug
+      console.error("Erro ao salvar:", error.response?.data); 
       alert(error.response?.data?.detail || 'Erro ao salvar turma.');
     }
   };

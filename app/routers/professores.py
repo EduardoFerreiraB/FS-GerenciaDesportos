@@ -40,7 +40,6 @@ def listar_professor(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Regra de acesso: Coordenador vê qualquer um, Professor só vê a si mesmo
     if current_user.role == "professor":
         if not current_user.professores or current_user.professores.id_professor != id_professor:
             raise HTTPException(status_code=403, detail="Acesso negado: Você só pode visualizar seu próprio perfil")
@@ -58,7 +57,6 @@ def atualizar_professor(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Regra de acesso: Coordenador edita qualquer um, Professor só edita a si mesmo
     if current_user.role == "professor":
         if not current_user.professores or current_user.professores.id_professor != id_professor:
             raise HTTPException(status_code=403, detail="Acesso negado: Você só pode editar seu próprio perfil")

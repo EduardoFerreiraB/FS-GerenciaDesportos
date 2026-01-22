@@ -14,7 +14,6 @@ router = APIRouter(
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Busca usuário pelo username
     user = db.query(models.Usuario).filter(models.Usuario.username == form_data.username).first()
     
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -51,7 +50,6 @@ def create_user(
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(check_admin_role)
 ):
-    # Verifica se usuário já existe
     db_user = db.query(models.Usuario).filter(models.Usuario.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Nome de usuário já cadastrado.")
@@ -78,7 +76,6 @@ def update_user_role(
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     
-    # Atualiza o papel
     db_user.role = role_data.role
     db.commit()
     db.refresh(db_user)

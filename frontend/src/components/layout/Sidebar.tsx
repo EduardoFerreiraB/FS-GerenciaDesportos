@@ -66,7 +66,6 @@ export default function Sidebar() {
     },
   ];
 
-  // Se ainda estiver carregando os dados do usuário, mostra um skeleton ou spinner na sidebar
   if (isLoading) {
     return (
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 z-10 p-6">
@@ -81,7 +80,6 @@ export default function Sidebar() {
     );
   }
 
-  // Filtra itens baseado na role
   const menuItems = allMenuItems.filter(item => 
     user && item.roles.includes(user.role)
   );

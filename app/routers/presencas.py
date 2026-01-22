@@ -20,12 +20,6 @@ def registrar_presenca(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Validar acesso: Se professor, verificar se a turma do aluno é dele?
-    # Isso exigiria uma query complexa aqui (buscar matricula -> turma -> professor).
-    # Por simplificação e eficiência, permitiremos que qualquer usuário ativo lance, 
-    # mas idealmente deveria validar. Vamos assumir que o frontend filtra correto.
-    # Mas para segurança, vamos ao menos checar se o usuário é professor/coord/admin
-    
     return servico_presencas.registrar_presenca(db=db, presenca=presenca)
 
 @router.post("/lote", summary="Registrar presenças em lote", response_model=List[schemas.Presenca], status_code=status.HTTP_201_CREATED)
@@ -51,9 +45,7 @@ def listar_presencas_turma_data(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Se professor, validar se a turma é dele
     if current_user.role == "professor":
-         # Pequena verificação de segurança
          turma = servico_turmas.listar_turma_id(db, id_turma)
          if not turma or (current_user.professores and turma.id_professor != current_user.professores.id_professor):
              raise HTTPException(status_code=403, detail="Acesso negado: Você só pode ver presenças das suas turmas.")

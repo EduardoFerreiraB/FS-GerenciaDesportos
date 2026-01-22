@@ -2,17 +2,14 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from datetime import date
-from sqlalchemy import and_
 
 def registrar_presenca(db: Session, presenca: schemas.PresencaCreate):
-    # Verifica se já existe presença lançada para essa matricula nesta data
     presenca_existente = db.query(models.Presenca).filter(
         models.Presenca.id_matricula == presenca.id_matricula,
         models.Presenca.data_aula == presenca.data_aula
     ).first()
 
     if presenca_existente:
-        # Atualiza se já existir
         presenca_existente.status = presenca.status
         presenca_existente.observacao = presenca.observacao
         db.commit()
@@ -31,7 +28,6 @@ def registrar_presenca(db: Session, presenca: schemas.PresencaCreate):
     return db_presenca
 
 def registrar_presenca_lote(db: Session, presencas: list[schemas.PresencaCreate]):
-    # Processa uma lista de presenças (útil para chamada da turma inteira)
     resultados = []
     for p in presencas:
         resultados.append(registrar_presenca(db, p))
@@ -41,7 +37,6 @@ def listar_presencas_matricula(db: Session, id_matricula: int):
     return db.query(models.Presenca).filter(models.Presenca.id_matricula == id_matricula).order_by(models.Presenca.data_aula.desc()).all()
 
 def listar_presencas_turma_data(db: Session, id_turma: int, data_aula: date):
-    # Retorna presenças de todos os alunos da turma numa data específica
     return db.query(models.Presenca).join(models.Matricula).filter(
         models.Matricula.id_turma == id_turma,
         models.Presenca.data_aula == data_aula

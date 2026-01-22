@@ -31,8 +31,6 @@ const COLORS = ['#3072F0', '#0EA5E9', '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B'
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   
-  // Só dispara as requisições se a autenticação já terminou
-  // Se user existir, dispara. Se não, espera (null).
   const shouldFetch = !authLoading && !!user;
 
   const { data: alunos } = useSWR(shouldFetch ? '/alunos/' : null, fetcher);

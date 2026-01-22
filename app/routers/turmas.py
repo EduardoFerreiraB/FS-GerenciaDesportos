@@ -40,13 +40,11 @@ def listar_turmas(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Se for professor, força o filtro pelo ID dele
     if current_user.role == "professor":
         if not current_user.professores:
-            return [] # Professor sem cadastro vinculado não vê turmas
+            return []
         return servico_turmas.listar_turmas_professor(db=db, id_professor=current_user.professores.id_professor)
     
-    # Admin/Coordenador vê tudo
     return servico_turmas.listar_turmas(db=db, skip=skip, limit=limit)
 
 @router.get("/{id_turma}", summary="Obter uma turma por ID", response_model=schemas.Turma, status_code=status.HTTP_200_OK)
@@ -59,7 +57,6 @@ def listar_turma(
     if not db_turma:
         raise HTTPException(status_code=404, detail="Turma não encontrada.")
 
-    # Se for professor, valida se a turma é dele
     if current_user.role == "professor":
         if not current_user.professores or db_turma.id_professor != current_user.professores.id_professor:
             raise HTTPException(status_code=403, detail="Acesso negado: Essa turma não pertence a você.")
@@ -74,7 +71,6 @@ def listar_turmas_professor(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Proteção: Professor só pode consultar seu próprio ID
     if current_user.role == "professor":
         if not current_user.professores or current_user.professores.id_professor != id_professor:
              raise HTTPException(status_code=403, detail="Acesso negado: Você só pode ver suas próprias turmas.")
@@ -93,12 +89,7 @@ def listar_turmas_modalidade(
     id_modalidade: int = None, 
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
-):
-    # Nota: Aqui deixamos aberto para professores consultarem modalidades, 
-    # mas poderíamos filtrar também para retornar apenas turmas DELE naquela modalidade.
-    # Por enquanto, vou manter o comportamento padrão de filtrar apenas pela modalidade,
-    # mas se for crítico, podemos iterar sobre o resultado e filtrar.
-    
+):    
     modalidade = servico_modalidades.listar_modalidade(db=db, id_modalidade=id_modalidade)
 
     if not modalidade:
@@ -106,7 +97,6 @@ def listar_turmas_modalidade(
     
     turmas = servico_turmas.listar_turmas_modalidade(db=db, id_modalidade=id_modalidade)
 
-    # Filtro adicional para professor
     if current_user.role == "professor" and current_user.professores:
         turmas = [t for t in turmas if t.id_professor == current_user.professores.id_professor]
 
@@ -123,7 +113,6 @@ def atualizar_turma(
     if not db_turma:
         raise HTTPException(status_code=404, detail="Turma não encontrada.")
 
-    # Se for professor, valida se a turma é dele
     if current_user.role == "professor":
         if not current_user.professores or db_turma.id_professor != current_user.professores.id_professor:
             raise HTTPException(status_code=403, detail="Acesso negado: Você não pode alterar turmas que não são suas.")

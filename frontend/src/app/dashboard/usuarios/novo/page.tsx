@@ -18,7 +18,7 @@ export default function NovoUsuarioPage() {
 
   const onSubmit = async (data: any) => {
     try {
-      await api.post('/register', data); // Endpoint /register criado no backend auth.py
+      await api.post('/register', data);
       alert('Usuário criado com sucesso!');
       router.push('/dashboard/usuarios');
     } catch (error: any) {

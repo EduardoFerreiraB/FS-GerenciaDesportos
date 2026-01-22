@@ -47,36 +47,29 @@ def listar_matriculas(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Se for professor, deve ver apenas matrículas das SUAS turmas
     if current_user.role == "professor":
         if not current_user.professores:
             return []
         
-        # Pega IDs das turmas do professor
         ids_turmas_prof = [t.id_turma for t in servico_turmas.listar_turmas_professor(db=db, id_professor=current_user.professores.id_professor)]
         
-        # Se foi passado um turma_id específico, verifica se ele pertence ao professor
         if turma_id:
             if turma_id not in ids_turmas_prof:
                 raise HTTPException(status_code=403, detail="Acesso negado: Essa turma não é sua.")
         
-        # Busca todas as matrículas
         todas_matriculas = []
         if turma_id:
             todas_matriculas = servico_matriculas.listar_matriculas_turma(db=db, id_turma=turma_id)
         elif aluno_id:
-            # Se buscar por aluno, filtra para mostrar apenas as matrículas desse aluno NAS TURMAS DO PROFESSOR
             matriculas_aluno = servico_matriculas.listar_matriculas_aluno(db=db, id_aluno=aluno_id)
             todas_matriculas = [m for m in matriculas_aluno if m.id_turma in ids_turmas_prof]
         else:
-            # Lista geral (cuidado com performance aqui se tiver muita coisa, mas pro MVP ok)
-            # O ideal seria um filtro no DB, mas vamos filtrar em memória por enquanto
+            # Mudar para um filtro no BD
             raw_matriculas = servico_matriculas.listar_matriculas(db=db, skip=skip, limit=limit)
             todas_matriculas = [m for m in raw_matriculas if m.id_turma in ids_turmas_prof]
             
         return todas_matriculas
 
-    # Admin/Coordenador segue o fluxo normal
     if turma_id:
         return servico_matriculas.listar_matriculas_turma(db=db, id_turma=turma_id)
     

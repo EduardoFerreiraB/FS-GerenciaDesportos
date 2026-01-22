@@ -14,10 +14,8 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 
-// Fetcher para o SWR
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
-// Função segura para formatar data (YYYY-MM-DD -> DD/MM/YYYY) sem timezone
 const formatDate = (dateString: string) => {
   if (!dateString) return '-';
   const [year, month, day] = dateString.split('-');
@@ -28,11 +26,9 @@ export default function AlunosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: alunos, error, isLoading } = useSWR('/alunos/', fetcher);
   
-  // Estado para o Modal de Exclusão
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [alunoToDelete, setAlunoToDelete] = useState<any>(null);
 
-  // Filtro no front-end (ideal seria no back, mas ok para v1)
   const filteredAlunos = alunos?.filter((aluno: any) => 
     aluno.nome_completo.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
@@ -46,7 +42,6 @@ export default function AlunosPage() {
     if (alunoToDelete) {
       try {
         await api.delete(`/alunos/${alunoToDelete.id_aluno}`);
-        // Atualiza a lista localmente
         mutate('/alunos/', filteredAlunos.filter((a: any) => a.id_aluno !== alunoToDelete.id_aluno), false);
         setIsDeleteModalOpen(false);
         setAlunoToDelete(null);
