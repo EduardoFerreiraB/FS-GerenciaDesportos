@@ -64,7 +64,6 @@ def listar_matriculas(
             matriculas_aluno = servico_matriculas.listar_matriculas_aluno(db=db, id_aluno=aluno_id)
             todas_matriculas = [m for m in matriculas_aluno if m.id_turma in ids_turmas_prof]
         else:
-            # Mudar para um filtro no BD
             raw_matriculas = servico_matriculas.listar_matriculas(db=db, skip=skip, limit=limit)
             todas_matriculas = [m for m in raw_matriculas if m.id_turma in ids_turmas_prof]
             

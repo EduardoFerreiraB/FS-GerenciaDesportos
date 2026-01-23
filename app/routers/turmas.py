@@ -20,18 +20,16 @@ def criar_turma(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-
     modalidade = servico_modalidades.listar_modalidade(db=db, id_modalidade=turma.id_modalidade)
-
     if not modalidade:
         raise HTTPException(status_code=404, detail="Modalidade não encontrada.")
-    
     professor = servico_professores.listar_professor(db=db, id_professor=turma.id_professor)
-
     if not professor:
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
-    
-    return servico_turmas.criar_turma(db=db, turma=turma)
+    try:
+        return servico_turmas.criar_turma(db=db, turma=turma)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/", summary="Listar todas as turmas", response_model=List[schemas.Turma], status_code=status.HTTP_200_OK)
 def listar_turmas(

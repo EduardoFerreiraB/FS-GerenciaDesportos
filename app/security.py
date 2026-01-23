@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Union
+from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -56,7 +56,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 async def get_current_active_user(current_user: models.Usuario = Depends(get_current_user)):
-    # Aqui poderia ter uma verificação se o usuario está ativo (ex: user.is_active)
     return current_user
 
 async def check_admin_role(current_user: models.Usuario = Depends(get_current_active_user)):

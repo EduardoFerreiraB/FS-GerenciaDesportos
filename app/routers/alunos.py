@@ -8,7 +8,6 @@ import models
 from services import alunos as servico_alunos
 from services import turmas as servico_turmas
 from security import check_coordenador_role, get_current_active_user
-import os
 import shutil
 import uuid
 from pathlib import Path
@@ -18,11 +17,6 @@ router = APIRouter(
     tags=["Alunos"],
 )
 
-# Define o diretório base como a raiz do projeto
-# Arquivo está em: app/routers/alunos.py
-# .parent -> app/routers
-# .parent.parent -> app
-# .parent.parent.parent -> raiz
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 
@@ -30,7 +24,6 @@ def salvar_arquivo(file: UploadFile, subpasta: str) -> str:
     if not file:
         return None
     
-
     diretorio = UPLOAD_DIR / subpasta
     diretorio.mkdir(parents=True, exist_ok=True)
 
@@ -55,14 +48,13 @@ def criar_aluno(
     telefone_2: Optional[str] = Form(None, max_length=20),
     endereco: Optional[str] = Form(None),
     recomendacoes_medicas: Optional[str] = Form(None),
-    ids_turmas: str = Form(..., description="IDs das turmas separados por vírgula (ex: 1,2,5)"),
+    ids_turmas: str = Form(...),
     foto: UploadFile = File(None),
     documento: UploadFile = File(None),
     atestado: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    # Processa a string de IDs vinda do Form (ex: "1,2,3")
     try:
         lista_ids_turmas = [int(id.strip()) for id in ids_turmas.split(",") if id.strip()]
     except ValueError:
@@ -71,18 +63,15 @@ def criar_aluno(
     if not lista_ids_turmas:
         raise HTTPException(status_code=400, detail="Pelo menos uma turma deve ser selecionada.")
 
-    # Validar se as turmas existem
     for id_turma in lista_ids_turmas:
         turma = servico_turmas.listar_turma_id(db=db, id_turma=id_turma)
         if not turma:
             raise HTTPException(status_code=404, detail=f"Turma com ID {id_turma} não encontrada.")
 
-    # Salva os arquivos e pega os caminhos de onde foram salvos
     foto_path = salvar_arquivo(foto, "fotos")
     doc_path = salvar_arquivo(documento, "documentos")
     atestado_path = salvar_arquivo(atestado, "atestados")
 
-    # DTO dos dados que vieram do Form
     aluno_schema = schemas.AlunoCreate(
         nome_completo=nome_completo,
         data_nascimento=data_nascimento,
@@ -112,7 +101,6 @@ def listar_alunos(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    
     if current_user.role == "professor":
         if not current_user.professores:
             return []

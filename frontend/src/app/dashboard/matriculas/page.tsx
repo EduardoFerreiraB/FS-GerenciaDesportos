@@ -19,12 +19,9 @@ const fetcher = (url: string) => api.get(url).then(res => res.data);
 export default function MatriculasPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAluno, setSelectedAluno] = useState<any>(null);
-  
-  // Busca Alunos e Turmas
   const { data: alunos, isLoading: isLoadingAlunos } = useSWR('/alunos/', fetcher);
   const { data: turmas, isLoading: isLoadingTurmas } = useSWR('/turmas/', fetcher);
 
-  // Filtro de Alunos
   const filteredAlunos = alunos?.filter((a: any) => 
     a.nome_completo.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
@@ -39,7 +36,6 @@ export default function MatriculasPage() {
       });
       alert(`Aluno ${selectedAluno.nome_completo} matriculado na turma ${turma.descricao} com sucesso!`);
       setSelectedAluno(null);
-      // Opcional: Revalidar /matriculas se houver lista
     } catch (error: any) {
       console.error(error);
       const msg = error.response?.data?.detail || 'Erro ao realizar matrícula.';
@@ -163,7 +159,6 @@ export default function MatriculasPage() {
   );
 }
 
-// Ícone auxiliar
 const ArrowRightCircle = ({ size }: any) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />

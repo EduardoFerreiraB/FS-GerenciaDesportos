@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 interface User {
   username: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {

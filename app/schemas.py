@@ -46,7 +46,6 @@ class ModalidadeUpdate(BaseModel):
 
 class Modalidade(ModalidadeBase):
     id_modalidade: int
-    
     class Config:
         from_attributes = True
 
@@ -62,15 +61,20 @@ class UsuarioUpdateRole(BaseModel):
 
 class Usuario(UsuarioBase):
     id_usuario: int
-
+    must_change_password: bool = True
     class Config:
         from_attributes = True
 
 class UsuarioResponse(UsuarioBase):
     id_usuario: int
-    
+    must_change_password: bool
     class Config:
         from_attributes = True
+
+class ChangePassword(BaseModel):
+    old_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6)
+    confirm_password: str = Field(..., min_length=6)
 
 class ProfessorBase(BaseModel):
     nome: str = Field(..., max_length=200)
@@ -89,7 +93,6 @@ class ProfessorUpdate(BaseModel):
 class Professor(ProfessorBase):
     id_professor: int
     usuario: Optional[Usuario] = None
-
     class Config:
         from_attributes = True
 
@@ -122,7 +125,22 @@ class Turma(TurmaBase):
     dias_semana: str | List[DiaSemanaEnum]
     modalidade: Modalidade
     professor: Professor
+    class Config:
+        from_attributes = True
 
+class TurmaSimples(BaseModel):
+    id_turma: int
+    descricao: Optional[str]
+    categoria_idade: str
+    modalidade: Modalidade 
+    class Config:
+        from_attributes = True
+
+class MatriculaNoAluno(BaseModel):
+    id_matricula: int
+    data_matricula: date
+    ativo: bool
+    turma: Optional[TurmaSimples] = None
     class Config:
         from_attributes = True
 
@@ -137,6 +155,9 @@ class AlunoBase(BaseModel):
     telefone_2: Optional[str] = None
     endereco: Optional[str] = None
     recomendacoes_medicas: Optional[str] = None
+    foto: Optional[str] = None
+    documento_pessoal: Optional[str] = None
+    atestado_medico: Optional[str] = None
 
 class AlunoCreate(AlunoBase):
     ids_turmas: List[int]
@@ -156,6 +177,7 @@ class AlunoUpdate(BaseModel):
 class Aluno(AlunoBase):
     id_aluno: int
     id_participante: int
+    matriculas: List[MatriculaNoAluno] = []
 
     class Config:
         from_attributes = True
@@ -164,10 +186,8 @@ class MatriculaBase(BaseModel):
     id_aluno: int
     id_turma: int
 
-
 class MatriculaCreate(MatriculaBase):
     pass
-
 
 class Matricula(MatriculaBase):
     id_matricula: int
@@ -175,10 +195,8 @@ class Matricula(MatriculaBase):
     ativo: bool
     aluno: Optional[Aluno] = None
     turma: Optional[Turma] = None
-
     class Config:
         from_attributes = True
-
 
 class PresencaBase(BaseModel):
     id_matricula: int
@@ -186,16 +204,23 @@ class PresencaBase(BaseModel):
     status: statusPresencaEnum = statusPresencaEnum.Presente
     observacao: Optional[str] = None
 
-
 class PresencaCreate(PresencaBase):
     pass
 
-
 class Presenca(PresencaBase):
     id_presenca: int
-
     class Config:
         from_attributes = True
+
+class PresencaItem(BaseModel):
+    id_matricula: int
+    status: statusPresencaEnum
+    observacao: Optional[str] = None
+
+class ListaPresenca(BaseModel):
+    data_aula: date
+    id_turma: int
+    presencas: List[PresencaItem]
 
 class LocalBase(BaseModel):
     loca_nome: str = Field(..., max_length=200)
@@ -207,7 +232,6 @@ class LocalCreate(LocalBase):
 
 class Local(LocalBase):
     id_local: int
-
     class Config:
         from_attributes = True
     
@@ -221,7 +245,6 @@ class ArbitroCreate(ArbitroBase):
 
 class Arbitro(ArbitroBase):
     id_arbitro: int
-    
     class Config:
         from_attributes = True
 
@@ -235,7 +258,6 @@ class EventoCreate(EventoBase):
 class Evento(EventoBase):
     id_evento: int
     modalidades: List[Modalidade] = []
-
     class Config:
         from_attributes = True
 
@@ -251,7 +273,6 @@ class EdicaoCreate(EdicaoBase):
 class Edicao(EdicaoBase):
     id_edicao: int
     evento: Optional[Evento] = None
-
     class Config:
         from_attributes = True
 
@@ -273,7 +294,6 @@ class Partida(PartidaBase):
     local: Optional[Local] = None
     arbitro: Optional[Arbitro] = None
     modalidade: Optional[Modalidade] = None
-
     class Config:
         from_attributes = True
 
