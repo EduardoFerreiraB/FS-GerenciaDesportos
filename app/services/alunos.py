@@ -2,36 +2,20 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from services import turmas as servico_turmas
+from services import matriculas as servico_matriculas
+
+def criar_participante(db: Session, tipo: str):
+    db_participante = models.Participante(tipo=tipo)
+    db.add(db_participante)
+    db.commit()
+    db.refresh(db_participante)
+    return db_participante
 
 def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, documento: str = None, atestado: str = None):
-    
-    # Validação de Conflitos de Horário antes de iniciar a transação
-    if aluno.ids_turmas:
-        turmas_selecionadas = []
-        for id_turma in aluno.ids_turmas:
-            turma = servico_turmas.listar_turma_id(db, id_turma)
-            if turma:
-                turmas_selecionadas.append(turma)
-        
-        # Verifica conflitos entre as turmas selecionadas
-        # Importação tardia para evitar ciclo se houver (mas aqui services -> services geralmente ok se cuidado)
-        # Porém, a função verificar_conflito_horario está em services.matriculas.
-        # Vamos replicar a lógica simples ou importar. Para manter DRY, importamos.
-        from services.matriculas import verificar_conflito_horario
-        
-        turmas_para_checar = []
-        for turma_nova in turmas_selecionadas:
-            if verificar_conflito_horario(turma_nova, turmas_para_checar):
-                 raise ValueError(f"Conflito de horário detectado envolvendo a turma {turma_nova.descricao or turma_nova.id_turma}")
-            turmas_para_checar.append(turma_nova)
+    participante = criar_participante(db, tipo="aluno")
 
-    db_participante = models.Participante(
-        tipo="aluno"
-    )
-    db.add(db_participante)
-    db.flush()
-
-    db.aluno = models.Aluno(
+    db_aluno = models.Aluno(
+        id_participante=participante.id_participante,
         nome_completo=aluno.nome_completo,
         data_nascimento=aluno.data_nascimento,
         escola=aluno.escola,
@@ -42,38 +26,32 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
         telefone_2=aluno.telefone_2,
         endereco=aluno.endereco,
         recomendacoes_medicas=aluno.recomendacoes_medicas,
-        id_participante=db_participante.id_participante,
         foto=foto,
         documento_pessoal=documento,
         atestado_medico=atestado
     )
-    db.add(db.aluno)
-    db.flush()
 
-    # Cria matrículas para todas as turmas informadas
+    db.add(db_aluno)
+    db.commit()
+    db.refresh(db_aluno)
+
     if aluno.ids_turmas:
         for id_turma in aluno.ids_turmas:
-            db_matricula = models.Matricula(
-                id_aluno=db.aluno.id_aluno,
-                id_turma=id_turma,
-                ativo=True
-            )
-            db.add(db_matricula)
-    
-    db.commit()
-    db.refresh(db.aluno)
+            turma = servico_turmas.listar_turma_id(db, id_turma)
+            if turma:
+                try:
+                    matricula = schemas.MatriculaCreate(id_aluno=db_aluno.id_aluno, id_turma=id_turma)
+                    servico_matriculas.criar_matricula(db, matricula)
+                except ValueError:
+                    pass
 
-    return db.aluno
+    return db_aluno
 
 def listar_aluno(db: Session, id_aluno: int):
     return db.query(models.Aluno).filter(models.Aluno.id_aluno == id_aluno).first()
 
 def listar_alunos(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Aluno).offset(skip).limit(limit).all()
-
-def listar_alunos_por_turma(db: Session, id_turma: int):
-    # Faz join com Matricula para filtrar pela turma
-    return db.query(models.Aluno).join(models.Matricula).filter(models.Matricula.id_turma == id_turma).all()
 
 def listar_alunos_nome(db: Session, nome: str):
     return db.query(models.Aluno).filter(models.Aluno.nome_completo.ilike(f"%{nome}%")).all()
@@ -84,6 +62,15 @@ def listar_alunos_escola(db: Session, escola: str):
 def listar_alunos_serie(db: Session, serie_ano: str):
     return db.query(models.Aluno).filter(models.Aluno.serie_ano.ilike(f"%{serie_ano}%")).all()
 
+def listar_alunos_por_turma(db: Session, id_turma: int):
+    matriculas = db.query(models.Matricula).filter(
+        models.Matricula.id_turma == id_turma, 
+        models.Matricula.ativo == True
+    ).all()
+    
+    alunos = [m.aluno for m in matriculas]
+    return alunos
+
 def atualizar_aluno(db: Session, id_aluno: int, aluno_atualizado: schemas.AlunoUpdate):
     db_aluno = listar_aluno(db, id_aluno)
 
@@ -92,7 +79,7 @@ def atualizar_aluno(db: Session, id_aluno: int, aluno_atualizado: schemas.AlunoU
     
     dados_atualizados = aluno_atualizado.model_dump(exclude_unset=True)
 
-    for chave, valor in dados_atualizados.items():
+    for chave, valor, in dados_atualizados.items():
         setattr(db_aluno, chave, valor)
 
     db.commit()
@@ -103,25 +90,7 @@ def excluir_aluno(db: Session, id_aluno: int):
     db_aluno = listar_aluno(db, id_aluno)
 
     if db_aluno:
-        # 1. Busca todas as matrículas do aluno
-        matriculas = db.query(models.Matricula).filter(models.Matricula.id_aluno == id_aluno).all()
-        
-        # 2. Para cada matrícula, remove as presenças e depois a matrícula
-        for matricula in matriculas:
-            # Remove presenças associadas à matrícula
-            db.query(models.Presenca).filter(models.Presenca.id_matricula == matricula.id_matricula).delete()
-            # Remove a matrícula
-            db.delete(matricula)
-        
-        # 3. Agora pode remover o aluno e o participante
-        id_participante = db_aluno.id_participante
         db.delete(db_aluno)
-
-        db_participante = db.query(models.Participante).filter(models.Participante.id_participante == id_participante).first()
-        if db_participante:
-            db.delete(db_participante)
-
         db.commit()
         return True
     return False
-

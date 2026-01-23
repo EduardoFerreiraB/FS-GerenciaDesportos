@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 interface User {
   username: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {
@@ -22,18 +23,16 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Começa true para bloquear render inicial
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Inicialização (F5 ou Load Inicial)
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('token');
       
       if (!token) {
         setIsLoading(false);
-        // Proteção de rota
         if (pathname.includes('/dashboard')) {
           router.push('/');
         }
@@ -60,28 +59,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, []);
 
-  // Login Manual (Formulário)
   const login = async (token: string) => {
     setIsLoading(true); // Bloqueia a UI
     localStorage.setItem('token', token);
     api.defaults.headers.Authorization = `Bearer ${token}`;
     
     try {
-        // Busca o usuário ANTES de redirecionar
         const response = await api.get('/users/me');
         
-        // Atualiza o estado
         setUser(response.data);
-        
-        // Pequeno delay ou verificação para garantir propagação? 
-        // Em teoria não precisa se usarmos isLoading corretamente nas páginas.
         router.push('/dashboard');
     } catch (error) {
         console.error("Erro no login:", error);
         alert('Erro ao obter dados do usuário. Tente novamente.');
-        logout(); // Limpa tudo se falhar
+        logout();
     } finally {
-        setIsLoading(false); // Libera a UI
+        setIsLoading(false);
     }
   };
 

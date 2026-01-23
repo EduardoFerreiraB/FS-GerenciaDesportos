@@ -8,7 +8,6 @@ import models
 from services import alunos as servico_alunos
 from services import turmas as servico_turmas
 from security import check_coordenador_role, get_current_active_user
-import os
 import shutil
 import uuid
 from pathlib import Path
@@ -18,11 +17,6 @@ router = APIRouter(
     tags=["Alunos"],
 )
 
-# Define o diretório base como a raiz do projeto
-# Arquivo está em: app/routers/alunos.py
-# .parent -> app/routers
-# .parent.parent -> app
-# .parent.parent.parent -> raiz
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 
@@ -30,11 +24,9 @@ def salvar_arquivo(file: UploadFile, subpasta: str) -> str:
     if not file:
         return None
     
-    # Cria diretório se não existir
     diretorio = UPLOAD_DIR / subpasta
     diretorio.mkdir(parents=True, exist_ok=True)
 
-    # Gera nome único para evitar colisão
     extensao = file.filename.split(".")[-1]
     nome_arquivo = f"{uuid.uuid4()}.{extensao}"
     caminho_arquivo = diretorio / nome_arquivo
@@ -42,8 +34,6 @@ def salvar_arquivo(file: UploadFile, subpasta: str) -> str:
     with open(caminho_arquivo, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    # Retorna o caminho relativo para salvar no banco (ex: uploads/fotos/abc.jpg)
-    # Isso facilita na hora de servir o arquivo estático
     return str(Path("uploads") / subpasta / nome_arquivo)
 
 @router.post("/", summary="Cadastrar um novo aluno", response_model=schemas.Aluno, status_code=status.HTTP_201_CREATED)
@@ -58,14 +48,13 @@ def criar_aluno(
     telefone_2: Optional[str] = Form(None, max_length=20),
     endereco: Optional[str] = Form(None),
     recomendacoes_medicas: Optional[str] = Form(None),
-    ids_turmas: str = Form(..., description="IDs das turmas separados por vírgula (ex: 1,2,5)"),
+    ids_turmas: str = Form(...),
     foto: UploadFile = File(None),
     documento: UploadFile = File(None),
     atestado: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    # Processa a string de IDs vinda do Form (ex: "1,2,3")
     try:
         lista_ids_turmas = [int(id.strip()) for id in ids_turmas.split(",") if id.strip()]
     except ValueError:
@@ -74,18 +63,15 @@ def criar_aluno(
     if not lista_ids_turmas:
         raise HTTPException(status_code=400, detail="Pelo menos uma turma deve ser selecionada.")
 
-    # Valida se as turmas existem
     for id_turma in lista_ids_turmas:
         turma = servico_turmas.listar_turma_id(db=db, id_turma=id_turma)
         if not turma:
             raise HTTPException(status_code=404, detail=f"Turma com ID {id_turma} não encontrada.")
 
-    # Salva arquivos no disco e obtém os caminhos
     foto_path = salvar_arquivo(foto, "fotos")
     doc_path = salvar_arquivo(documento, "documentos")
     atestado_path = salvar_arquivo(atestado, "atestados")
 
-    # Monta o DTO manualmente com os dados vindos do Form
     aluno_schema = schemas.AlunoCreate(
         nome_completo=nome_completo,
         data_nascimento=data_nascimento,
@@ -115,12 +101,10 @@ def listar_alunos(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    # Professor só vê alunos das turmas dele
     if current_user.role == "professor":
         if not current_user.professores:
             return []
         
-        # Pega todas as turmas do professor
         turmas_professor = servico_turmas.listar_turmas_professor(db=db, id_professor=current_user.professores.id_professor)
         
         alunos_filtrados = []
@@ -147,11 +131,9 @@ def listar_aluno(
     if not db_aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado.")
 
-    # Verificação para Professor: O aluno está matriculado em alguma turma dele?
     if current_user.role == "professor":
         tem_permissao = False
         if current_user.professores:
-             # Verifica se o aluno tem alguma matricula ativa numa turma deste professor
              for matricula in db_aluno.matriculas:
                  if matricula.turma.id_professor == current_user.professores.id_professor:
                      tem_permissao = True
@@ -172,12 +154,10 @@ def buscar_alunos_por_nome(
 ):
     alunos = servico_alunos.listar_alunos_nome(db=db, nome=nome)
     
-    # Filtro manual para professor (mesma lógica)
     if current_user.role == "professor":
          if not current_user.professores:
             return []
          
-         # Otimização: Pegar IDs das turmas do professor
          ids_turmas_prof = [t.id_turma for t in servico_turmas.listar_turmas_professor(db=db, id_professor=current_user.professores.id_professor)]
          
          alunos_filtrados = []

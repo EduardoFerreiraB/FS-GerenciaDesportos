@@ -41,7 +41,7 @@ export default function ModalidadesPage() {
     if (modalidadeToDelete) {
       try {
         await api.delete(`/modalidades/${modalidadeToDelete.id_modalidade}`);
-        mutate('/modalidades/'); // Revalida o cache
+        mutate('/modalidades/');
         setIsDeleteModalOpen(false);
         setModalidadeToDelete(null);
       } catch (error) {
@@ -113,7 +113,6 @@ export default function ModalidadesPage() {
         /* Grid de Cards */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredModalidades.map((modalidade: any) => {
-            // Mapeia ícones baseados no nome (simples heurística visual)
             let Icon = Dumbbell;
             const nome = modalidade.nome.toLowerCase();
             if (nome.includes('futebol') || nome.includes('futsal')) Icon = Trophy;

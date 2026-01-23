@@ -7,7 +7,7 @@ import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
-  const { login } = useAuth(); // Usa o hook de autenticação
+  const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -24,8 +24,6 @@ export default function LoginPage() {
 
       const response = await api.post('/token', formData);
       const token = response.data.access_token;
-
-      // Chama o login do contexto e espera ele resolver (buscar usuário -> redirecionar)
       await login(token);
       
     } catch (err: any) {

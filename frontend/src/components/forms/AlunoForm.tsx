@@ -18,7 +18,6 @@ import { clsx } from 'clsx';
 import api from '@/lib/api';
 import useSWR from 'swr';
 
-// Fetcher simples
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
 interface AlunoFormProps {
@@ -30,14 +29,8 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
   const router = useRouter();
   const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
   const [selectedTurmas, setSelectedTurmas] = useState<number[]>([]);
-  
-  // Buscar turmas reais da API para o checklist
   const { data: turmasDisponiveis } = useSWR('/turmas/', fetcher);
-  
-  // Estados visuais
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
-  
-  // Estados reais de arquivos para upload
   const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [atestadoFile, setAtestadoFile] = useState<File | null>(null);
   const [documentoFile, setDocumentoFile] = useState<File | null>(null);
@@ -49,10 +42,7 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
       });
       if (initialData.ids_turmas) setSelectedTurmas(initialData.ids_turmas);
       
-      // Foto vinda do banco é uma URL/String
       if (initialData.foto && typeof initialData.foto === 'string') {
-        // Ajuste para exibir a foto do backend se necessário (ex: adicionar base_url)
-        // Por enquanto assumimos que o backend pode retornar caminho relativo
         setFotoPreview(`http://localhost:8000/${initialData.foto}`); 
       }
     }
@@ -61,9 +51,7 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
   const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setFotoFile(file); // Guarda o arquivo real para envio
-      
-      // Preview local
+      setFotoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFotoPreview(reader.result as string);
@@ -75,9 +63,6 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
   const onSubmit = async (data: any) => {
     try {
       if (isEditing) {
-        // PARA EDIÇÃO (PUT): Enviamos JSON
-        // O backend espera um JSON no corpo para PUT /alunos/{id}
-        // Mas não suporta upload de arquivos no PUT atual.
         const jsonPayload = {
           nome_completo: data.nome_completo,
           data_nascimento: data.data_nascimento,
@@ -89,21 +74,17 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
           telefone_2: data.telefone_2 || null,
           endereco: data.endereco,
           recomendacoes_medicas: data.recomendacoes_medicas || null,
-          // PUT espera os dados de atualização, ids_turmas talvez não seja atualizável aqui dependendo do schema
-          // Mas vamos tentar enviar.
         };
 
         await api.put(`/alunos/${initialData.id_aluno}`, jsonPayload);
         alert('Aluno atualizado com sucesso!');
       } else {
-        // PARA CRIAÇÃO (POST): Enviamos FormData (Multipart)
         const formData = new FormData();
 
-        // Campos obrigatórios e simples
         formData.append('nome_completo', data.nome_completo);
         formData.append('data_nascimento', data.data_nascimento);
         
-        // Campos opcionais (apenas se tiver valor)
+
         if (data.escola) formData.append('escola', data.escola);
         if (data.serie_ano) formData.append('serie_ano', data.serie_ano);
         if (data.nome_mae) formData.append('nome_mae', data.nome_mae);
@@ -112,15 +93,11 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
         if (data.telefone_2) formData.append('telefone_2', data.telefone_2);
         if (data.endereco) formData.append('endereco', data.endereco);
         if (data.recomendacoes_medicas) formData.append('recomendacoes_medicas', data.recomendacoes_medicas);
-
-        // Tratamento especial para ids_turmas (backend espera string "1,2,3")
         if (selectedTurmas.length > 0) {
           formData.append('ids_turmas', selectedTurmas.join(','));
         } else {
-          formData.append('ids_turmas', ''); // Envia string vazia se não tiver turmas
+          formData.append('ids_turmas', ''); 
         }
-
-        // Arquivos (apenas se selecionados novos)
         if (fotoFile) formData.append('foto', fotoFile);
         if (documentoFile) formData.append('documento', documentoFile);
         if (atestadoFile) formData.append('atestado', atestadoFile);
