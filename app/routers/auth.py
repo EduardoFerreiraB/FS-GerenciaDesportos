@@ -6,7 +6,7 @@ import models
 from security import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, check_admin_role, get_password_hash, get_current_user
 from datetime import timedelta
 from typing import List
-from schemas import Token, UsuarioCreate, UsuarioResponse, UsuarioUpdateRole
+from schemas import Token, UsuarioCreate, UsuarioResponse, UsuarioUpdateRole, ChangePassword
 
 router = APIRouter(
     tags=["Autenticação"],
@@ -14,7 +14,6 @@ router = APIRouter(
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Busca usuário pelo username
     user = db.query(models.Usuario).filter(models.Usuario.username == form_data.username).first()
     
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -23,13 +22,29 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             detail="Usuário ou senha incorretos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    password_data: ChangePassword,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    if not verify_password(password_data.old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta.")
+
+    if password_data.new_password != password_data.confirm_password:
+        raise HTTPException(status_code=400, detail="As novas senhas não conferem.")
+    current_user.password_hash = get_password_hash(password_data.new_password)
+    current_user.must_change_password = False
+    
+    db.commit()
+    
+    return {"message": "Senha alterada com sucesso."}
 
 @router.get("/users/me", response_model=UsuarioResponse)
 async def read_users_me(current_user: models.Usuario = Depends(get_current_user)):
@@ -51,7 +66,6 @@ def create_user(
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(check_admin_role)
 ):
-    # Verifica se usuário já existe
     db_user = db.query(models.Usuario).filter(models.Usuario.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Nome de usuário já cadastrado.")
@@ -60,7 +74,8 @@ def create_user(
     new_user = models.Usuario(
         username=user.username,
         password_hash=hashed_password,
-        role=user.role
+        role=user.role,
+        must_change_password=True
     )
     db.add(new_user)
     db.commit()
@@ -78,7 +93,6 @@ def update_user_role(
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     
-    # Atualiza o papel
     db_user.role = role_data.role
     db.commit()
     db.refresh(db_user)

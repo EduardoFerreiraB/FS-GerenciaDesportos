@@ -19,7 +19,6 @@ export default function UsuariosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: users, error, isLoading } = useSWR('/users', fetcher);
   
-  // Estado para o Modal de Exclusão
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
 
@@ -35,15 +34,15 @@ export default function UsuariosPage() {
   const confirmDelete = async () => {
     if (userToDelete) {
       try {
-        await api.delete(`/users/${userToDelete.id_usuario}`); // Usa rota que criamos em auth.py
-        mutate('/users'); // Revalida a lista
+        await api.delete(`/users/${userToDelete.id_usuario}`);
+        mutate('/users');
         setIsDeleteModalOpen(false);
         setUserToDelete(null);
         alert('Usuário excluído com sucesso.');
       } catch (error: any) {
         const msg = error.response?.data?.detail || 'Erro ao excluir usuário.';
         alert(msg);
-        setIsDeleteModalOpen(false); // Fecha mesmo com erro para limpar estado
+        setIsDeleteModalOpen(false);
       }
     }
   };

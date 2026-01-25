@@ -29,7 +29,6 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
       Object.keys(initialData).forEach(key => {
         setValue(key, initialData[key]);
       });
-      // Preenche o usuário se vier no objeto aninhado
       if (initialData.usuario) {
         setValue('username', initialData.usuario.username);
       }
@@ -39,16 +38,6 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
   const onSubmit = async (data: any) => {
     try {
       const payload = { ...data };
-      
-      // Ajuste de payload para o back-end (separar professor e usuario)
-      // O back-end espera { nome, cpf, contato, username, password } num único corpo JSON para criação?
-      // Analisando schemas.py: ProfessorCreate tem esses campos?
-      // O endpoint POST /professores espera ProfessorCreate que herda de ProfessorBase (nome, cpf, contato).
-      // Mas a criação de usuário é feita junto? 
-      // Geralmente sim, ou o backend espera { professor: {...}, usuario: {...} }.
-      // Vamos assumir que o endpoint lida com tudo plano ou ajustar conforme o erro.
-      // Analisando routers/professores.py (se pudesse ler): Geralmente se envia tudo junto.
-      
       if (isEditing) {
         await api.put(`/professores/${initialData.id_professor}`, payload);
         alert('Professor atualizado com sucesso!');
@@ -119,7 +108,7 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
                 register={register('username', { required: 'O usuário é obrigatório' })}
                 error={errors.username}
                 theme="emerald"
-                disabled={isEditing} // Geralmente não se altera username fácil
+                disabled={isEditing}
               />
               {!isEditing && (
                 <Input 

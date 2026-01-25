@@ -2,6 +2,14 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from services import turmas as servico_turmas
+from services import matriculas as servico_matriculas
+
+def criar_participante(db: Session, tipo: str):
+    db_participante = models.Participante(tipo=tipo)
+    db.add(db_participante)
+    db.commit()
+    db.refresh(db_participante)
+    return db_participante
 
 def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, documento: str = None, atestado: str = None):
     
@@ -14,6 +22,7 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
                 turmas_selecionadas.append(turma)
         
         # Verifica conflitos entre as turmas selecionadas
+        # Importação local para evitar ciclo
         from services.matriculas import verificar_conflito_horario
         
         turmas_para_checar = []
@@ -22,13 +31,11 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
                  raise ValueError(f"Conflito de horário detectado envolvendo a turma {turma_nova.descricao or turma_nova.id_turma}")
             turmas_para_checar.append(turma_nova)
 
-    db_participante = models.Participante(
-        tipo="aluno"
-    )
-    db.add(db_participante)
-    db.flush()
+    # Cria o participante primeiro
+    participante = criar_participante(db, tipo="aluno")
 
-    db.aluno = models.Aluno(
+    db_aluno = models.Aluno(
+        id_participante=participante.id_participante,
         nome_completo=aluno.nome_completo,
         data_nascimento=aluno.data_nascimento,
         escola=aluno.escola,
@@ -39,41 +46,43 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
         telefone_2=aluno.telefone_2,
         endereco=aluno.endereco,
         recomendacoes_medicas=aluno.recomendacoes_medicas,
-        id_participante=db_participante.id_participante,
         foto=foto,
         documento_pessoal=documento,
         atestado_medico=atestado,
         ativo=True # Garante que nasce ativo
     )
-    db.add(db.aluno)
-    db.flush()
+
+    db.add(db_aluno)
+    db.commit()
+    db.refresh(db_aluno)
 
     # Cria matrículas para todas as turmas informadas
     if aluno.ids_turmas:
         for id_turma in aluno.ids_turmas:
-            db_matricula = models.Matricula(
-                id_aluno=db.aluno.id_aluno,
-                id_turma=id_turma,
-                ativo=True
-            )
-            db.add(db_matricula)
+            # Usa o serviço de matrícula para garantir validações extras se houver
+            try:
+                matricula_schema = schemas.MatriculaCreate(id_aluno=db_aluno.id_aluno, id_turma=id_turma)
+                servico_matriculas.criar_matricula(db, matricula_schema)
+            except ValueError:
+                # Se der erro numa matrícula específica (ex: turma cheia), ignora e segue (ou loga)
+                pass
     
-    db.commit()
-    db.refresh(db.aluno)
-
-    return db.aluno
+    return db_aluno
 
 def listar_aluno(db: Session, id_aluno: int):
     return db.query(models.Aluno).filter(models.Aluno.id_aluno == id_aluno).first()
 
 def listar_alunos(db: Session, skip: int = 0, limit: int = 100):
     # Por padrão, lista apenas os ativos para o CRUD básico
-    # Se precisar de inativos, precisaremos de um endpoint específico ou filtro
     return db.query(models.Aluno).filter(models.Aluno.ativo == True).offset(skip).limit(limit).all()
 
 def listar_alunos_por_turma(db: Session, id_turma: int):
-    # Faz join com Matricula para filtrar pela turma
-    return db.query(models.Aluno).join(models.Matricula).filter(models.Matricula.id_turma == id_turma).all()
+    # Faz join com Matricula para filtrar pela turma e apenas ativos
+    return db.query(models.Aluno).join(models.Matricula).filter(
+        models.Matricula.id_turma == id_turma,
+        models.Matricula.ativo == True,
+        models.Aluno.ativo == True
+    ).all()
 
 def listar_alunos_nome(db: Session, nome: str):
     return db.query(models.Aluno).filter(models.Aluno.nome_completo.ilike(f"%{nome}%"), models.Aluno.ativo == True).all()

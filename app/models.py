@@ -40,6 +40,7 @@ class Usuario(Base):
     username = Column(String(150), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum("admin", "coordenador", "professor", "assistente"), default="professor", nullable=False)
+    must_change_password = Column(Boolean, default=True)
 
     professores = relationship("Professor", back_populates="usuario", uselist=False)
 

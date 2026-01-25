@@ -53,10 +53,15 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
         if (Array.isArray(initialData.dias_semana)) {
           setSelectedDias(initialData.dias_semana);
         } else if (typeof initialData.dias_semana === 'string') {
-          // Tenta fazer parse se for string JSON ou split por vírgula
           try {
-            const parsed = JSON.parse(initialData.dias_semana.replace(/'/g, '"')); // Tenta corrigir aspas simples do Python
-             setSelectedDias(Array.isArray(parsed) ? parsed : [initialData.dias_semana]);
+            // Tenta limpar aspas simples se vier do Python string representation
+            const cleanStr = initialData.dias_semana.replace(/'/g, '"');
+            if (cleanStr.startsWith('[')) {
+                 const parsed = JSON.parse(cleanStr);
+                 setSelectedDias(Array.isArray(parsed) ? parsed : [initialData.dias_semana]);
+            } else {
+                 setSelectedDias(initialData.dias_semana.split(',').map((d:string) => d.trim()));
+            }
           } catch {
              setSelectedDias(initialData.dias_semana.split(',').map((d:string) => d.trim()));
           }
@@ -78,18 +83,22 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
     }
 
     try {
-      // Ajuste para bater com o Schema do Pydantic (TurmaCreate)
+      // Limpeza de horários para garantir HH:MM:SS
+      const inicio = data.horario_inicio.length === 5 ? data.horario_inicio + ":00" : data.horario_inicio;
+      const fim = data.horario_fim.length === 5 ? data.horario_fim + ":00" : data.horario_fim;
+
       const payload = {
         descricao: data.descricao,
         categoria_idade: data.categoria_idade,
-        horario_inicio: data.horario_inicio + ":00", // Garante formato HH:MM:SS se necessário
-        horario_fim: data.horario_fim + ":00",
-        dias_semana: selectedDias, // Envia o Array direto ['SEG', 'QUA']
+        horario_inicio: inicio,
+        horario_fim: fim,
+        dias_semana: selectedDias, 
         id_modalidade: parseInt(data.modalidade_id),
         id_professor: parseInt(data.professor_id)
       };
 
       if (isEditing) {
+        // Ao atualizar, usamos o ID da URL ou do initialData
         await api.put(`/turmas/${initialData.id_turma}`, payload);
         alert('Turma atualizada com sucesso!');
       } else {
@@ -98,8 +107,22 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
       }
       router.push('/dashboard/turmas');
     } catch (error: any) {
-      console.error("Erro ao salvar:", error.response?.data); // Log detalhado para debug
-      alert(error.response?.data?.detail || 'Erro ao salvar turma.');
+      console.error("Erro detalhado:", error.response?.data); 
+      
+      // Tratamento melhorado para exibir o erro real do Pydantic (422) ou lógica (400)
+      let errorMessage = 'Erro ao salvar turma.';
+      if (error.response?.data?.detail) {
+          const detail = error.response.data.detail;
+          if (Array.isArray(detail)) {
+              // Erro de validação Pydantic (422)
+              errorMessage = detail.map((e: any) => `${e.loc[1]}: ${e.msg}`).join('\n');
+          } else {
+              // Erro de lógica (400)
+              errorMessage = detail;
+          }
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -254,7 +277,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
   );
 }
 
-// --- Componentes Locais ---
+// --- Componentes Locais --- 
 
 function CardSection({ title, icon: Icon, children, theme }: any) {
   const themeClasses = theme === 'indigo' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600';

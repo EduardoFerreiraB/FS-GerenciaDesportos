@@ -5,17 +5,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db, engine
 import models
-from routers import modalidades
-from routers import professores
-from routers import turmas
-from routers import alunos
-from routers import matriculas
-from routers import presencas
-from routers import arbitros
-from routers import locais
-from routers import eventos
-from routers import edicoes
-from routers import auth
+from routers import (
+    modalidades, professores, turmas, alunos, 
+    matriculas, presencas, arbitros, locais, 
+    eventos, edicoes, auth
+)
 import os
 from pathlib import Path
 
@@ -27,8 +21,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configuração de CORS para permitir que o Front-end acesse a API
-origins = ["*"]  # Em produção, substitua "*" pela URL do seu front-end (ex: "http://localhost:3000")
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,8 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuração para servir arquivos estáticos (fotos, documentos, etc)
-# Define o diretório base como a raiz do projeto (pai do diretório 'app')
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 
@@ -59,6 +50,7 @@ app.include_router(arbitros.router)
 app.include_router(locais.router)
 app.include_router(eventos.router)
 app.include_router(edicoes.router)
+
 @app.get("/", tags=["Root"])
 async def read_root():
     return {"message": "Welcome to the Gerencia Esportes API!"}

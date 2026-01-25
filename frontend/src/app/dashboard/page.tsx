@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { 
   Users, 
@@ -10,7 +10,9 @@ import {
   ClipboardList,
   PlusCircle,
   Dumbbell,
-  ArrowRight
+  ArrowRight,
+  CalendarCheck,
+  Clock
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -25,14 +27,16 @@ import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
-
 const COLORS = ['#3072F0', '#0EA5E9', '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981'];
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
-  // Só dispara as requisições se a autenticação já terminou
-  // Se user existir, dispara. Se não, espera (null).
   const shouldFetch = !authLoading && !!user;
 
   const { data: alunos } = useSWR(shouldFetch ? '/alunos/' : null, fetcher);
@@ -41,21 +45,23 @@ export default function DashboardPage() {
   const { data: modalidades } = useSWR(shouldFetch ? '/modalidades/' : null, fetcher);
   const { data: matriculas } = useSWR(shouldFetch ? '/matriculas/' : null, fetcher);
 
+  if (user?.role === 'professor') {
+    return <DashboardProfessor turmas={turmas} alunos={alunos} modalidades={modalidades} matriculas={matriculas} />;
+  }
+
   const totalAlunos = alunos?.length || 0;
   const totalTurmas = turmas?.length || 0;
   const totalProfessores = professores?.length || 0;
   const totalModalidades = modalidades?.length || 0;
-
   const recentAlunos = alunos ? [...alunos].slice(-5).reverse() : [];
 
   const alunosPorModalidade: Record<string, number> = {};
-
   if (matriculas && matriculas.length > 0 && turmas && modalidades) {
     matriculas.forEach((matricula: any) => {
       const turma = turmas.find((t: any) => t.id_turma === matricula.id_turma);
       if (turma) {
         let nomeModalidade = 'Outros';
-        if (turma.modalidade && turma.modalidade.nome) {
+        if (turma.modalidade?.nome) {
             nomeModalidade = turma.modalidade.nome;
         } else if (turma.id_modalidade) {
             const mod = modalidades.find((m: any) => m.id_modalidade === turma.id_modalidade);
@@ -96,35 +102,18 @@ export default function DashboardPage() {
               <ClipboardList className="text-primary" size={20} />
               Ações Rápidas
             </h2>
-            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Link href="/dashboard/alunos/novo" className="w-full">
-                <ActionButton 
-                  title="Nova Matrícula" 
-                  desc="Inscrever aluno em turma" 
-                  icon={PlusCircle} 
-                />
+                <ActionButton title="Nova Matrícula" desc="Inscrever aluno em turma" icon={PlusCircle} />
               </Link>
               <Link href="/dashboard/turmas" className="w-full">
-                <ActionButton 
-                  title="Gerir Turmas" 
-                  desc="Criar ou editar turmas" 
-                  icon={GraduationCap} 
-                />
+                <ActionButton title="Gerir Turmas" desc="Criar ou editar turmas" icon={GraduationCap} />
               </Link>
               <Link href="/dashboard/professores/novo" className="w-full">
-                <ActionButton 
-                  title="Cadastrar Professor" 
-                  desc="Adicionar novo docente" 
-                  icon={UserPlus} 
-                />
+                <ActionButton title="Cadastrar Professor" desc="Adicionar novo docente" icon={UserPlus} />
               </Link>
               <Link href="/dashboard/modalidades" className="w-full">
-                <ActionButton 
-                  title="Modalidades" 
-                  desc="Configurar esportes" 
-                  icon={Trophy} 
-                />
+                <ActionButton title="Modalidades" desc="Configurar esportes" icon={Trophy} />
               </Link>
             </div>
           </section>
@@ -133,32 +122,17 @@ export default function DashboardPage() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <h2 className="text-lg font-bold text-slate-800 mb-4">Alunos por Modalidade</h2>
           <div className="h-[250px] w-full" style={{ minHeight: '250px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={showChart ? dataGrafico : dataPlaceholder}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {showChart ? (
-                    dataGrafico.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))
-                  ) : (
-                    <Cell fill="#e2e8f0" />
-                  )}
-                </Pie>
-                <Tooltip />
-                {showChart && <Legend verticalAlign="bottom" height={36}/>}
-              </PieChart>
-            </ResponsiveContainer>
-            {!showChart && (
-                <p className="text-center text-xs text-slate-400 mt-2">Nenhuma matrícula registrada.</p>
-            )}
+            {mounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={showChart ? dataGrafico : dataPlaceholder} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                    {showChart ? (dataGrafico.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)) : <Cell fill="#e2e8f0" />}
+                  </Pie>
+                  <Tooltip />
+                  {showChart && <Legend verticalAlign="bottom" height={36}/>}
+                </PieChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
         </div>
       </div>
@@ -167,44 +141,149 @@ export default function DashboardPage() {
         <div className="p-6 border-b border-slate-100 flex justify-between items-center">
           <h2 className="text-lg font-bold text-slate-800">Alunos Recentes</h2>
           <Link href="/dashboard/alunos">
-            <button className="text-primary text-sm font-semibold hover:text-blue-700 flex items-center gap-1">
-                Ver todos <ArrowRight size={16} />
-            </button>
+            <button className="text-primary text-sm font-semibold hover:text-blue-700 flex items-center gap-1">Ver todos <ArrowRight size={16} /></button>
           </Link>
         </div>
-        
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium">
               <tr>
                 <th className="px-6 py-4">Aluno</th>
+                <th className="px-6 py-4">Turma</th>
                 <th className="px-6 py-4">Data Nasc.</th>
                 <th className="px-6 py-4">Responsável</th>
                 <th className="px-6 py-4">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {recentAlunos.map((aluno: any) => (
-                <tr key={aluno.id_aluno} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-900">{aluno.nome_completo}</td>
-                  <td className="px-6 py-4 text-slate-600">{aluno.data_nascimento}</td>
-                  <td className="px-6 py-4 text-slate-500">{aluno.nome_mae || aluno.nome_pai || '-'}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                      Ativo
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {recentAlunos.length === 0 && (
-                  <tr>
-                      <td colSpan={4} className="p-6 text-center text-slate-400">Nenhum aluno recente.</td>
+              {recentAlunos.map((aluno: any) => {
+                const turmaNome = aluno.matriculas?.[0]?.turma?.descricao || 'Sem turma';
+                const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+                const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+                const cleanFotoPath = aluno.foto ? aluno.foto.replace(/^\//, '') : null;
+                const fotoUrl = cleanFotoPath ? `${cleanBaseUrl}/${cleanFotoPath}` : null;
+
+                return (
+                  <tr key={aluno.id_aluno} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        {fotoUrl ? (
+                          <img src={fotoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-sm">{aluno.nome_completo.charAt(0)}</div>
+                        )}
+                        <span className="font-medium text-slate-900">{aluno.nome_completo}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">{turmaNome}</span></td>
+                    <td className="px-6 py-4 text-slate-600">{aluno.data_nascimento}</td>
+                    <td className="px-6 py-4 text-slate-500">{aluno.nome_mae || aluno.nome_pai || '-'}</td>
+                    <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Ativo</span></td>
                   </tr>
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
       </section>
+    </>
+  );
+}
+
+function DashboardProfessor({ turmas, alunos, modalidades, matriculas }: any) {
+  const minhasTurmas = turmas || [];
+  const meusAlunos = alunos || [];
+  const proximaAula = minhasTurmas.length > 0 ? minhasTurmas[0] : null;
+
+  const alunosPorModalidade: Record<string, number> = {};
+  if (matriculas && matriculas.length > 0 && turmas && modalidades) {
+    matriculas.forEach((matricula: any) => {
+        const turma = turmas.find((t: any) => t.id_turma === matricula.id_turma);
+        if (turma) {
+            const nomeModalidade = turma.modalidade?.nome || 'Minhas Aulas';
+            alunosPorModalidade[nomeModalidade] = (alunosPorModalidade[nomeModalidade] || 0) + 1;
+        }
+    });
+  }
+  const dataGrafico = Object.keys(alunosPorModalidade).map((key, index) => ({
+    name: key,
+    value: alunosPorModalidade[key],
+    color: COLORS[index % COLORS.length]
+  }));
+  const showChart = dataGrafico.length > 0;
+
+  return (
+    <>
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold text-slate-800">Área do Professor</h1>
+        <p className="text-slate-500">Bem-vindo ao seu painel de controle.</p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <KpiCard title="Meus Alunos" value={meusAlunos.length} icon={Users} color="bg-blue-50 text-blue-600" />
+        <KpiCard title="Minhas Turmas" value={minhasTurmas.length} icon={GraduationCap} color="bg-indigo-50 text-indigo-600" />
+        <KpiCard title="Aulas Hoje" value="-" icon={CalendarCheck} color="bg-emerald-50 text-emerald-600" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          {proximaAula && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-10 -mt-10 blur-xl opacity-50"></div>
+              <div className="flex justify-between items-start mb-4 relative z-10">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md mb-2 inline-block">Próxima Aula</span>
+                  <h3 className="text-2xl font-bold text-slate-800">{proximaAula.descricao}</h3>
+                  <p className="text-slate-500">{proximaAula.categoria_idade} • {proximaAula.modalidade?.nome}</p>
+                </div>
+                <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center"><Clock size={24} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
+                <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl">
+                  <CalendarCheck size={20} className="text-slate-400" />
+                  <div><p className="text-xs text-slate-400 font-bold uppercase">Dia</p><p className="font-medium text-sm">{proximaAula.dias_semana}</p></div>
+                </div>
+                <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl">
+                  <Clock size={20} className="text-slate-400" />
+                  <div><p className="text-xs text-slate-400 font-bold uppercase">Horário</p><p className="font-medium text-sm">{proximaAula.horario_inicio} - {proximaAula.horario_fim}</p></div>
+                </div>
+              </div>
+              <div className="flex gap-3 relative z-10">
+                <Link href={`/dashboard/turmas/${proximaAula.id_turma}`} className="flex-1">
+                  <button className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"><ClipboardList size={20} /> Fazer Chamada</button>
+                </Link>
+              </div>
+            </div>
+          )}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-6 border-b border-slate-100"><h3 className="font-bold text-slate-800">Minhas Turmas</h3></div>
+            <div className="divide-y divide-slate-100">
+              {minhasTurmas.map((t: any) => (
+                <div key={t.id_turma} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                  <div><p className="font-semibold text-slate-800">{t.descricao}</p><p className="text-xs text-slate-500">{t.dias_semana} • {t.horario_inicio}</p></div>
+                  <Link href={`/dashboard/turmas/${t.id_turma}`}><button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><ArrowRight size={18} /></button></Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-4">Alunos por Modalidade</h3>
+            <div className="h-[200px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={showChart ? dataGrafico : [{ name: 'Sem dados', value: 1, color: '#e2e8f0' }]} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                    {showChart ? (dataGrafico.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)) : <Cell fill="#e2e8f0" />}
+                  </Pie>
+                  <Tooltip />
+                  {showChart && <Legend verticalAlign="bottom" height={36}/>}
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -218,19 +297,10 @@ function KpiCard({ title, value, icon: Icon, color }: any) {
 
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group hover:shadow-md transition-all duration-300">
-      {/* Mancha arredondada (Blob) que invade o card - Agora com cor mais sólida */}
       <div className={`absolute -top-6 -right-6 w-24 h-24 ${blobColor} opacity-70 rounded-full transition-transform duration-500 group-hover:scale-150 group-hover:rotate-12 group-hover:opacity-100`} />
-      
-      {/* Detalhe extra de acento no topo */}
       <div className={`absolute top-0 right-0 w-16 h-1 ${color.split(' ')[1].replace('text', 'bg')} opacity-40`} />
-
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative z-10 ${color}`}>
-        <Icon size={24} />
-      </div>
-      <div className="relative z-10">
-        <p className="text-slate-500 text-sm font-medium">{title}</p>
-        <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
-      </div>
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center relative z-10 ${color}`}><Icon size={24} /></div>
+      <div className="relative z-10"><p className="text-slate-500 text-sm font-medium">{title}</p><h3 className="text-2xl font-bold text-slate-800">{value}</h3></div>
     </div>
   );
 }
@@ -238,13 +308,8 @@ function KpiCard({ title, value, icon: Icon, color }: any) {
 function ActionButton({ title, desc, icon: Icon }: any) {
   return (
     <button className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 hover:border-primary/30 hover:bg-blue-50/50 transition-all text-left group w-full h-full">
-      <div className="bg-blue-50 text-primary p-3 rounded-lg group-hover:bg-primary group-hover:text-white transition-colors">
-        <Icon size={24} />
-      </div>
-      <div>
-        <h4 className="font-bold text-slate-800 group-hover:text-primary transition-colors">{title}</h4>
-        <p className="text-xs text-slate-500">{desc}</p>
-      </div>
+      <div className="bg-blue-50 text-primary p-3 rounded-lg group-hover:bg-primary group-hover:text-white transition-colors"><Icon size={24} /></div>
+      <div><h4 className="font-bold text-slate-800 group-hover:text-primary transition-colors">{title}</h4><p className="text-xs text-slate-500">{desc}</p></div>
     </button>
   );
 }

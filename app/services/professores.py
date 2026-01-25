@@ -13,13 +13,10 @@ def listar_professor_cpf(db: Session, cpf: str):
     return db.query(models.Professor).filter(models.Professor.cpf == cpf).first()
 
 def criar_professor(db: Session, professor: schemas.ProfessorCreate):
-    # Usa a senha fornecida pelo usuário
     senha_plana = professor.password
     
-    # Hash da senha
     senha_hash = security.get_password_hash(senha_plana)
 
-    # Cria o usuário com o username escolhido
     db_usuario = models.Usuario(
         username=professor.username,
         password_hash=senha_hash,
@@ -27,7 +24,7 @@ def criar_professor(db: Session, professor: schemas.ProfessorCreate):
     )
 
     db.add(db_usuario)
-    db.flush() # Para gerar o id_usuario
+    db.flush()
 
     db_professor = models.Professor(
         nome=professor.nome,
@@ -40,7 +37,6 @@ def criar_professor(db: Session, professor: schemas.ProfessorCreate):
     db.commit()
     db.refresh(db_professor)
 
-    # Retorna o objeto (senha_temporaria não é mais usada neste fluxo manual, mas mantemos compatibilidade)
     db_professor.senha_temporaria = "" 
     return db_professor
 
