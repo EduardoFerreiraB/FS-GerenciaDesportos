@@ -102,6 +102,7 @@ class Aluno(Base):
     foto = Column(String(500), nullable=True)
     documento_pessoal = Column(String(500), nullable=True)
     atestado_medico = Column(String(500), nullable=True)
+    ativo = Column(Boolean, default=True)
 
     participante = relationship("Participante", back_populates="aluno")
     matriculas = relationship("Matricula", back_populates="aluno")
