@@ -102,10 +102,18 @@ def excluir_turma(db: Session, id_turma: int):
     db_turma = listar_turma_id(db, id_turma)
 
     if db_turma:
-        # Excluir manualmente as matrículas vinculadas (Desassociação)
-        db.query(models.Matricula).filter(models.Matricula.id_turma == id_turma).delete()
+        # 1. Buscar matrículas para deletar presenças associadas
+        matriculas = db.query(models.Matricula).filter(models.Matricula.id_turma == id_turma).all()
+        ids_matriculas = [m.id_matricula for m in matriculas]
+
+        if ids_matriculas:
+            # Deletar presenças vinculadas às matrículas
+            db.query(models.Presenca).filter(models.Presenca.id_matricula.in_(ids_matriculas)).delete(synchronize_session=False)
+            
+            # Deletar as matrículas
+            db.query(models.Matricula).filter(models.Matricula.id_turma == id_turma).delete(synchronize_session=False)
         
-        # Agora exclui a turma sem IntegrityError
+        # 2. Agora exclui a turma com segurança
         db.delete(db_turma)
         db.commit()
         return True
