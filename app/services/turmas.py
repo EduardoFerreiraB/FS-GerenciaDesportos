@@ -18,23 +18,38 @@ def dias_semana_str(dias_lista: list) -> str:
 
     return ",".join(dias_valores)
 
-def verificar_conflito_horario(db: Session, id_professor: int, dias: list, inicio, fim, id_turma_atual: int = None):
-    turmas_prof = db.query(models.Turma).filter(models.Turma.id_professor == id_professor).all()
+def checar_conflito_agenda(dias_selecionados: list, horario_inicio, horario_fim, turmas_comparar: list, id_turma_ignorar: int = None) -> bool:
+    """
+    Função pura que verifica se há conflito entre um horário proposto e uma lista de turmas existentes.
+    """
+    if not dias_selecionados:
+        return False
+        
+    # Normaliza os dias selecionados para uma lista de strings
+    dias_novos = [d.value if hasattr(d, 'value') else str(d) for d in dias_selecionados]
     
-    dias_novos = []
-    for d in dias:
-        dias_novos.append(d.value if hasattr(d, 'value') else str(d))
-
-    for turma in turmas_prof:
-        if id_turma_atual and turma.id_turma == id_turma_atual:
+    for turma in turmas_comparar:
+        if id_turma_ignorar and getattr(turma, 'id_turma', None) == id_turma_ignorar:
             continue
             
-        dias_turma = turma.dias_semana.split(',') if turma.dias_semana else []
+        # Pega os dias da turma (pode ser string do banco ou lista do schema/modelo)
+        dias_turma_raw = turma.dias_semana
+        if isinstance(dias_turma_raw, str):
+            dias_turma = dias_turma_raw.split(',')
+        elif isinstance(dias_turma_raw, list):
+            dias_turma = [d.value if hasattr(d, 'value') else str(d) for d in dias_turma_raw]
+        else:
+            dias_turma = []
         
+        # Verifica interseção de dias e sobreposição de horários
         if any(dia in dias_turma for dia in dias_novos):
-            if (inicio < turma.horario_fim) and (turma.horario_inicio < fim):
+            if (horario_inicio < turma.horario_fim) and (turma.horario_inicio < horario_fim):
                 return True
     return False
+
+def verificar_conflito_horario(db: Session, id_professor: int, dias: list, inicio, fim, id_turma_atual: int = None):
+    turmas_prof = db.query(models.Turma).filter(models.Turma.id_professor == id_professor).all()
+    return checar_conflito_agenda(dias, inicio, fim, turmas_prof, id_turma_ignorar=id_turma_atual)
 
 def criar_turma(db:Session, turma: schemas.TurmaCreate):
     if verificar_conflito_horario(db, turma.id_professor, turma.dias_semana, turma.horario_inicio, turma.horario_fim):

@@ -9,23 +9,22 @@ def verificar_conflito_aluno(db: Session, id_aluno: int, nova_turma_id: int):
         return False 
     matriculas_aluno = listar_matriculas_aluno(db, id_aluno)
     
-    dias_nova = nova_turma.dias_semana.split(',') if nova_turma.dias_semana else []
-    
+    # Extrair turmas das matrículas
+    turmas_aluno = []
     for m in matriculas_aluno:
-        turma_atual = m.turma 
-        if not turma_atual: 
-            turma_atual = servico_turmas.listar_turma_id(db, m.id_turma)
-            
-        if turma_atual.id_turma == nova_turma.id_turma:
-            continue
-            
-        dias_atual = turma_atual.dias_semana.split(',') if turma_atual.dias_semana else []
-        
-        if any(dia in dias_atual for dia in dias_nova):
-            if (nova_turma.horario_inicio < turma_atual.horario_fim) and (turma_atual.horario_inicio < nova_turma.horario_fim):
-                return True
-                
-    return False
+        t = m.turma if m.turma else servico_turmas.listar_turma_id(db, m.id_turma)
+        if t:
+            turmas_aluno.append(t)
+    
+    dias_nova = nova_turma.dias_semana.split(',') if isinstance(nova_turma.dias_semana, str) else []
+    
+    return servico_turmas.checar_conflito_agenda(
+        dias_nova, 
+        nova_turma.horario_inicio, 
+        nova_turma.horario_fim, 
+        turmas_aluno, 
+        id_turma_ignorar=nova_turma.id_turma
+    )
 
 def criar_matricula(db: Session, matricula: schemas.MatriculaCreate):
     if verificar_conflito_aluno(db, matricula.id_aluno, matricula.id_turma):

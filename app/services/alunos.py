@@ -19,11 +19,10 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
             if turma:
                 turmas_selecionadas.append(turma)
         
-        from services.matriculas import verificar_conflito_aluno
-        
         turmas_para_checar = []
         for turma_nova in turmas_selecionadas:
-            if verificar_conflito_aluno(turma_nova, turmas_para_checar):
+            dias_nova = turma_nova.dias_semana.split(',') if isinstance(turma_nova.dias_semana, str) else []
+            if servico_turmas.checar_conflito_agenda(dias_nova, turma_nova.horario_inicio, turma_nova.horario_fim, turmas_para_checar):
                  raise ValueError(f"Conflito de horário detectado envolvendo a turma {turma_nova.descricao or turma_nova.id_turma}")
             turmas_para_checar.append(turma_nova)
 
