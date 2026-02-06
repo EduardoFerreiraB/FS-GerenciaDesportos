@@ -102,19 +102,14 @@ def excluir_turma(db: Session, id_turma: int):
     db_turma = listar_turma_id(db, id_turma)
 
     if db_turma:
-        # 1. Busca matrículas para remover dependências (Presenças)
-        # Importante: Pegar os IDs para limpar a tabela de Presenças primeiro
         matriculas = db.query(models.Matricula).filter(models.Matricula.id_turma == id_turma).all()
         ids_matriculas = [m.id_matricula for m in matriculas]
 
         if ids_matriculas:
-            # Remove Presenças vinculadas às matrículas dessa turma
             db.query(models.Presenca).filter(models.Presenca.id_matricula.in_(ids_matriculas)).delete(synchronize_session=False)
             
-            # Remove as Matrículas dessa turma
             db.query(models.Matricula).filter(models.Matricula.id_turma == id_turma).delete(synchronize_session=False)
         
-        # 2. Remove a Turma
         db.delete(db_turma)
         db.commit()
         return True
