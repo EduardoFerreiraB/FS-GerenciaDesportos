@@ -19,20 +19,15 @@ def dias_semana_str(dias_lista: list) -> str:
     return ",".join(dias_valores)
 
 def checar_conflito_agenda(dias_selecionados: list, horario_inicio, horario_fim, turmas_comparar: list, id_turma_ignorar: int = None) -> bool:
-    """
-    Função pura que verifica se há conflito entre um horário proposto e uma lista de turmas existentes.
-    """
     if not dias_selecionados:
         return False
-        
-    # Normaliza os dias selecionados para uma lista de strings
+   
     dias_novos = [d.value if hasattr(d, 'value') else str(d) for d in dias_selecionados]
     
     for turma in turmas_comparar:
         if id_turma_ignorar and getattr(turma, 'id_turma', None) == id_turma_ignorar:
             continue
             
-        # Pega os dias da turma (pode ser string do banco ou lista do schema/modelo)
         dias_turma_raw = turma.dias_semana
         if isinstance(dias_turma_raw, str):
             dias_turma = dias_turma_raw.split(',')
@@ -41,7 +36,6 @@ def checar_conflito_agenda(dias_selecionados: list, horario_inicio, horario_fim,
         else:
             dias_turma = []
         
-        # Verifica interseção de dias e sobreposição de horários
         if any(dia in dias_turma for dia in dias_novos):
             if (horario_inicio < turma.horario_fim) and (turma.horario_inicio < horario_fim):
                 return True

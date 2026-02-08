@@ -9,7 +9,6 @@ def verificar_conflito_aluno(db: Session, id_aluno: int, nova_turma_id: int):
         return False 
     matriculas_aluno = listar_matriculas_aluno(db, id_aluno)
     
-    # Extrair turmas das matrículas
     turmas_aluno = []
     for m in matriculas_aluno:
         t = m.turma if m.turma else servico_turmas.listar_turma_id(db, m.id_turma)
