@@ -37,6 +37,9 @@ Antes de começar, você precisará ter instalado em sua máquina:
    python setup_local.py
    ```
 
+   Com o usuário admin criado durante do setup, todas as configurações para usar o sistema estão prontas, basta usar as credencias que você criou para o user admin para entrar no sistema e navegar.
+
+   Se quiser saber quais são as funcionalidades do sistema, a rota http://localhost:8000/docs te mostra todas as rotas existentes, desde criar modalidades a matricular aluno. Logado como usuário admin, você consegue fazer tudo no sistema, inclusive criar novos usuários.
 ---
 
 ### 🏃 Passo 2: Uso Diário (Próximas vezes)
