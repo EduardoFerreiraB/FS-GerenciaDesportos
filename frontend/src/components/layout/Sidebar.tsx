@@ -12,7 +12,9 @@ import {
   ClipboardList,
   UserCheck,
   ShieldAlert,
-  Loader2
+  Loader2,
+  Trophy,
+  Calendar
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
@@ -70,6 +72,12 @@ export default function Sidebar() {
       icon: Dumbbell,
       label: 'Modalidades',
       href: '/dashboard/modalidades',
+      roles: ['admin', 'coordenador']
+    },
+    {
+      icon: Trophy,
+      label: 'Eventos / Competições',
+      href: '/dashboard/eventos',
       roles: ['admin', 'coordenador']
     },
     {

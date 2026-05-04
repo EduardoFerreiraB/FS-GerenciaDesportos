@@ -4,33 +4,33 @@ from datetime import date, time, datetime
 from enum import Enum
 
 class RoleEnum(str, Enum):
-    admin = "admin",
-    coordenador = "coordenador",
-    professor = "professor",
+    admin = "admin"
+    coordenador = "coordenador"
+    professor = "professor"
     assistente = "assistente"
 
 class TipoParticipanteEnum(str, Enum):
-    Aluno = "Aluno",
+    Aluno = "Aluno"
     Atleta = "Atleta"
 
 class statusPresencaEnum(str, Enum):
-    Presente = "Presente",
-    Ausente = "Ausente",
+    Presente = "Presente"
+    Ausente = "Ausente"
     Justificado = "Justificado" 
 
 class DiaSemanaEnum(str, Enum):
-    SEG = "SEG",
-    TER = "TER",
-    QUA = "QUA",
-    QUI = "QUI",
-    SEX = "SEX",
-    SAB = "SAB",
+    SEG = "SEG"
+    TER = "TER"
+    QUA = "QUA"
+    QUI = "QUI"
+    SEX = "SEX"
+    SAB = "SAB"
     DOM = "DOM"
 
 class StatusPartidaEnum(str, Enum):
-    Agendada = "Agendada",
-    EmAndamento = "Em Andamento",
-    Finalizada = "Finalizada",
+    Agendada = "Agendada"
+    EmAndamento = "Em Andamento"
+    Finalizada = "Finalizada"
     Cancelada = "Cancelada"
 
 class ModalidadeBase(BaseModel):
@@ -276,17 +276,83 @@ class Edicao(EdicaoBase):
     class Config:
         from_attributes = True
 
+class AtletaBase(BaseModel):
+    nome_completo: str = Field(..., max_length=500)
+    data_nascimento: date
+    documento_pessoal: str = Field(..., max_length=50)
+    contato: Optional[str] = Field(None, max_length=20)
+    endereco: Optional[str] = None
+    foto: Optional[str] = None
+
+class AtletaCreate(AtletaBase):
+    pass
+
+class AtletaUpdate(BaseModel):
+    nome_completo: Optional[str] = Field(None, max_length=500)
+    data_nascimento: Optional[date] = None
+    documento_pessoal: Optional[str] = Field(None, max_length=50)
+    contato: Optional[str] = Field(None, max_length=20)
+    endereco: Optional[str] = None
+
+class Atleta(AtletaBase):
+    id_atleta: int
+    id_participante: int
+    class Config:
+        from_attributes = True
+
+class ParticipanteResponse(BaseModel):
+    id_participante: int
+    tipo: str
+    aluno: Optional[Aluno] = None
+    atleta: Optional[Atleta] = None
+    class Config:
+        from_attributes = True
+
+class EquipeBase(BaseModel):
+    nome: str = Field(..., max_length=200)
+    id_edicao: int
+
+class EquipeCreate(EquipeBase):
+    pass
+
+class EquipeUpdate(BaseModel):
+    nome: Optional[str] = Field(None, max_length=200)
+
+class Equipe(EquipeBase):
+    id_equipe: int
+    edicao: Optional[Edicao] = None
+    participantes: List[ParticipanteResponse] = []
+    class Config:
+        from_attributes = True
+
 class PartidaBase(BaseModel):
     id_edicao: int
     id_local: int
     id_arbitro: int
     id_modalidade: int
+    id_equipe_casa: Optional[int] = None
+    id_equipe_visitante: Optional[int] = None
     part_data: date
-    status: StatusPartidaEnum = StatusPartidaEnum.Agendada
     part_hora: time
+    placar_casa: int = 0
+    placar_visitante: int = 0
+    status: StatusPartidaEnum = StatusPartidaEnum.Agendada
+    observacoes: Optional[str] = None
 
 class PartidaCreate(PartidaBase):
     pass
+
+class PartidaUpdate(BaseModel):
+    id_local: Optional[int] = None
+    id_arbitro: Optional[int] = None
+    id_equipe_casa: Optional[int] = None
+    id_equipe_visitante: Optional[int] = None
+    part_data: Optional[date] = None
+    part_hora: Optional[time] = None
+    placar_casa: Optional[int] = None
+    placar_visitante: Optional[int] = None
+    status: Optional[StatusPartidaEnum] = None
+    observacoes: Optional[str] = None
 
 class Partida(PartidaBase):
     id_partida: int
@@ -294,6 +360,8 @@ class Partida(PartidaBase):
     local: Optional[Local] = None
     arbitro: Optional[Arbitro] = None
     modalidade: Optional[Modalidade] = None
+    equipe_casa: Optional[Equipe] = None
+    equipe_visitante: Optional[Equipe] = None
     class Config:
         from_attributes = True
 

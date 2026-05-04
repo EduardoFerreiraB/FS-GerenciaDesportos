@@ -8,7 +8,7 @@ import models
 from routers import (
     modalidades, professores, turmas, alunos, 
     matriculas, presencas, arbitros, locais, 
-    eventos, edicoes, auth
+    eventos, edicoes, auth, equipes, partidas, atletas
 )
 import os
 from pathlib import Path
@@ -50,6 +50,9 @@ app.include_router(arbitros.router)
 app.include_router(locais.router)
 app.include_router(eventos.router)
 app.include_router(edicoes.router)
+app.include_router(equipes.router)
+app.include_router(partidas.router)
+app.include_router(atletas.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():

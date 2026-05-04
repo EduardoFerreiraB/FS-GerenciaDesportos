@@ -43,3 +43,26 @@ def excluir_edicao(db: Session, edicao_id: int):
         db.commit()
         return True
     return False
+
+def clonar_equipes(db: Session, id_edicao_origem: int, id_edicao_destino: int):
+    # 1. Buscar equipes da edição de origem
+    equipes_origem = db.query(models.Equipe).filter(models.Equipe.id_edicao == id_edicao_origem).all()
+    
+    novas_equipes = []
+    for eq_origem in equipes_origem:
+        # 2. Criar nova equipe para o destino
+        nova_equipe = models.Equipe(
+            nome=eq_origem.nome,
+            id_edicao=id_edicao_destino
+        )
+        db.add(nova_equipe)
+        db.flush() # Para gerar o id_equipe
+        
+        # 3. Copiar os participantes (vínculos)
+        for participante in eq_origem.participantes:
+            nova_equipe.participantes.append(participante)
+        
+        novas_equipes.append(nova_equipe)
+    
+    db.commit()
+    return novas_equipes

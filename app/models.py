@@ -79,6 +79,26 @@ class Participante(Base):
     tipo = Column(Enum("aluno", "atleta"), nullable=False)
 
     aluno = relationship("Aluno", back_populates="participante", uselist=False)
+    atleta = relationship("Atleta", back_populates="participante", uselist=False)
+
+class Atleta(Base):
+    __tablename__ = "atletas"
+
+    id_atleta = Column(Integer, primary_key=True, index=True)
+    id_participante = Column(
+        Integer,
+        ForeignKey("participantes.id_participante"),
+        unique=True,
+        nullable=False,
+    )
+    nome_completo = Column(String(500), nullable=False)
+    data_nascimento = Column(Date, nullable=False)
+    documento_pessoal = Column(String(50), nullable=False)
+    contato = Column(String(20), nullable=True)
+    endereco = Column(Text, nullable=True)
+    foto = Column(String(500), nullable=True)
+
+    participante = relationship("Participante", back_populates="atleta")
 
 class Aluno(Base):
     __tablename__ = "alunos"
@@ -99,7 +119,7 @@ class Aluno(Base):
     telefone_1 = Column(String(20), nullable=False)
     telefone_2 = Column(String(20), nullable=True)
     endereco = Column(Text, nullable=False)
-    recomendacoes_medicas = Column(Text, nullable=False)
+    recomendacoes_medicas = Column(Text, nullable=True)
     foto = Column(String(500), nullable=True)
     documento_pessoal = Column(String(500), nullable=True)
     atestado_medico = Column(String(500), nullable=True)
@@ -170,6 +190,24 @@ class Edicao(Base):
 
     evento = relationship("Evento", back_populates="edicoes")
     partidas = relationship("Partida", back_populates="edicao")
+    equipes = relationship("Equipe", back_populates="edicao")
+
+equipes_participantes = Table(
+    "equipes_participantes",
+    Base.metadata,
+    Column("id_equipe", Integer, ForeignKey("equipes.id_equipe"), primary_key=True),
+    Column("id_participante", Integer, ForeignKey("participantes.id_participante"), primary_key=True)
+)
+
+class Equipe(Base):
+    __tablename__ = "equipes"
+
+    id_equipe = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(200), nullable=False)
+    id_edicao = Column(Integer, ForeignKey("edicoes.id_edicao"), nullable=False)
+
+    edicao = relationship("Edicao", back_populates="equipes")
+    participantes = relationship("Participante", secondary=equipes_participantes)
 
 class Partida(Base):
     __tablename__ = "partidas"
@@ -179,11 +217,18 @@ class Partida(Base):
     id_local = Column(Integer, ForeignKey("locais.id_local"), nullable=False)
     id_arbitro = Column(Integer, ForeignKey("arbitros.id_arbitro"), nullable=False)
     id_modalidade = Column(Integer, ForeignKey("modalidades.id_modalidade"), nullable=False)
+    id_equipe_casa = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
+    id_equipe_visitante = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
     part_data = Column(Date, nullable=False)
     part_hora = Column(Time, nullable=False)
+    placar_casa = Column(Integer, default=0)
+    placar_visitante = Column(Integer, default=0)
     status = Column(Enum("Agendada", "Em Andamento", "Finalizada", "Cancelada"), default="Agendada")
+    observacoes = Column(Text, nullable=True)
 
     edicao = relationship("Edicao", back_populates="partidas")
     local = relationship("Local")
     arbitro = relationship("Arbitro")
     modalidade = relationship("Modalidade")
+    equipe_casa = relationship("Equipe", foreign_keys=[id_equipe_casa])
+    equipe_visitante = relationship("Equipe", foreign_keys=[id_equipe_visitante])
