@@ -6,6 +6,7 @@ import schemas
 import models
 from services import professores as servico_professores
 from security import check_coordenador_role, get_current_active_user
+from utils import validar_cpf
 
 router = APIRouter(
     prefix="/professores",
@@ -18,12 +19,26 @@ def criar_professor(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    if professor.cpf:
-        professor_existente = servico_professores.listar_professor_cpf(db, cpf=professor.cpf)
-        if professor_existente:
-            raise HTTPException(status_code=400, detail="CPF já cadastrado para outro professor.")
-        
-    return servico_professores.criar_professor(db=db, professor=professor)
+    # 1. Validar CPF estruturalmente
+    if not validar_cpf(professor.cpf):
+        raise HTTPException(status_code=400, detail="CPF inválido. Certifique-se de que o número está correto.")
+
+    # 2. Verificar se CPF já está cadastrado
+    professor_existente = servico_professores.listar_professor_cpf(db, cpf=professor.cpf)
+    if professor_existente:
+        raise HTTPException(status_code=400, detail="Este CPF já está cadastrado para outro professor.")
+    
+    # 3. Verificar se o username já está em uso
+    usuario_existente = db.query(models.Usuario).filter(models.Usuario.username == professor.username).first()
+    if usuario_existente:
+        raise HTTPException(status_code=400, detail="Este nome de usuário já está sendo utilizado.")
+
+    try:
+        return servico_professores.criar_professor(db=db, professor=professor)
+    except Exception as e:
+        # Tratar outros erros genéricos ou específicos que possam ocorrer
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Erro ao cadastrar professor: {str(e)}")
 
 @router.get("/", summary="Listar todos os professores", response_model=List[schemas.Professor], status_code=status.HTTP_200_OK)
 def listar_professores(
@@ -50,6 +65,17 @@ def listar_professor(
         raise HTTPException(status_code=404, detail="Professor não encontrado.")
     return db_professor
 
+@router.get("/buscar/cpf/{cpf}", summary="Obter professor por CPF", response_model=schemas.Professor, status_code=status.HTTP_200_OK)
+def obter_professor_cpf(
+    cpf: str,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role)
+):
+    db_professor = servico_professores.listar_professor_cpf(db, cpf=cpf)
+    if not db_professor:
+        raise HTTPException(status_code=404, detail="Professor não encontrado com este CPF.")
+    return db_professor
+
 @router.put("/{id_professor}", summary="Atualizar um professor existente", response_model=schemas.Professor, status_code=status.HTTP_200_OK)
 def atualizar_professor(
     id_professor: int, 
@@ -60,6 +86,15 @@ def atualizar_professor(
     if current_user.role == "professor":
         if not current_user.professores or current_user.professores.id_professor != id_professor:
             raise HTTPException(status_code=403, detail="Acesso negado: Você só pode editar seu próprio perfil")
+
+    # Se estiver tentando atualizar o CPF, validar
+    if professor_atualizado.cpf:
+        if not validar_cpf(professor_atualizado.cpf):
+             raise HTTPException(status_code=400, detail="CPF inválido.")
+        
+        professor_existente = servico_professores.listar_professor_cpf(db, cpf=professor_atualizado.cpf)
+        if professor_existente and professor_existente.id_professor != id_professor:
+            raise HTTPException(status_code=400, detail="Este CPF já está cadastrado para outro professor.")
 
     db_professor = servico_professores.atualizar_professor(db=db, id_professor=id_professor, professor_atualizado=professor_atualizado)
 

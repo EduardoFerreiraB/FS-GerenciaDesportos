@@ -86,13 +86,16 @@ def criar_aluno(
         ids_turmas=lista_ids_turmas
     )
 
-    return servico_alunos.cadastrar_aluno(
-        db=db, 
-        aluno=aluno_schema, 
-        foto=foto_path, 
-        documento=doc_path, 
-        atestado=atestado_path
-    )
+    try:
+        return servico_alunos.cadastrar_aluno(
+            db=db, 
+            aluno=aluno_schema, 
+            foto=foto_path, 
+            documento=doc_path, 
+            atestado=atestado_path
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/", summary="Listar todos os alunos", response_model=List[schemas.Aluno], status_code=status.HTTP_200_OK)
 def listar_alunos(

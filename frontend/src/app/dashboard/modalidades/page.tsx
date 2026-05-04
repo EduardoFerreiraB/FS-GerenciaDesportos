@@ -153,7 +153,7 @@ export default function ModalidadesPage() {
             <div className="w-12 h-12 rounded-full bg-slate-50 group-hover:bg-white flex items-center justify-center transition-colors">
                 <Plus size={24} />
             </div>
-            <span className="font-semibold">Nova Modalidade</span>
+            <span className="font-semibold">Cadastrar Modalidade</span>
             </button>
         </div>
       )}
