@@ -199,7 +199,9 @@ export default function ModalidadesPage() {
 
 // Sub-componente Modal de Cadastro
 function ModalCadastro({ onClose, onSave }: any) {
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    mode: 'onChange'
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -221,7 +223,9 @@ function ModalCadastro({ onClose, onSave }: any) {
 
         <form onSubmit={handleSubmit(onSave)} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Nome da Modalidade</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Nome da Modalidade <span className="text-red-500">*</span>
+            </label>
             <input 
               {...register('nome', { required: true })}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#C5430C]/20 focus:border-[#C5430C] outline-none transition-all"

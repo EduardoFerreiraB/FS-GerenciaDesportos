@@ -22,7 +22,9 @@ interface ProfessorFormProps {
 
 export default function ProfessorForm({ initialData, isEditing = false }: ProfessorFormProps) {
   const router = useRouter();
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
+    mode: 'onChange'
+  });
 
   useEffect(() => {
     if (initialData) {
@@ -53,6 +55,12 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
     }
   };
 
+  const numberRegisterOptions = {
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.target.value = e.target.value.replace(/\D/g, '');
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-12">
       
@@ -79,20 +87,29 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
                 register={register('nome', { required: 'O nome é obrigatório' })}
                 error={errors.nome}
                 theme="emerald"
+                required
               />
               <Input 
                 label="CPF" 
-                placeholder="000.000.000-00" 
-                register={register('cpf', { required: 'O CPF é obrigatório' })}
+                placeholder="Apenas números" 
+                register={register('cpf', { 
+                  required: 'O CPF é obrigatório',
+                  ...numberRegisterOptions
+                })}
                 error={errors.cpf}
                 theme="emerald"
+                required
               />
               <Input 
                 label="WhatsApp / Contato" 
-                placeholder="(00) 00000-0000" 
-                register={register('contato', { required: 'O contato é obrigatório' })}
+                placeholder="Apenas números" 
+                register={register('contato', { 
+                  required: 'O contato é obrigatório',
+                  ...numberRegisterOptions
+                })}
                 error={errors.contato}
                 theme="emerald"
+                required
               />
             </div>
           </CardSection>
@@ -109,6 +126,7 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
                 error={errors.username}
                 theme="emerald"
                 disabled={isEditing}
+                required
               />
               {!isEditing && (
                 <Input 
@@ -118,6 +136,7 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
                   register={register('password', { required: 'A senha é obrigatória', minLength: { value: 6, message: 'Mínimo 6 caracteres' } })}
                   error={errors.password}
                   theme="emerald"
+                  required
                 />
               )}
               <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
@@ -175,12 +194,14 @@ function CardSection({ title, icon: Icon, children, theme }: any) {
   );
 }
 
-function Input({ label, type = "text", placeholder, register, error, theme, disabled }: any) {
+function Input({ label, type = "text", placeholder, register, error, theme, disabled, required }: any) {
   const focusClasses = theme === 'emerald' ? 'focus:ring-emerald-500/20 focus:border-emerald-500' : 'focus:ring-primary/20 focus:border-primary';
   
   return (
     <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">{label}</label>
+      <label className="text-sm font-semibold text-slate-700 ml-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       <input
         type={type}
         disabled={disabled}

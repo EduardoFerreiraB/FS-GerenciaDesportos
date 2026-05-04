@@ -14,7 +14,9 @@ import api from '@/lib/api';
 
 export default function NovoUsuarioPage() {
   const router = useRouter();
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    mode: 'onChange'
+  });
 
   const onSubmit = async (data: any) => {
     try {
@@ -50,6 +52,7 @@ export default function NovoUsuarioPage() {
                 register={register('username', { required: 'Obrigatório' })}
                 error={errors.username}
                 theme="purple"
+                required
               />
               <Input 
                 label="Senha" 
@@ -58,10 +61,13 @@ export default function NovoUsuarioPage() {
                 register={register('password', { required: 'Obrigatório', minLength: { value: 6, message: 'Mínimo 6 caracteres' } })}
                 error={errors.password}
                 theme="purple"
+                required
               />
               
               <div className="w-full space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 ml-1">Perfil de Acesso (Role)</label>
+                <label className="text-sm font-semibold text-slate-700 ml-1">
+                  Perfil de Acesso (Role) <span className="text-red-500">*</span>
+                </label>
                 <select 
                   {...register('role', { required: true })}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all appearance-none cursor-pointer"
@@ -99,10 +105,12 @@ export default function NovoUsuarioPage() {
   );
 }
 
-function Input({ label, type = "text", placeholder, register, error, theme }: any) {
+function Input({ label, type = "text", placeholder, register, error, theme, required }: any) {
   return (
     <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">{label}</label>
+      <label className="text-sm font-semibold text-slate-700 ml-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       <input
         type={type}
         className={clsx(

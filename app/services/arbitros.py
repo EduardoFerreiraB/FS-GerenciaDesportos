@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-import models, schemas
+import models
+import schemas
 
 def criar_arbitro(db: Session, arbitro: schemas.ArbitroCreate):
     db_arbitro = models.Arbitro(

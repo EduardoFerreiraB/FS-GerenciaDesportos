@@ -27,7 +27,9 @@ interface AlunoFormProps {
 
 export default function AlunoForm({ initialData, isEditing = false }: AlunoFormProps) {
   const router = useRouter();
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
+    mode: 'onChange'
+  });
   const [selectedTurmas, setSelectedTurmas] = useState<number[]>([]);
   const { data: turmasDisponiveis } = useSWR('/turmas/', fetcher);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
@@ -61,14 +63,19 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
   };
 
   const onSubmit = async (data: any) => {
+    if (!isEditing && (!atestadoFile || !documentoFile)) {
+      alert('Atestado Médico e Documento Pessoal são obrigatórios para novos cadastros.');
+      return;
+    }
+
     try {
       if (isEditing) {
         const jsonPayload = {
           nome_completo: data.nome_completo,
           data_nascimento: data.data_nascimento,
-          escola: data.escola || null,
-          serie_ano: data.serie_ano || null,
-          nome_mae: data.nome_mae || null,
+          escola: data.escola,
+          serie_ano: data.serie_ano,
+          nome_mae: data.nome_mae,
           nome_pai: data.nome_pai || null,
           telefone_1: data.telefone_1,
           telefone_2: data.telefone_2 || null,
@@ -83,21 +90,22 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
 
         formData.append('nome_completo', data.nome_completo);
         formData.append('data_nascimento', data.data_nascimento);
+        formData.append('escola', data.escola);
+        formData.append('serie_ano', data.serie_ano);
+        formData.append('nome_mae', data.nome_mae);
         
-
-        if (data.escola) formData.append('escola', data.escola);
-        if (data.serie_ano) formData.append('serie_ano', data.serie_ano);
-        if (data.nome_mae) formData.append('nome_mae', data.nome_mae);
         if (data.nome_pai) formData.append('nome_pai', data.nome_pai);
-        if (data.telefone_1) formData.append('telefone_1', data.telefone_1);
+        formData.append('telefone_1', data.telefone_1);
         if (data.telefone_2) formData.append('telefone_2', data.telefone_2);
-        if (data.endereco) formData.append('endereco', data.endereco);
+        formData.append('endereco', data.endereco);
         if (data.recomendacoes_medicas) formData.append('recomendacoes_medicas', data.recomendacoes_medicas);
+        
         if (selectedTurmas.length > 0) {
           formData.append('ids_turmas', selectedTurmas.join(','));
         } else {
           formData.append('ids_turmas', ''); 
         }
+        
         if (fotoFile) formData.append('foto', fotoFile);
         if (documentoFile) formData.append('documento', documentoFile);
         if (atestadoFile) formData.append('atestado', atestadoFile);
@@ -113,8 +121,6 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
       router.push('/dashboard/alunos');
     } catch (error: any) {
       console.error("Erro ao salvar aluno (Response):", error.response?.data);
-      console.error("Erro ao salvar aluno (Status):", error.response?.status);
-      
       const detail = error.response?.data?.detail;
       const msg = Array.isArray(detail) ? detail.map((e: any) => `${e.loc.join('.')} - ${e.msg}`).join('\n') : detail;
       alert(msg || 'Erro ao salvar aluno.');
@@ -125,6 +131,12 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
     setSelectedTurmas(prev => 
       prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
     );
+  };
+
+  const phoneRegisterOptions = {
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.target.value = e.target.value.replace(/\D/g, '');
+    }
   };
 
   return (
@@ -192,22 +204,28 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
             placeholder="Ex: João Pedro Silva" 
             register={register('nome_completo', { required: 'Nome é obrigatório' })}
             error={errors.nome_completo}
+            required
           />
           <Input 
             label="Data de Nascimento" 
             type="date"
             register={register('data_nascimento', { required: 'Data é obrigatória' })}
             error={errors.data_nascimento}
+            required
           />
           <Input 
             label="Escola" 
             placeholder="Nome da escola" 
-            register={register('escola')}
+            register={register('escola', { required: 'Escola é obrigatória' })}
+            error={errors.escola}
+            required
           />
           <Input 
             label="Série / Ano" 
             placeholder="Ex: 7º Ano" 
-            register={register('serie_ano')}
+            register={register('serie_ano', { required: 'Série/Ano é obrigatório' })}
+            error={errors.serie_ano}
+            required
           />
         </div>
       </CardSection>
@@ -215,15 +233,29 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
       {/* 3. Responsáveis */}
       <CardSection title="Dados dos Responsáveis" icon={UserPlus}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <Input label="Nome da Mãe" placeholder="Nome completo da mãe" register={register('nome_mae')} />
+          <Input 
+            label="Nome da Mãe" 
+            placeholder="Nome completo da mãe" 
+            register={register('nome_mae', { required: 'Nome da mãe é obrigatório' })} 
+            error={errors.nome_mae}
+            required
+          />
           <Input label="Nome do Pai" placeholder="Nome completo do pai" register={register('nome_pai')} />
           <Input 
             label="Telefone 1 (Principal)" 
-            placeholder="(00) 00000-0000" 
-            register={register('telefone_1', { required: 'Telefone é obrigatório' })}
+            placeholder="Apenas números" 
+            register={register('telefone_1', { 
+              required: 'Telefone é obrigatório',
+              ...phoneRegisterOptions
+            })}
             error={errors.telefone_1}
+            required
           />
-          <Input label="Telefone 2 (Opcional)" placeholder="(00) 00000-0000" register={register('telefone_2')} />
+          <Input 
+            label="Telefone 2 (Opcional)" 
+            placeholder="Apenas números" 
+            register={register('telefone_2', phoneRegisterOptions)} 
+          />
         </div>
         <div className="w-full">
           <Input 
@@ -231,6 +263,7 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
             placeholder="Rua, Número, Bairro, Cidade - UF" 
             register={register('endereco', { required: 'Endereço é obrigatório' })}
             error={errors.endereco}
+            required
           />
         </div>
       </CardSection>
@@ -249,6 +282,7 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
             file={atestadoFile}
             onFileChange={setAtestadoFile}
             accept=".pdf,image/*"
+            required={!isEditing}
           />
         </div>
       </CardSection>
@@ -260,12 +294,13 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
           file={documentoFile}
           onFileChange={setDocumentoFile}
           accept=".pdf,image/*"
+          required={!isEditing}
         />
       </CardSection>
 
       {/* 6. Seleção de Turmas */}
       <CardSection title="Turmas" icon={UserPlus}>
-        <p className="text-sm text-slate-500 mb-4">Selecione as turmas em que o aluno será matriculado:</p>
+        <p className="text-sm text-slate-500 mb-4">Selecione as turmas em que o aluno será matriculado: <span className="text-red-500">*</span></p>
         
         {turmasDisponiveis ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -343,10 +378,12 @@ function CardSection({ title, icon: Icon, children }: any) {
   );
 }
 
-function FileUploadField({ label, file, onFileChange, accept }: any) {
+function FileUploadField({ label, file, onFileChange, accept, required }: any) {
   return (
     <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 transition-all">
-      <label className="block text-sm font-semibold text-slate-700 mb-3 ml-1">{label}</label>
+      <label className="block text-sm font-semibold text-slate-700 mb-3 ml-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       
       {file ? (
         <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-primary/20 shadow-sm animate-in fade-in zoom-in-95 duration-200">
@@ -385,10 +422,12 @@ function FileUploadField({ label, file, onFileChange, accept }: any) {
   );
 }
 
-function Input({ label, type = "text", placeholder, register, error }: any) {
+function Input({ label, type = "text", placeholder, register, error, required }: any) {
   return (
     <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">{label}</label>
+      <label className="text-sm font-semibold text-slate-700 ml-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       <input
         type={type}
         className={clsx(
@@ -403,10 +442,12 @@ function Input({ label, type = "text", placeholder, register, error }: any) {
   );
 }
 
-function TextArea({ label, placeholder, register }: any) {
+function TextArea({ label, placeholder, register, required }: any) {
   return (
     <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">{label}</label>
+      <label className="text-sm font-semibold text-slate-700 ml-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       <textarea
         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-400 min-h-[100px]"
         placeholder={placeholder}

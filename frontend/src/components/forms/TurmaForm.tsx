@@ -35,7 +35,9 @@ interface TurmaFormProps {
 
 export default function TurmaForm({ initialData, isEditing = false }: TurmaFormProps) {
   const router = useRouter();
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
+    mode: 'onChange'
+  });
   const [selectedDias, setSelectedDias] = useState<string[]>([]);
 
   // Buscar dados reais para os selects
@@ -147,7 +149,9 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Modalidade */}
             <div className="w-full space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Modalidade</label>
+              <label className="text-sm font-semibold text-slate-700 ml-1">
+                Modalidade <span className="text-red-500">*</span>
+              </label>
               <select 
                 {...register('modalidade_id', { required: 'Selecione uma modalidade' })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
@@ -162,7 +166,9 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
 
             {/* Professor */}
             <div className="w-full space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Professor Responsável</label>
+              <label className="text-sm font-semibold text-slate-700 ml-1">
+                Professor Responsável <span className="text-red-500">*</span>
+              </label>
               <select 
                 {...register('professor_id', { required: 'Selecione um professor' })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
@@ -182,6 +188,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
               register={register('categoria_idade', { required: 'A categoria é obrigatória' })}
               error={errors.categoria_idade}
               theme="indigo"
+              required
             />
 
             {/* Descrição */}
@@ -191,6 +198,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
               register={register('descricao', { required: 'O nome/descrição é obrigatório' })}
               error={errors.descricao}
               theme="indigo"
+              required
             />
           </div>
         </CardSection>
@@ -201,7 +209,9 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
             
             {/* Dias da Semana */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-3 ml-1">Dias da Semana</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-3 ml-1">
+                Dias da Semana <span className="text-red-500">*</span>
+              </label>
               <div className="flex flex-wrap gap-2">
                 {diasSemana.map((dia) => (
                   <button
@@ -226,7 +236,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="w-full space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700 ml-1 flex items-center gap-2">
-                  <Clock size={16} className="text-indigo-500" /> Horário de Início
+                  <Clock size={16} className="text-indigo-500" /> Horário de Início <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="time"
@@ -238,7 +248,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
 
               <div className="w-full space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700 ml-1 flex items-center gap-2">
-                  <Clock size={16} className="text-indigo-500" /> Horário de Fim
+                  <Clock size={16} className="text-indigo-500" /> Horário de Fim <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="time"
@@ -297,12 +307,14 @@ function CardSection({ title, icon: Icon, children, theme }: any) {
   );
 }
 
-function Input({ label, type = "text", placeholder, register, error, theme }: any) {
+function Input({ label, type = "text", placeholder, register, error, theme, required }: any) {
   const focusClasses = theme === 'indigo' ? 'focus:ring-indigo-500/20 focus:border-indigo-500' : 'focus:ring-primary/20 focus:border-primary';
   
   return (
     <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">{label}</label>
+      <label className="text-sm font-semibold text-slate-700 ml-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
       <input
         type={type}
         className={clsx(

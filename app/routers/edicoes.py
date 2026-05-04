@@ -44,3 +44,11 @@ def excluir_edicao(edicao_id: int, db: Session = Depends(get_db)):
     if not sucesso:
         raise HTTPException(status_code=404, detail="Edição não encontrada.")
     return None
+
+@router.post("/{edicao_id}/clonar-equipes", summary="Clonar equipes de uma edição anterior")
+def clonar_equipes(edicao_id: int, edicao_origem_id: int, db: Session = Depends(get_db)):
+    try:
+        equipes = edicao_service.clonar_equipes(db, id_edicao_origem=edicao_origem_id, id_edicao_destino=edicao_id)
+        return {"message": f"{len(equipes)} equipes clonadas com sucesso."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
