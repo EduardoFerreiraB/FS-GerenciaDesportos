@@ -12,6 +12,15 @@ def criar_participante(db: Session, tipo: str):
     return db_participante
 
 def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, documento: str = None, atestado: str = None):
+    # Verificar se já existe aluno com mesmo nome e data de nascimento
+    aluno_existente = db.query(models.Aluno).filter(
+        models.Aluno.nome_completo == aluno.nome_completo,
+        models.Aluno.data_nascimento == aluno.data_nascimento
+    ).first()
+    
+    if aluno_existente:
+        raise ValueError("Já existe um aluno cadastrado com este nome e data de nascimento.")
+
     if aluno.ids_turmas:
         turmas_selecionadas = []
         for id_turma in aluno.ids_turmas:

@@ -47,7 +47,12 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
   useEffect(() => {
     if (initialData) {
       Object.keys(initialData).forEach(key => {
-        if (key !== 'dias_semana') setValue(key, initialData[key]);
+        if (key !== 'dias_semana') {
+          // Mapeamento de IDs para os nomes dos campos do formulário
+          if (key === 'id_modalidade') setValue('modalidade_id', initialData[key].toString());
+          else if (key === 'id_professor') setValue('professor_id', initialData[key].toString());
+          else setValue(key, initialData[key]);
+        }
       });
       
       // Ajuste: A API provavelmente retorna string "SEG,QUA" ou JSON. O form usa array.
