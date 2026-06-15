@@ -57,7 +57,16 @@ def atualizar_professor(db: Session, id_professor: int, professor_atualizado: sc
 def excluir_professor(db: Session, id_professor: int):
     db_professor = listar_professor(db=db, id_professor=id_professor)
     if db_professor:
+        if db_professor.turmas:
+            raise ValueError("Não é possível excluir o professor pois ele está alocado em uma ou mais turmas.")
+        
+        id_usuario = db_professor.id_usuario
         db.delete(db_professor)
+        
+        db_user = db.query(models.Usuario).filter(models.Usuario.id_usuario == id_usuario).first()
+        if db_user:
+            db.delete(db_user)
+            
         db.commit()
         return True
     return False

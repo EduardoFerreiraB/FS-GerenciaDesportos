@@ -43,6 +43,9 @@ def excluir_modalidade(db: Session, id_modalidade: int):
     if not db_modalidade:
         return None
 
+    if db_modalidade.turmas:
+        raise ValueError("Não é possível excluir esta modalidade pois ela possui turmas vinculadas.")
+
     db.delete(db_modalidade)
     db.commit()
     return db_modalidade

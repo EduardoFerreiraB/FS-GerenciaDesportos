@@ -3,10 +3,26 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-from security import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, check_admin_role, get_password_hash, get_current_user
-from datetime import timedelta
+from security import (
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    check_admin_role,
+    check_coordenador_role,
+    get_password_hash,
+    get_current_user
+)
+from datetime import timedelta, datetime, timezone
 from typing import List
-from schemas import Token, UsuarioCreate, UsuarioResponse, UsuarioUpdateRole, ChangePassword
+from schemas import (
+    Token,
+    UsuarioCreate,
+    UsuarioResponse,
+    UsuarioUpdateRole,
+    ChangePassword,
+    RefreshTokenRequest
+)
 
 router = APIRouter(
     tags=["Autenticação"],
@@ -26,7 +42,44 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(db=db, id_usuario=user.id_usuario)
+    return {"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token}
+
+@router.post("/refresh", response_model=Token)
+def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_db)):
+    db_token = db.query(models.RefreshToken).filter(
+        models.RefreshToken.token == request_data.refresh_token,
+        models.RefreshToken.revoked == False
+    ).first()
+
+    if not db_token:
+        raise HTTPException(status_code=401, detail="Refresh token inválido ou revogado.")
+
+    expires_at = db_token.expires_at
+    # Handle offset-naive or aware datetimes
+    if expires_at.tzinfo is not None:
+        now = datetime.now(timezone.utc)
+    else:
+        now = datetime.utcnow()
+
+    if expires_at < now:
+        db_token.revoked = True
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token expirado.")
+
+    user = db_token.usuario
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    new_access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+
+    # Revoke current token and rotate
+    db_token.revoked = True
+    db.commit()
+
+    new_refresh_token = create_refresh_token(db=db, id_usuario=user.id_usuario)
+
+    return {"access_token": new_access_token, "token_type": "bearer", "refresh_token": new_refresh_token}
 
 @router.post("/change-password", status_code=status.HTTP_200_OK)
 def change_password(
@@ -64,8 +117,15 @@ def read_users(
 def create_user(
     user: UsuarioCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(check_admin_role)
+    current_user: models.Usuario = Depends(check_coordenador_role)
 ):
+    # Coordinators can only create professors or assistants
+    if current_user.role == "coordenador" and user.role in ["admin", "coordenador"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Acesso negado: Coordenadores só podem criar usuários de nível inferior (professor ou assistente)."
+        )
+
     db_user = db.query(models.Usuario).filter(models.Usuario.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Nome de usuário já cadastrado.")
@@ -87,12 +147,19 @@ def update_user_role(
     username: str, 
     role_data: UsuarioUpdateRole, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(check_admin_role)
+    current_user: models.Usuario = Depends(check_coordenador_role)
 ):
     db_user = db.query(models.Usuario).filter(models.Usuario.username == username).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     
+    if current_user.role == "coordenador":
+        if db_user.role in ["admin", "coordenador"] or role_data.role in ["admin", "coordenador"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Acesso negado: Coordenadores não podem alterar privilégios de administradores ou outros coordenadores."
+            )
+
     db_user.role = role_data.role
     db.commit()
     db.refresh(db_user)
@@ -102,7 +169,7 @@ def update_user_role(
 def delete_user(
     id_usuario: int,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(check_admin_role)
+    current_user: models.Usuario = Depends(check_coordenador_role)
 ):
     if current_user.id_usuario == id_usuario:
         raise HTTPException(status_code=400, detail="Você não pode excluir sua própria conta.")
@@ -111,6 +178,12 @@ def delete_user(
     if not user_to_delete:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     
+    if current_user.role == "coordenador" and user_to_delete.role in ["admin", "coordenador"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: Coordenadores não podem excluir administradores ou outros coordenadores."
+        )
+
     try:
         db.delete(user_to_delete)
         db.commit()

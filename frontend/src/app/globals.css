@@ -1,21 +1,256 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --color-primary: #3072F0;
-  --color-primary-hover: #2559C0;
+  --color-primary: #3b82f6; /* Modern Cobalt Blue */
+  --color-primary-hover: #1d4ed8;
   --color-secondary: #64748b;
   --color-background: #f8fafc;
   --color-surface: #ffffff;
 }
 
 :root {
-  --background: var(--color-background);
-  --foreground: #1e293b;
+  --background: #f1f5f9; /* Warm slate backdrop */
+  --foreground: #0f172a; /* Slate 900 for high readability */
+  --card-bg: #ffffff;
+  --card-border: rgba(226, 232, 240, 0.8);
 }
 
 body {
-  background: var(--background);
+  background: radial-gradient(circle at top, #f8fafc 0%, #f1f5f9 100%);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
+  min-height: 100-screen;
+}
+
+/* Premium micro-interactions and springy animations */
+button, a, select, input, textarea, .card-elevate {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+button:active:not(:disabled), a:active {
+  transform: scale(0.95);
+}
+
+/* Hover Elevation for Cards */
+.bg-white.rounded-3xl, 
+.bg-white.rounded-2xl, 
+.bg-white.rounded-xl {
+  background-color: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
+}
+
+.bg-white.rounded-3xl:hover, 
+.bg-white.rounded-2xl:hover,
+.bg-white.rounded-xl:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important; /* cobalt glow outline */
+}
+
+/* Buttons Styling with Gradients & Glows */
+button.bg-blue-600, 
+button.bg-primary,
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #4f46e5 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25) !important;
+}
+
+button.bg-blue-600:hover, 
+button.bg-primary:hover,
+.btn-primary:hover {
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.45) !important;
+  transform: translateY(-2px);
+}
+
+/* Form Elements */
+input, select, textarea {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+  background-color: #ffffff !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+/* --- PREMIUM DARK MODE --- */
+.dark {
+  --background: #030712; /* Deep Obsidian Black */
+  --foreground: #f8fafc;
+  --card-bg: rgba(17, 24, 39, 0.7); /* Translucent Slate 900 */
+  --card-border: rgba(255, 255, 255, 0.07);
+  color-scheme: dark;
+}
+
+.dark body {
+  background: radial-gradient(circle at top, #0f172a 0%, #030712 100%) !important;
+  color: var(--foreground);
+}
+
+.dark {
+  /* Scrollbars styling */
+  scrollbar-color: #1f2937 #030712;
+
+  /* Force background changes */
+  .bg-slate-50 {
+    background-color: #030712 !important;
+  }
+
+  /* Translucent Glass Cards */
+  .bg-white {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid var(--card-border) !important;
+  }
+
+  .bg-white.rounded-3xl:hover, 
+  .bg-white.rounded-2xl:hover,
+  .bg-white.rounded-xl:hover {
+    border-color: rgba(99, 102, 241, 0.4) !important; /* Glowing Purple Accent */
+    box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(99, 102, 241, 0.15) !important;
+  }
+
+  /* Nested Panels (inside cards) */
+  .bg-slate-50.p-3,
+  .bg-slate-50.p-4,
+  .bg-slate-50.p-6,
+  .bg-slate-50.p-8,
+  .bg-slate-100,
+  .bg-slate-50.p-2,
+  .bg-slate-50\/50,
+  .bg-slate-50\/30,
+  .bg-slate-50\/20 {
+    background-color: rgba(3, 7, 18, 0.5) !important;
+    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  }
+
+  /* Typography color fixes */
+  .text-slate-800,
+  .text-slate-900,
+  .text-slate-700,
+  .text-gray-900,
+  h1, h2, h3, h4, h5, h6 {
+    color: #f8fafc !important;
+  }
+
+  .text-slate-500,
+  .text-slate-600,
+  .text-gray-500,
+  .text-gray-600 {
+    color: #94a3b8 !important;
+  }
+
+  .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  /* Borders override */
+  .border-slate-100,
+  .border-slate-200,
+  .border-slate-350,
+  .border-gray-200,
+  .border-slate-150,
+  .border-slate-700\/50,
+  .border-slate-100\/30 {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .divide-slate-100 > * + *,
+  .divide-slate-200 > * + * {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Active states and badges */
+  .bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+    color: #60a5fa !important;
+  }
+
+  /* Form Elements in Dark Mode */
+  input, select, textarea {
+    background-color: rgba(3, 7, 18, 0.6) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: #f8fafc !important;
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: #4b5563 !important;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+  }
+
+  /* Hover states */
+  .hover\:bg-slate-50:hover,
+  .hover\:bg-gray-50:hover {
+    background-color: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  /* Table styling */
+  thead.bg-slate-50 {
+    background-color: rgba(17, 24, 39, 0.9) !important;
+  }
+
+  tr.hover\:bg-slate-50:hover {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  /* Custom glow for active Primary buttons in Dark Mode */
+  button.bg-blue-600,
+  button.bg-primary {
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4) !important;
+  }
+  
+  button.bg-blue-600:hover,
+  button.bg-primary:hover {
+    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6) !important;
+  }
+
+  /* Secondary Buttons */
+  button.bg-white,
+  a.bg-white,
+  .btn-secondary {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    color: #cbd5e1 !important;
+  }
+
+  button.bg-white:hover,
+  a.bg-white:hover,
+  .btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.09) !important;
+    color: #ffffff !important;
+  }
+
+  /* Shadows overriden to dark deep values */
+  .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl,
+  .shadow-blue-100, .shadow-blue-200, .shadow-amber-100, .shadow-emerald-100,
+  .shadow-indigo-100, .shadow-orange-100 {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.6) !important;
+  }
+
+  /* Aggregated KPI items overlay */
+  .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.15) !important; color: #818cf8 !important; }
+  .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.15) !important; color: #34d399 !important; }
+  .bg-orange-50 { background-color: rgba(249, 115, 22, 0.15) !important; color: #fb923c !important; }
+  .bg-amber-50 { background-color: rgba(245, 158, 11, 0.15) !important; color: #fbbf24 !important; }
+  .bg-red-50 { background-color: rgba(239, 68, 68, 0.15) !important; color: #f87171 !important; }
+
+  .bg-indigo-50 .text-indigo-600 { color: #818cf8 !important; }
+  .bg-emerald-50 .text-emerald-600 { color: #34d399 !important; }
+  .bg-orange-50 .text-orange-600 { color: #fb923c !important; }
+  .bg-blue-50 .text-blue-600 { color: #60a5fa !important; }
 }

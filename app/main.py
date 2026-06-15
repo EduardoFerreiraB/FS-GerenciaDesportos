@@ -8,7 +8,8 @@ import models
 from routers import (
     modalidades, professores, turmas, alunos, 
     matriculas, presencas, arbitros, locais, 
-    eventos, edicoes, auth, equipes, partidas, atletas
+    eventos, edicoes, auth, equipes, partidas, atletas,
+    publico
 )
 import os
 from pathlib import Path
@@ -21,7 +22,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-origins = ["*"]
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +57,7 @@ app.include_router(edicoes.router)
 app.include_router(equipes.router)
 app.include_router(partidas.router)
 app.include_router(atletas.router)
+app.include_router(publico.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():

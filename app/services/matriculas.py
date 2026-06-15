@@ -15,7 +15,7 @@ def verificar_conflito_aluno(db: Session, id_aluno: int, nova_turma_id: int):
         if t:
             turmas_aluno.append(t)
     
-    dias_nova = nova_turma.dias_semana.split(',') if isinstance(nova_turma.dias_semana, str) else []
+    dias_nova = nova_turma.dias_semana
     
     return servico_turmas.checar_conflito_agenda(
         dias_nova, 
@@ -61,7 +61,7 @@ def cancelar_matricula(db: Session, id_matricula: int):
     db_matricula = db.query(models.Matricula).filter(models.Matricula.id_matricula == id_matricula).first()
     
     if db_matricula:
-        db.delete(db_matricula) 
+        db_matricula.ativo = False
         db.commit()
         return True
     return False

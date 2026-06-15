@@ -30,7 +30,7 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
         
         turmas_para_checar = []
         for turma_nova in turmas_selecionadas:
-            dias_nova = turma_nova.dias_semana.split(',') if isinstance(turma_nova.dias_semana, str) else []
+            dias_nova = turma_nova.dias_semana
             if servico_turmas.checar_conflito_agenda(dias_nova, turma_nova.horario_inicio, turma_nova.horario_fim, turmas_para_checar):
                  raise ValueError(f"Conflito de horário detectado envolvendo a turma {turma_nova.descricao or turma_nova.id_turma}")
             turmas_para_checar.append(turma_nova)
@@ -122,6 +122,14 @@ def excluir_aluno(db: Session, id_aluno: int):
 
         # 4. Deletar Aluno
         id_participante = db_aluno.id_participante
+        
+        # Clean up competition team associations
+        db.execute(
+            models.equipes_participantes.delete().where(
+                models.equipes_participantes.c.id_participante == id_participante
+            )
+        )
+        
         db.delete(db_aluno)
 
         # 5. Deletar Participante (se for o caso)

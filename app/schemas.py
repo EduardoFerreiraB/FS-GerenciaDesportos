@@ -248,12 +248,26 @@ class Arbitro(ArbitroBase):
     class Config:
         from_attributes = True
 
+class TipoCompeticaoEnum(str, Enum):
+    PontosCorridos = "Pontos Corridos"
+    MataMata = "Mata-Mata"
+    Grupos = "Grupos"
+
+class FaseInicialEnum(str, Enum):
+    Oitavas = "Oitavas"
+    Quartas = "Quartas"
+    Semifinal = "Semifinal"
+    Final = "Final"
+
 class EventoBase(BaseModel):
     even_nome: str = Field(..., max_length=150)
     descricao: Optional[str] = None
 
 class EventoCreate(EventoBase):
     modalidade_ids: List[int] = []
+
+class EventoUpdate(EventoBase):
+    modalidade_ids: Optional[List[int]] = None
 
 class Evento(EventoBase):
     id_evento: int
@@ -264,6 +278,8 @@ class Evento(EventoBase):
 class EdicaoBase(BaseModel):
     id_evento: int
     edic_ano: int
+    tipo_competicao: TipoCompeticaoEnum = TipoCompeticaoEnum.PontosCorridos
+    fase_inicial: Optional[FaseInicialEnum] = None
     data_inicio: date
     data_fim: date
 
@@ -339,8 +355,30 @@ class PartidaBase(BaseModel):
     status: StatusPartidaEnum = StatusPartidaEnum.Agendada
     observacoes: Optional[str] = None
 
-class PartidaCreate(PartidaBase):
-    pass
+class LocalInline(BaseModel):
+    loca_nome: str = Field(..., max_length=200)
+    loca_descricao: Optional[str] = None
+
+class ArbitroInline(BaseModel):
+    apito_nome: str = Field(..., max_length=200)
+    apito_doc: str = Field(..., max_length=100)
+    apito_tel: str = Field(..., max_length=20)
+
+class PartidaCreate(BaseModel):
+    id_edicao: int
+    id_local: Optional[int] = None
+    id_arbitro: Optional[int] = None
+    local_inline: Optional[LocalInline] = None
+    arbitro_inline: Optional[ArbitroInline] = None
+    id_modalidade: int
+    id_equipe_casa: Optional[int] = None
+    id_equipe_visitante: Optional[int] = None
+    part_data: date
+    part_hora: time
+    placar_casa: int = 0
+    placar_visitante: int = 0
+    status: StatusPartidaEnum = StatusPartidaEnum.Agendada
+    observacoes: Optional[str] = None
 
 class PartidaUpdate(BaseModel):
     id_local: Optional[int] = None
@@ -356,6 +394,9 @@ class PartidaUpdate(BaseModel):
 
 class Partida(PartidaBase):
     id_partida: int
+    id_proxima_partida: Optional[int] = None
+    fase: Optional[str] = None
+    sumula_arquivo: Optional[str] = None
     edicao: Optional[Edicao] = None
     local: Optional[Local] = None
     arbitro: Optional[Arbitro] = None
@@ -368,6 +409,32 @@ class Partida(PartidaBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+class GerarConfrontosRequest(BaseModel):
+    id_modalidade: int
+    part_hora: Optional[time] = None
+
+class EstatisticaPartidaBase(BaseModel):
+    id_participante: int
+    gols: int = 0
+    cartoes_amarelos: int = 0
+    cartoes_vermelhos: int = 0
+    assistencias: int = 0
+
+class EstatisticaPartidaCreate(EstatisticaPartidaBase):
+    pass
+
+class EstatisticaPartidaResponse(EstatisticaPartidaBase):
+    id_estatistica: int
+    id_partida: int
+    participante: Optional[ParticipanteResponse] = None
+    class Config:
+        from_attributes = True
+

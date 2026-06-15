@@ -21,13 +21,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 
 def salvar_foto_atleta(file: UploadFile) -> Optional[str]:
-    if not file:
+    if not file or not file.filename:
         return None
     
+    extensao = file.filename.split(".")[-1].lower()
+    if extensao not in {"jpg", "jpeg", "png"}:
+        raise HTTPException(status_code=400, detail=f"Extensão de arquivo '.{extensao}' não é permitida. Use apenas JPG, JPEG ou PNG para fotos.")
+        
+    if file.content_type not in {"image/jpeg", "image/png", "image/jpg"}:
+        raise HTTPException(status_code=400, detail="Tipo de arquivo não permitido. Use apenas imagens (JPG/PNG) para fotos.")
+
     diretorio = UPLOAD_DIR / "atletas"
     diretorio.mkdir(parents=True, exist_ok=True)
 
-    extensao = file.filename.split(".")[-1]
     nome_arquivo = f"{uuid.uuid4()}.{extensao}"
     caminho_arquivo = diretorio / nome_arquivo
 
