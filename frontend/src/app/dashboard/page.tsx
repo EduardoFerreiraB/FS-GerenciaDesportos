@@ -190,10 +190,135 @@ export default function DashboardPage() {
   );
 }
 
+function obterProximaDataObjeto(diasSemana: any, horarioInicioStr: string): Date {
+  const WEEKDAY_MAP: Record<string, number> = {
+    'DOM': 0, 'SEG': 1, 'TER': 2, 'QUA': 3, 'QUI': 4, 'SEX': 5, 'SAB': 6
+  };
+  
+  const diasArray = Array.isArray(diasSemana) ? diasSemana : (typeof diasSemana === 'string' ? diasSemana.split(',').map(d => d.trim()) : []);
+  const diasIndices = diasArray.map(d => WEEKDAY_MAP[d.toUpperCase()]).filter(v => v !== undefined);
+  const agora = new Date();
+  
+  if (diasIndices.length === 0) {
+    const farDate = new Date();
+    farDate.setFullYear(agora.getFullYear() + 10);
+    return farDate;
+  }
+
+  let classHour = 0;
+  let classMinute = 0;
+  if (horarioInicioStr) {
+    const parts = horarioInicioStr.split(':');
+    if (parts.length >= 2) {
+      classHour = parseInt(parts[0], 10);
+      classMinute = parseInt(parts[1], 10);
+    }
+  }
+
+  for (let offset = 0; offset <= 7; offset++) {
+    const dataAlvo = new Date(agora);
+    dataAlvo.setDate(agora.getDate() + offset);
+    const diaSemanaIdx = dataAlvo.getDay();
+
+    if (diasIndices.includes(diaSemanaIdx)) {
+      if (offset === 0) {
+        const horaAlvo = new Date(agora);
+        horaAlvo.setHours(classHour, classMinute, 0, 0);
+        if (agora > horaAlvo) {
+          continue;
+        }
+      }
+      dataAlvo.setHours(classHour, classMinute, 0, 0);
+      return dataAlvo;
+    }
+  }
+
+  const fallback = new Date(agora);
+  fallback.setDate(agora.getDate() + 7);
+  fallback.setHours(classHour, classMinute, 0, 0);
+  return fallback;
+}
+
+function obterProximaDataAulaFormatada(diasSemana: any, horarioInicioStr: string): string {
+  const diasArray = Array.isArray(diasSemana) ? diasSemana : (typeof diasSemana === 'string' ? diasSemana.split(',').map(d => d.trim()) : []);
+  if (diasArray.length === 0) return 'Sem dia definido';
+  
+  const WEEKDAY_MAP: Record<string, number> = {
+    'DOM': 0, 'SEG': 1, 'TER': 2, 'QUA': 3, 'QUI': 4, 'SEX': 5, 'SAB': 6
+  };
+  
+  const WEEKDAY_NAME: Record<number, string> = {
+    0: 'Domingo', 1: 'Segunda-feira', 2: 'Terça-feira', 3: 'Quarta-feira', 4: 'Quinta-feira', 5: 'Sexta-feira', 6: 'Sábado'
+  };
+
+  const diasIndices = diasArray.map(d => WEEKDAY_MAP[d.toUpperCase()]).filter(v => v !== undefined);
+  if (diasIndices.length === 0) return diasArray.join(', ');
+
+  const agora = new Date();
+  
+  let classHour = 0;
+  let classMinute = 0;
+  if (horarioInicioStr) {
+    const parts = horarioInicioStr.split(':');
+    if (parts.length >= 2) {
+      classHour = parseInt(parts[0], 10);
+      classMinute = parseInt(parts[1], 10);
+    }
+  }
+
+  for (let offset = 0; offset <= 7; offset++) {
+    const dataAlvo = new Date(agora);
+    dataAlvo.setDate(agora.getDate() + offset);
+    const diaSemanaIdx = dataAlvo.getDay();
+
+    if (diasIndices.includes(diaSemanaIdx)) {
+      if (offset === 0) {
+        const horaAlvo = new Date(agora);
+        horaAlvo.setHours(classHour, classMinute, 0, 0);
+        if (agora > horaAlvo) {
+          continue;
+        }
+      }
+      
+      const diaNome = WEEKDAY_NAME[diaSemanaIdx];
+      const diaNum = String(dataAlvo.getDate()).padStart(2, '0');
+      const mesNum = String(dataAlvo.getMonth() + 1).padStart(2, '0');
+      
+      if (offset === 0) {
+        return `Hoje (${diaNum}/${mesNum})`;
+      } else if (offset === 1) {
+        return `Amanhã (${diaNum}/${mesNum})`;
+      } else {
+        return `${diaNome}, ${diaNum}/${mesNum}`;
+      }
+    }
+  }
+
+  return diasArray.join(', ');
+}
+
 function DashboardProfessor({ turmas, alunos, modalidades, matriculas }: any) {
   const minhasTurmas = turmas || [];
   const meusAlunos = alunos || [];
-  const proximaAula = minhasTurmas.length > 0 ? minhasTurmas[0] : null;
+  
+  // Ordena as turmas pela data da próxima ocorrência
+  const minhasTurmasOrdenadas = [...minhasTurmas].sort((a, b) => {
+    const dataA = obterProximaDataObjeto(a.dias_semana, a.horario_inicio);
+    const dataB = obterProximaDataObjeto(b.dias_semana, b.horario_inicio);
+    return dataA.getTime() - dataB.getTime();
+  });
+  
+  const proximaAula = minhasTurmasOrdenadas.length > 0 ? minhasTurmasOrdenadas[0] : null;
+
+  const WEEKDAY_MAP: Record<string, number> = {
+    'DOM': 0, 'SEG': 1, 'TER': 2, 'QUA': 3, 'QUI': 4, 'SEX': 5, 'SAB': 6
+  };
+  const hojeIdx = new Date().getDay();
+  const aulasHoje = minhasTurmas.filter((t: any) => {
+    const diasArray = Array.isArray(t.dias_semana) ? t.dias_semana : (typeof t.dias_semana === 'string' ? t.dias_semana.split(',').map((d: any) => d.trim()) : []);
+    const indices = diasArray.map((d: string) => WEEKDAY_MAP[d.toUpperCase()]).filter((v: any) => v !== undefined);
+    return indices.includes(hojeIdx);
+  }).length;
 
   const alunosPorModalidade: Record<string, number> = {};
   if (matriculas && matriculas.length > 0 && turmas && modalidades) {
@@ -222,7 +347,7 @@ function DashboardProfessor({ turmas, alunos, modalidades, matriculas }: any) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <KpiCard title="Meus Alunos" value={meusAlunos.length} icon={Users} color="bg-blue-50 text-blue-600" />
         <KpiCard title="Minhas Turmas" value={minhasTurmas.length} icon={GraduationCap} color="bg-indigo-50 text-indigo-600" />
-        <KpiCard title="Aulas Hoje" value="-" icon={CalendarCheck} color="bg-emerald-50 text-emerald-600" />
+        <KpiCard title="Aulas Hoje" value={aulasHoje} icon={CalendarCheck} color="bg-emerald-50 text-emerald-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -241,11 +366,11 @@ function DashboardProfessor({ turmas, alunos, modalidades, matriculas }: any) {
               <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
                 <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl">
                   <CalendarCheck size={20} className="text-slate-400" />
-                  <div><p className="text-xs text-slate-400 font-bold uppercase">Dia</p><p className="font-medium text-sm">{proximaAula.dias_semana}</p></div>
+                  <div><p className="text-xs text-slate-400 font-bold uppercase">Dia</p><p className="font-medium text-sm">{obterProximaDataAulaFormatada(proximaAula.dias_semana, proximaAula.horario_inicio)}</p></div>
                 </div>
                 <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl">
                   <Clock size={20} className="text-slate-400" />
-                  <div><p className="text-xs text-slate-400 font-bold uppercase">Horário</p><p className="font-medium text-sm">{proximaAula.horario_inicio} - {proximaAula.horario_fim}</p></div>
+                  <div><p className="text-xs text-slate-400 font-bold uppercase">Horário</p><p className="font-medium text-sm">{proximaAula.horario_inicio?.substring(0, 5)} - {proximaAula.horario_fim?.substring(0, 5)}</p></div>
                 </div>
               </div>
               <div className="flex gap-3 relative z-10">
@@ -258,12 +383,22 @@ function DashboardProfessor({ turmas, alunos, modalidades, matriculas }: any) {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-6 border-b border-slate-100"><h3 className="font-bold text-slate-800">Minhas Turmas</h3></div>
             <div className="divide-y divide-slate-100">
-              {minhasTurmas.map((t: any) => (
-                <div key={t.id_turma} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                  <div><p className="font-semibold text-slate-800">{t.descricao}</p><p className="text-xs text-slate-500">{t.dias_semana} • {t.horario_inicio}</p></div>
-                  <Link href={`/dashboard/turmas/${t.id_turma}`}><button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><ArrowRight size={18} /></button></Link>
-                </div>
-              ))}
+              {minhasTurmas.map((t: any) => {
+                const diasTexto = Array.isArray(t.dias_semana) ? t.dias_semana.join(', ') : t.dias_semana;
+                return (
+                  <div key={t.id_turma} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div>
+                      <p className="font-semibold text-slate-800">{t.descricao}</p>
+                      <p className="text-xs text-slate-500">{diasTexto} • {t.horario_inicio?.substring(0, 5)}</p>
+                    </div>
+                    <Link href={`/dashboard/turmas/${t.id_turma}`}>
+                      <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                        <ArrowRight size={18} />
+                      </button>
+                    </Link>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

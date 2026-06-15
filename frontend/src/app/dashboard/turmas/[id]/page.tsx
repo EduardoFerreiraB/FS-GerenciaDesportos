@@ -171,7 +171,8 @@ export default function DetalhesTurmaPage() {
 }
 
 function InfoItem({ label, value, icon: Icon }: any) {
+  const displayValue = Array.isArray(value) ? value.join(', ') : value;
   return (
-    <div><p className="text-xs text-slate-400 font-semibold uppercase mb-0.5 flex items-center gap-1">{Icon && <Icon size={12}/>}{label}</p><p className="text-slate-800 font-medium">{value || '-'}</p></div>
+    <div><p className="text-xs text-slate-400 font-semibold uppercase mb-0.5 flex items-center gap-1">{Icon && <Icon size={12}/>}{label}</p><p className="text-slate-800 font-medium">{displayValue || '-'}</p></div>
   );
 }

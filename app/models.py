@@ -29,6 +29,7 @@ class Modalidade(Base):
     id_modalidade = Column(Integer, primary_key=True, index=True)
     nome = Column(String(500), unique=True, nullable=False)
     descricao = Column(Text, nullable=True)
+    duracao_minutos = Column(Integer, nullable=False, default=60)
 
     turmas = relationship("Turma", back_populates="modalidade")
     eventos = relationship("Evento", secondary=modalidades_evento, back_populates="modalidades")
@@ -44,11 +45,22 @@ class Usuario(Base):
 
     professores = relationship("Professor", back_populates="usuario", uselist=False)
 
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id_token = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario", ondelete="CASCADE"), nullable=False)
+    token = Column(String(255), unique=True, index=True, nullable=False)
+    expires_at = Column(TIMESTAMP, nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
+
+    usuario = relationship("Usuario")
+
 class Professor(Base):
     __tablename__ = "professores"
 
     id_professor = Column(Integer, primary_key=True, index=True)
-    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=False)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), unique=True, nullable=False)
     nome = Column(String(500), nullable=False)
     cpf = Column(String(14), unique=True, nullable=False)
     contato = Column(String(20), nullable=False)
@@ -66,11 +78,23 @@ class Turma(Base):
     categoria_idade = Column(String(50), nullable=False)
     horario_inicio = Column(Time, nullable=False)
     horario_fim = Column(Time, nullable=False)
-    dias_semana = Column(String(50), nullable=False)
 
     modalidade = relationship("Modalidade", back_populates="turmas")
     professor = relationship("Professor", back_populates="turmas")
     matriculas = relationship("Matricula", back_populates="turma")
+    dias = relationship("TurmaDia", back_populates="turma", cascade="all, delete-orphan")
+
+    @property
+    def dias_semana(self):
+        return [d.dia_semana for d in self.dias]
+
+class TurmaDia(Base):
+    __tablename__ = "turmas_dias"
+
+    id_turma = Column(Integer, ForeignKey("turmas.id_turma", ondelete="CASCADE"), primary_key=True)
+    dia_semana = Column(Enum("SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"), primary_key=True)
+
+    turma = relationship("Turma", back_populates="dias")
 
 class Participante(Base):
     __tablename__ = "participantes"
@@ -156,7 +180,7 @@ class Local(Base):
     __tablename__ = "locais"
 
     id_local = Column(Integer, primary_key=True, index=True)
-    loca_nome = Column(String(200), nullable=False)
+    loca_nome = Column(String(200), unique=True, nullable=False)
     loca_descricao = Column(Text, nullable=True)
     ativo = Column(Boolean, default=True)
 
@@ -165,7 +189,7 @@ class Arbitro(Base):
 
     id_arbitro = Column(Integer, primary_key=True, index=True)
     apito_nome = Column(String(200), nullable=False)
-    apito_doc = Column(String(100), nullable=False)
+    apito_doc = Column(String(100), unique=True, nullable=False)
     apito_tel = Column(String(20), nullable=False)
 
 class Evento(Base):
@@ -176,8 +200,7 @@ class Evento(Base):
     descricao = Column(Text, nullable=True)
 
     modalidades = relationship("Modalidade", secondary=modalidades_evento, back_populates="eventos")
-
-    edicoes = relationship("Edicao", back_populates="evento")
+    edicoes = relationship("Edicao", back_populates="evento", cascade="all, delete-orphan")
 
 class Edicao(Base):
     __tablename__ = "edicoes"
@@ -185,12 +208,14 @@ class Edicao(Base):
     id_edicao = Column(Integer, primary_key=True, index=True)
     id_evento = Column(Integer, ForeignKey("eventos.id_evento"), nullable=False)
     edic_ano = Column(Integer, nullable=False)
+    tipo_competicao = Column(Enum("Pontos Corridos", "Mata-Mata", "Grupos"), nullable=False, default="Pontos Corridos")
+    fase_inicial = Column(Enum("Oitavas", "Quartas", "Semifinal", "Final"), nullable=True)
     data_inicio = Column(Date, nullable=False)
     data_fim = Column(Date, nullable=False)
 
     evento = relationship("Evento", back_populates="edicoes")
-    partidas = relationship("Partida", back_populates="edicao")
-    equipes = relationship("Equipe", back_populates="edicao")
+    partidas = relationship("Partida", back_populates="edicao", cascade="all, delete-orphan")
+    equipes = relationship("Equipe", back_populates="edicao", cascade="all, delete-orphan")
 
 equipes_participantes = Table(
     "equipes_participantes",
@@ -219,11 +244,14 @@ class Partida(Base):
     id_modalidade = Column(Integer, ForeignKey("modalidades.id_modalidade"), nullable=False)
     id_equipe_casa = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
     id_equipe_visitante = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
+    id_proxima_partida = Column(Integer, ForeignKey("partidas.id_partida"), nullable=True)
+    fase = Column(String(100), nullable=True)
     part_data = Column(Date, nullable=False)
     part_hora = Column(Time, nullable=False)
     placar_casa = Column(Integer, default=0)
     placar_visitante = Column(Integer, default=0)
     status = Column(Enum("Agendada", "Em Andamento", "Finalizada", "Cancelada"), default="Agendada")
+    sumula_arquivo = Column(String(500), nullable=True)
     observacoes = Column(Text, nullable=True)
 
     edicao = relationship("Edicao", back_populates="partidas")
@@ -232,3 +260,19 @@ class Partida(Base):
     modalidade = relationship("Modalidade")
     equipe_casa = relationship("Equipe", foreign_keys=[id_equipe_casa])
     equipe_visitante = relationship("Equipe", foreign_keys=[id_equipe_visitante])
+    proxima_partida = relationship("Partida", remote_side=[id_partida])
+    estatisticas = relationship("EstatisticaPartida", back_populates="partida", cascade="all, delete-orphan")
+
+class EstatisticaPartida(Base):
+    __tablename__ = "estatisticas_partida"
+
+    id_estatistica = Column(Integer, primary_key=True, index=True)
+    id_partida = Column(Integer, ForeignKey("partidas.id_partida", ondelete="CASCADE"), nullable=False)
+    id_participante = Column(Integer, ForeignKey("participantes.id_participante", ondelete="CASCADE"), nullable=False)
+    gols = Column(Integer, default=0, nullable=False)
+    cartoes_amarelos = Column(Integer, default=0, nullable=False)
+    cartoes_vermelhos = Column(Integer, default=0, nullable=False)
+    assistencias = Column(Integer, default=0, nullable=False)
+
+    partida = relationship("Partida", back_populates="estatisticas")
+    participante = relationship("Participante")

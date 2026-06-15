@@ -67,6 +67,7 @@ def excluir_modalidade(
         sucesso = servico_modalidades.excluir_modalidade(db=db, id_modalidade=id_modalidade)
         if not sucesso:
             raise HTTPException(status_code=404, detail="Modalidade não encontrada.")
-    except IntegrityError:
-        raise HTTPException(status_code=400, detail="Não é possível excluir a modalidade, verifique se há turmas vinculadas.")
+    except (IntegrityError, ValueError) as e:
+        detail_msg = str(e) if isinstance(e, ValueError) else "Não é possível excluir a modalidade, verifique se há turmas vinculadas."
+        raise HTTPException(status_code=400, detail=detail_msg)
     return None

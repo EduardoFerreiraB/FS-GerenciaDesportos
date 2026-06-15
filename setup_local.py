@@ -1,7 +1,6 @@
 import os
 import sys
 import subprocess
-from sqlalchemy import create_engine, text
 
 # Adiciona o diretório app ao path para permitir imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
@@ -35,6 +34,7 @@ def install_dependencies():
         print("⚠️  AVISO: Pasta 'frontend' não encontrada.")
 
 def setup_database():
+    from sqlalchemy import create_engine, text
     print("\n--- 2. Configuração do Banco de Dados MySQL ---")
     db_user = input("Usuário do MySQL (padrão: root): ") or "root"
     db_pass = input(f"Senha do MySQL para '{db_user}': ")

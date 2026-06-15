@@ -135,7 +135,7 @@ export default function TurmasPage() {
                     </div>
                     <div>
                         <p className="text-xs text-slate-400 font-semibold uppercase">Dias</p>
-                        <p className="font-medium">{turma.dias_semana || '-'}</p>
+                        <p className="font-medium">{Array.isArray(turma.dias_semana) ? turma.dias_semana.join(', ') : (turma.dias_semana || '-')}</p>
                     </div>
                     </div>
 

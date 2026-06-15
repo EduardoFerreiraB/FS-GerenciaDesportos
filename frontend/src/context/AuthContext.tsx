@@ -13,7 +13,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (token: string) => Promise<void>;
+  login: (token: string, refreshToken?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!token) {
         setIsLoading(false);
         if (pathname.includes('/dashboard')) {
-          router.push('/');
+          router.push('/login');
         }
         return;
       }
@@ -47,9 +47,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error("Token inválido na inicialização:", error);
         localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
         setUser(null);
         if (pathname.includes('/dashboard')) {
-          router.push('/');
+          router.push('/login');
         }
       } finally {
         setIsLoading(false);
@@ -59,9 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, []);
 
-  const login = async (token: string) => {
+  const login = async (token: string, refreshToken?: string) => {
     setIsLoading(true); // Bloqueia a UI
     localStorage.setItem('token', token);
+    if (refreshToken) {
+      localStorage.setItem('refresh_token', refreshToken);
+    }
     api.defaults.headers.Authorization = `Bearer ${token}`;
     
     try {
@@ -80,9 +84,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     delete api.defaults.headers.Authorization;
     setUser(null);
-    router.push('/');
+    router.push('/login');
   };
 
   return (

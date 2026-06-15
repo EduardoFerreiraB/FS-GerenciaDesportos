@@ -21,13 +21,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 
 def salvar_arquivo(file: UploadFile, subpasta: str) -> str:
-    if not file:
+    if not file or not file.filename:
         return None
     
+    extensao = file.filename.split(".")[-1].lower()
+    if extensao not in {"jpg", "jpeg", "png", "pdf"}:
+        raise HTTPException(status_code=400, detail=f"Extensão de arquivo '.{extensao}' não é permitida. Use apenas JPG, JPEG, PNG ou PDF.")
+        
+    if file.content_type not in {"image/jpeg", "image/png", "application/pdf", "image/jpg"}:
+        raise HTTPException(status_code=400, detail="Tipo de arquivo (MIME type) não permitido. Use apenas imagens (JPG/PNG) ou documentos PDF.")
+
     diretorio = UPLOAD_DIR / subpasta
     diretorio.mkdir(parents=True, exist_ok=True)
 
-    extensao = file.filename.split(".")[-1]
     nome_arquivo = f"{uuid.uuid4()}.{extensao}"
     caminho_arquivo = diretorio / nome_arquivo
 

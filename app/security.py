@@ -56,6 +56,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
+import uuid
+
 async def get_current_active_user(current_user: models.Usuario = Depends(get_current_user)):
     return current_user
 
@@ -68,3 +70,28 @@ async def check_coordenador_role(current_user: models.Usuario = Depends(get_curr
     if current_user.role not in ["admin", "coordenador"]:
         raise HTTPException(status_code=403, detail="Acesso negado: Requer privilégios de Coordenador ou Administrador")
     return current_user
+
+async def check_professor_role(current_user: models.Usuario = Depends(get_current_active_user)):
+    if current_user.role not in ["admin", "coordenador", "professor"]:
+        raise HTTPException(status_code=403, detail="Acesso negado: Requer privilégios de Professor, Coordenador ou Administrador")
+    return current_user
+
+async def check_assistente_role(current_user: models.Usuario = Depends(get_current_active_user)):
+    if current_user.role not in ["admin", "coordenador", "assistente"]:
+        raise HTTPException(status_code=403, detail="Acesso negado: Requer privilégios de Assistente, Coordenador ou Administrador")
+    return current_user
+
+def create_refresh_token(db: Session, id_usuario: int) -> str:
+    token_str = str(uuid.uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    db_token = models.RefreshToken(
+        id_usuario=id_usuario,
+        token=token_str,
+        expires_at=expires_at,
+        revoked=False
+    )
+    db.add(db_token)
+    db.commit()
+    db.refresh(db_token)
+    return token_str

@@ -14,15 +14,19 @@ import {
   ShieldAlert,
   Loader2,
   Trophy,
-  Calendar
+  Calendar,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout, isLoading, login } = useAuth(); // login pode ser util para recarregar o user se necessario
+  const { theme, toggleTheme } = useTheme();
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [forcePasswordChange, setForcePasswordChange] = useState(false);
 
@@ -155,8 +159,42 @@ export default function Sidebar() {
           </nav>
         </div>
 
-        {/* Perfil do Usuário */}
-        <div className="p-4 border-t border-slate-100">
+        {/* Perfil do Usuário & Theme Switcher */}
+        <div className="p-4 border-t border-slate-100 space-y-4">
+          {/* Theme Switcher Toggle */}
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-xl">
+            <span className="text-xs font-semibold text-slate-500">Aparência</span>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+              <button
+                type="button"
+                onClick={() => theme === 'dark' && toggleTheme()}
+                className={clsx(
+                  "p-1 rounded-md transition-all cursor-pointer",
+                  theme === 'light' 
+                    ? "bg-white text-amber-500 shadow-sm" 
+                    : "text-slate-400 hover:text-slate-200"
+                )}
+                title="Modo Claro"
+              >
+                <Sun size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => theme === 'light' && toggleTheme()}
+                className={clsx(
+                  "p-1 rounded-md transition-all cursor-pointer",
+                  theme === 'dark' 
+                    ? "bg-slate-700 text-blue-400 shadow-sm" 
+                    : "text-slate-500 hover:text-slate-700"
+                )}
+                title="Modo Escuro"
+              >
+                <Moon size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Profile Details */}
           <div 
             onClick={() => setIsPasswordModalOpen(true)}
             className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group select-none"
@@ -170,8 +208,9 @@ export default function Sidebar() {
               <p className="text-xs text-slate-500 truncate capitalize">{user?.role || '...'}</p>
             </div>
             <button 
+              type="button"
               onClick={(e) => { e.stopPropagation(); logout(); }}
-              className="text-slate-400 hover:text-red-500 transition-colors p-1"
+              className="text-slate-400 hover:text-red-500 transition-colors p-1 cursor-pointer"
               title="Sair"
             >
               <LogOut size={18} />

@@ -16,6 +16,21 @@ def criar_evento(db: Session, evento: schemas.EventoCreate):
         db_evento.modalidades = modalidades
 
     db.add(db_evento)
+    db.flush()  # Para obter o id_evento gerado
+
+    # Criar a primeira edição automaticamente com valores padrão
+    import datetime
+    hoje = datetime.date.today()
+    db_edicao = models.Edicao(
+        id_evento=db_evento.id_evento,
+        edic_ano=hoje.year,
+        tipo_competicao="Pontos Corridos",
+        fase_inicial=None,
+        data_inicio=hoje,
+        data_fim=hoje + datetime.timedelta(days=90)
+    )
+    db.add(db_edicao)
+    
     db.commit()
     db.refresh(db_evento)
     return db_evento
@@ -26,7 +41,7 @@ def listar_evento(db: Session, id_evento: int):
 def listar_eventos(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Evento).offset(skip).limit(limit).all()
 
-def atualizar_evento(db: Session, id_evento: int, evento_atualizado: schemas.EventoCreate):
+def atualizar_evento(db: Session, id_evento: int, evento_atualizado: schemas.EventoUpdate):
     db_evento = listar_evento(db, id_evento)
 
     if not db_evento:

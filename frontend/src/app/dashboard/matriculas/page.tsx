@@ -135,7 +135,7 @@ export default function MatriculasPage() {
                       <div>
                         <h4 className="font-bold text-slate-800">{turma.descricao || `Turma ${turma.id_turma}`}</h4>
                         <p className="text-xs text-slate-500">
-                          {turma.modalidade?.nome} • {turma.dias_semana || 'Dias a definir'} • {turma.horario_inicio}-{turma.horario_fim}
+                          {turma.modalidade?.nome} • {Array.isArray(turma.dias_semana) ? turma.dias_semana.join(', ') : (turma.dias_semana || 'Dias a definir')} • {turma.horario_inicio?.substring(0, 5)}-{turma.horario_fim?.substring(0, 5)}
                         </p>
                       </div>
                     </div>

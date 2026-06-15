@@ -113,7 +113,8 @@ def excluir_professor(
         sucesso = servico_professores.excluir_professor(db=db, id_professor=id_professor)
         if not sucesso:
             raise HTTPException(status_code=404, detail="Professor não encontrado.")
-    except IntegrityError:
-        raise HTTPException(status_code=400, detail="Não é possível excluir o professor, verifique se ele tem turmas ativas.")
+    except (IntegrityError, ValueError) as e:
+        detail_msg = str(e) if isinstance(e, ValueError) else "Não é possível excluir o professor, verifique se ele tem turmas ativas."
+        raise HTTPException(status_code=400, detail=detail_msg)
     
     return None
