@@ -327,12 +327,14 @@ class ParticipanteResponse(BaseModel):
 class EquipeBase(BaseModel):
     nome: str = Field(..., max_length=200)
     id_edicao: int
+    grupo: Optional[str] = Field(None, max_length=50)
 
 class EquipeCreate(EquipeBase):
     pass
 
 class EquipeUpdate(BaseModel):
     nome: Optional[str] = Field(None, max_length=200)
+    grupo: Optional[str] = Field(None, max_length=50)
 
 class Equipe(EquipeBase):
     id_equipe: int
@@ -373,6 +375,8 @@ class PartidaCreate(BaseModel):
     id_modalidade: int
     id_equipe_casa: Optional[int] = None
     id_equipe_visitante: Optional[int] = None
+    id_proxima_partida: Optional[int] = None
+    fase: Optional[str] = None
     part_data: date
     part_hora: time
     placar_casa: int = 0
@@ -385,6 +389,8 @@ class PartidaUpdate(BaseModel):
     id_arbitro: Optional[int] = None
     id_equipe_casa: Optional[int] = None
     id_equipe_visitante: Optional[int] = None
+    id_proxima_partida: Optional[int] = None
+    fase: Optional[str] = None
     part_data: Optional[date] = None
     part_hora: Optional[time] = None
     placar_casa: Optional[int] = None

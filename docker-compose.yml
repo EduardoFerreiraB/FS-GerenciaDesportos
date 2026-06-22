@@ -1,0 +1,48 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: gerencia-desportos-db
+    environment:
+      MYSQL_DATABASE: gerencia_esporte_local
+      MYSQL_USER: dudu
+      MYSQL_PASSWORD: D252310m,
+      MYSQL_ROOT_PASSWORD: root_password_segura
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - gerencia_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "dudu", "-pD252310m,"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gerencia-desportos-web
+    ports:
+      - "8000:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - gerencia_network
+    environment:
+      - ENV=development
+      - SECRET_KEY=chave_secreta_para_desenvolvimento_local
+      - DATABASE_URL=mysql+pymysql://dudu:D252310m,@db:3306/gerencia_esporte_local
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+
+networks:
+  gerencia_network:
+    driver: bridge
+
+volumes:
+  mysql_data:

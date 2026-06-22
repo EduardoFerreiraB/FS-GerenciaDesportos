@@ -7,8 +7,7 @@ from services import matriculas as servico_matriculas
 def criar_participante(db: Session, tipo: str):
     db_participante = models.Participante(tipo=tipo)
     db.add(db_participante)
-    db.commit()
-    db.refresh(db_participante)
+    db.flush()
     return db_participante
 
 def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, documento: str = None, atestado: str = None):
@@ -35,39 +34,47 @@ def cadastrar_aluno(db: Session, aluno: schemas.AlunoCreate, foto: str = None, d
                  raise ValueError(f"Conflito de horário detectado envolvendo a turma {turma_nova.descricao or turma_nova.id_turma}")
             turmas_para_checar.append(turma_nova)
 
-    participante = criar_participante(db, tipo="aluno")
+    try:
+        participante = criar_participante(db, tipo="aluno")
 
-    db_aluno = models.Aluno(
-        id_participante=participante.id_participante,
-        nome_completo=aluno.nome_completo,
-        data_nascimento=aluno.data_nascimento,
-        escola=aluno.escola,
-        serie_ano=aluno.serie_ano,
-        nome_mae=aluno.nome_mae,
-        nome_pai=aluno.nome_pai,
-        telefone_1=aluno.telefone_1,
-        telefone_2=aluno.telefone_2,
-        endereco=aluno.endereco,
-        recomendacoes_medicas=aluno.recomendacoes_medicas,
-        foto=foto,
-        documento_pessoal=documento,
-        atestado_medico=atestado,
-        ativo=True
-    )
+        db_aluno = models.Aluno(
+            id_participante=participante.id_participante,
+            nome_completo=aluno.nome_completo,
+            data_nascimento=aluno.data_nascimento,
+            escola=aluno.escola,
+            serie_ano=aluno.serie_ano,
+            nome_mae=aluno.nome_mae,
+            nome_pai=aluno.nome_pai,
+            telefone_1=aluno.telefone_1,
+            telefone_2=aluno.telefone_2,
+            endereco=aluno.endereco,
+            recomendacoes_medicas=aluno.recomendacoes_medicas,
+            foto=foto,
+            documento_pessoal=documento,
+            atestado_medico=atestado,
+            ativo=True
+        )
 
-    db.add(db_aluno)
-    db.commit()
-    db.refresh(db_aluno)
+        db.add(db_aluno)
+        db.flush()
 
-    if aluno.ids_turmas:
-        for id_turma in aluno.ids_turmas:
-            try:
-                matricula_schema = schemas.MatriculaCreate(id_aluno=db_aluno.id_aluno, id_turma=id_turma)
-                servico_matriculas.criar_matricula(db, matricula_schema)
-            except ValueError:
-                pass
-    
-    return db_aluno
+        if aluno.ids_turmas:
+            from services import matriculas as servico_matriculas
+            for id_turma in aluno.ids_turmas:
+                if servico_matriculas.verificar_conflito_aluno(db, db_aluno.id_aluno, id_turma):
+                    raise ValueError(f"Conflito de horário: O aluno já possui matrícula em outra turma nesse mesmo horário.")
+                db_matricula = models.Matricula(
+                    id_aluno=db_aluno.id_aluno,
+                    id_turma=id_turma,
+                )
+                db.add(db_matricula)
+        
+        db.commit()
+        db.refresh(db_aluno)
+        return db_aluno
+    except Exception as e:
+        db.rollback()
+        raise e
 
 def listar_aluno(db: Session, id_aluno: int):
     return db.query(models.Aluno).filter(models.Aluno.id_aluno == id_aluno).first()
@@ -90,7 +97,14 @@ def listar_alunos_escola(db: Session, escola: str):
 def listar_alunos_serie(db: Session, serie_ano: str):
     return db.query(models.Aluno).filter(models.Aluno.serie_ano.ilike(f"%{serie_ano}%")).all()
 
-def atualizar_aluno(db: Session, id_aluno: int, aluno_atualizado: schemas.AlunoUpdate):
+def atualizar_aluno(
+    db: Session, 
+    id_aluno: int, 
+    aluno_atualizado: schemas.AlunoUpdate, 
+    foto: str = None, 
+    documento: str = None, 
+    atestado: str = None
+):
     db_aluno = listar_aluno(db, id_aluno)
 
     if not db_aluno:
@@ -100,6 +114,13 @@ def atualizar_aluno(db: Session, id_aluno: int, aluno_atualizado: schemas.AlunoU
 
     for chave, valor in dados_atualizados.items():
         setattr(db_aluno, chave, valor)
+
+    if foto:
+        db_aluno.foto = foto
+    if documento:
+        db_aluno.documento_pessoal = documento
+    if atestado:
+        db_aluno.atestado_medico = atestado
 
     db.commit()
     db.refresh(db_aluno)

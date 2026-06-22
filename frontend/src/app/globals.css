@@ -69,12 +69,14 @@ button.bg-primary:hover,
 }
 
 /* Form Elements */
-input, select, textarea {
-  border: 1px solid #cbd5e1 !important;
-  border-radius: 12px !important;
-  padding: 10px 14px !important;
-  font-size: 14px !important;
-  background-color: #ffffff !important;
+@layer base {
+  input, select, textarea {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 12px !important;
+    padding: 10px 14px;
+    font-size: 14px !important;
+    background-color: #ffffff !important;
+  }
 }
 
 input:focus, select:focus, textarea:focus {
@@ -177,10 +179,12 @@ input:focus, select:focus, textarea:focus {
   }
 
   /* Form Elements in Dark Mode */
-  input, select, textarea {
-    background-color: rgba(3, 7, 18, 0.6) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-    color: #f8fafc !important;
+  @layer base {
+    input, select, textarea {
+      background-color: rgba(3, 7, 18, 0.6) !important;
+      border-color: rgba(255, 255, 255, 0.1) !important;
+      color: #f8fafc !important;
+    }
   }
 
   input::placeholder, textarea::placeholder {

@@ -375,7 +375,7 @@ export default function DetalhesEventoPublicoPage() {
                     >
                       Confrontos
                     </button>
-                    {activeEdicao.tipo_competicao === 'Pontos Corridos' && (
+                    {(activeEdicao.tipo_competicao === 'Pontos Corridos' || activeEdicao.tipo_competicao === 'Grupos') && (
                       <button
                         onClick={() => setPartidasSubTab('tabela')}
                         className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${partidasSubTab === 'tabela' ? 'bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-705'}`}
@@ -383,7 +383,7 @@ export default function DetalhesEventoPublicoPage() {
                         Tabela de Classificação
                       </button>
                     )}
-                    {activeEdicao.tipo_competicao === 'Mata-Mata' && (
+                    {(activeEdicao.tipo_competicao === 'Mata-Mata' || activeEdicao.tipo_competicao === 'Grupos') && (
                       <button
                         onClick={() => setPartidasSubTab('arvore')}
                         className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${partidasSubTab === 'arvore' ? 'bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-705'}`}
@@ -430,52 +430,71 @@ export default function DetalhesEventoPublicoPage() {
 
                 {/* Sub Tab: Tabela (Points League Table) */}
                 {partidasSubTab === 'tabela' && (
-                  <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            <th className="py-4 px-6 text-center w-12">Pos</th>
-                            <th className="py-4 px-6">Equipe</th>
-                            <th className="py-4 px-6 text-center">P</th>
-                            <th className="py-4 px-6 text-center">J</th>
-                            <th className="py-4 px-6 text-center">V</th>
-                            <th className="py-4 px-6 text-center">E</th>
-                            <th className="py-4 px-6 text-center">D</th>
-                            <th className="py-4 px-6 text-center">GP</th>
-                            <th className="py-4 px-6 text-center">GC</th>
-                            <th className="py-4 px-6 text-center">SG</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                          {classificationTable.map((team: any, index: number) => (
-                            <tr key={team.id_equipe} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                              <td className="py-4 px-6 text-center font-bold">
-                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${index === 0 ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' : index === 1 ? 'bg-slate-200 dark:bg-slate-500/20 text-slate-700 dark:text-slate-400' : index === 2 ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500'}`}>
-                                  {index + 1}
-                                </span>
-                              </td>
-                              <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100">{team.nome}</td>
-                              <td className="py-4 px-6 text-center text-blue-600 dark:text-blue-400 font-extrabold">{team.pontos}</td>
-                              <td className="py-4 px-6 text-center">{team.jogos}</td>
-                              <td className="py-4 px-6 text-center text-green-600 dark:text-green-400">{team.vitorias}</td>
-                              <td className="py-4 px-6 text-center text-slate-500">{team.empates}</td>
-                              <td className="py-4 px-6 text-center text-red-500">{team.derrotas}</td>
-                              <td className="py-4 px-6 text-center">{team.golsPro}</td>
-                              <td className="py-4 px-6 text-center">{team.golsContra}</td>
-                              <td className={`py-4 px-6 text-center font-extrabold ${team.saldoGols > 0 ? 'text-green-600' : team.saldoGols < 0 ? 'text-red-500' : 'text-slate-500'}`}>{team.saldoGols}</td>
-                            </tr>
-                          ))}
-                          
-                          {classificationTable.length === 0 && (
-                            <tr>
-                              <td colSpan={10} className="py-12 text-center text-slate-450 italic font-normal">Nenhuma equipe para classificar.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                  activeEdicao.tipo_competicao === 'Grupos' ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-200">
+                      <PublicGroupClassificationTable 
+                        titulo="Grupo A"
+                        rows={classificationTable.filter((r: any) => {
+                          const eqObj = equipes?.find((e: any) => e.id_equipe === r.id_equipe);
+                          return eqObj?.grupo === 'A' || !eqObj?.grupo;
+                        })} 
+                      />
+                      <PublicGroupClassificationTable 
+                        titulo="Grupo B"
+                        rows={classificationTable.filter((r: any) => {
+                          const eqObj = equipes?.find((e: any) => e.id_equipe === r.id_equipe);
+                          return eqObj?.grupo === 'B';
+                        })} 
+                      />
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              <th className="py-4 px-6 text-center w-12">Pos</th>
+                              <th className="py-4 px-6">Equipe</th>
+                              <th className="py-4 px-6 text-center">P</th>
+                              <th className="py-4 px-6 text-center">J</th>
+                              <th className="py-4 px-6 text-center">V</th>
+                              <th className="py-4 px-6 text-center">E</th>
+                              <th className="py-4 px-6 text-center">D</th>
+                              <th className="py-4 px-6 text-center">GP</th>
+                              <th className="py-4 px-6 text-center">GC</th>
+                              <th className="py-4 px-6 text-center">SG</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            {classificationTable.map((team: any, index: number) => (
+                              <tr key={team.id_equipe} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                                <td className="py-4 px-6 text-center font-bold">
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${index === 0 ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' : index === 1 ? 'bg-slate-200 dark:bg-slate-500/20 text-slate-700 dark:text-slate-400' : index === 2 ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500'}`}>
+                                    {index + 1}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100">{team.nome}</td>
+                                <td className="py-4 px-6 text-center text-blue-600 dark:text-blue-400 font-extrabold">{team.pontos}</td>
+                                <td className="py-4 px-6 text-center">{team.jogos}</td>
+                                <td className="py-4 px-6 text-center text-green-600 dark:text-green-400">{team.vitorias}</td>
+                                <td className="py-4 px-6 text-center text-slate-500">{team.empates}</td>
+                                <td className="py-4 px-6 text-center text-red-500">{team.derrotas}</td>
+                                <td className="py-4 px-6 text-center">{team.golsPro}</td>
+                                <td className="py-4 px-6 text-center">{team.golsContra}</td>
+                                <td className={`py-4 px-6 text-center font-extrabold ${team.saldoGols > 0 ? 'text-green-600' : team.saldoGols < 0 ? 'text-red-500' : 'text-slate-500'}`}>{team.saldoGols}</td>
+                              </tr>
+                            ))}
+                            
+                            {classificationTable.length === 0 && (
+                              <tr>
+                                <td colSpan={10} className="py-12 text-center text-slate-450 italic font-normal">Nenhuma equipe para classificar.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
                 )}
 
                 {/* Sub Tab: Arvore (Knockout Bracket Tree) */}
@@ -545,7 +564,14 @@ export default function DetalhesEventoPublicoPage() {
                         </div>
 
                         <div>
-                          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{eq.nome}</h3>
+                          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            {eq.nome}
+                            {eq.grupo && (
+                              <span className="text-[10px] font-extrabold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full uppercase">
+                                Grupo {eq.grupo}
+                              </span>
+                            )}
+                          </h3>
                           <p className="text-xs text-slate-400 mt-1">Equipe Oficial</p>
                         </div>
 
@@ -762,7 +788,7 @@ function PublicMatchCard({ match }: { match: any }) {
         {/* PDF Download sheet button if present */}
         {match.sumula_arquivo && (
           <a
-            href={`${apiURL}/uploads/${match.sumula_arquivo}`}
+            href={api.defaults.baseURL + match.sumula_arquivo}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 px-3 py-1.5 bg-slate-105 dark:bg-slate-750 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-lg transition-colors border border-slate-150 dark:border-slate-700 cursor-pointer"
@@ -772,6 +798,53 @@ function PublicMatchCard({ match }: { match: any }) {
             Súmula
           </a>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PublicGroupClassificationTable({ titulo, rows }: { titulo: string, rows: any[] }) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
+      <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700/40 font-bold text-slate-800 dark:text-slate-100">
+        {titulo}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700/40 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+              <th className="py-3 px-4 text-center w-10">Pos</th>
+              <th className="py-3 px-4">Equipe</th>
+              <th className="py-3 px-4 text-center">P</th>
+              <th className="py-3 px-4 text-center">J</th>
+              <th className="py-3 px-4 text-center">V</th>
+              <th className="py-3 px-4 text-center">E</th>
+              <th className="py-3 px-4 text-center">D</th>
+              <th className="py-3 px-4 text-center">SG</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-xs font-semibold text-slate-700 dark:text-slate-300">
+            {rows.map((row: any, idx: number) => (
+              <tr key={row.id_equipe} className="hover:bg-slate-50/50 dark:hover:bg-slate-850 transition-colors">
+                <td className="py-3 px-4 text-center font-bold text-slate-500 dark:text-slate-450">{idx + 1}</td>
+                <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-100">{row.nome}</td>
+                <td className="py-3 px-4 text-center font-black text-blue-600 dark:text-blue-400">{row.pontos}</td>
+                <td className="py-3 px-4 text-center">{row.jogos}</td>
+                <td className="py-3 px-4 text-center text-green-600 dark:text-green-400">{row.vitorias}</td>
+                <td className="py-3 px-4 text-center text-slate-500">{row.empates}</td>
+                <td className="py-3 px-4 text-center text-red-500">{row.derrotas}</td>
+                <td className={`py-3 px-4 text-center font-semibold ${row.saldoGols > 0 ? 'text-green-600' : row.saldoGols < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                  {row.saldoGols > 0 ? `+${row.saldoGols}` : row.saldoGols}
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-6 text-center text-slate-400 dark:text-slate-500 italic font-normal">Nenhuma equipe neste grupo.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

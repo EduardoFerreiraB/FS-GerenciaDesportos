@@ -115,7 +115,10 @@ def atualizar_turma(
         if not current_user.professores or db_turma.id_professor != current_user.professores.id_professor:
             raise HTTPException(status_code=403, detail="Acesso negado: Você não pode alterar turmas que não são suas.")
 
-    return servico_turmas.atualizar_turma(db=db, id_turma=id_turma, turma_atualizada=turma)
+    try:
+        return servico_turmas.atualizar_turma(db=db, id_turma=id_turma, turma_atualizada=turma)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/{id_turma}", summary="Excluir uma turma", status_code=status.HTTP_204_NO_CONTENT)
 def excluir_turma(

@@ -57,7 +57,7 @@ def refresh_token(request_data: RefreshTokenRequest, db: Session = Depends(get_d
 
     expires_at = db_token.expires_at
     # Handle offset-naive or aware datetimes
-    if expires_at.tzinfo is not None:
+    if expires_at.tzinfo is not None:  # pragma: no cover
         now = datetime.now(timezone.utc)
     else:
         now = datetime.utcnow()

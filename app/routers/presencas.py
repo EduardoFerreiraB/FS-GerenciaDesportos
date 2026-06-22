@@ -19,7 +19,10 @@ def registrar_presenca_lote(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    return servico_presencas.registrar_presenca_lote(db=db, lista_presenca=dados)
+    try:
+        return servico_presencas.registrar_presenca_lote(db=db, lista_presenca=dados)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/turma/{id_turma}/data/{data_aula}", summary="Listar presenças de uma turma em uma data", response_model=List[schemas.Presenca])
 def listar_presencas_turma_data(

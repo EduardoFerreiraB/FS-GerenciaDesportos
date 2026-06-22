@@ -37,8 +37,8 @@ export default function DetalhesEdicaoPage() {
   const params = useParams();
   const id = params.id as string;
 
-  // Estados dos Modais
-  const [activeTab, setActiveTab] = useState<'equipes' | 'partidas'>('equipes');
+   // Estados dos Modais
+  const [activeTab, setActiveTab] = useState<'equipes' | 'partidas' | 'jogadores'>('equipes');
   const [isEquipeModalOpen, setIsEquipeModalOpen] = useState(false);
   const [isPartidaModalOpen, setIsPartidaModalOpen] = useState(false);
   const [selectedMatchForScore, setSelectedMatchForScore] = useState<any | null>(null);
@@ -57,6 +57,7 @@ export default function DetalhesEdicaoPage() {
   const { data: edicao, error, isLoading } = useSWR(id ? `/edicoes/${id}` : null, fetcher);
   const { data: equipes, isLoading: loadingEquipes } = useSWR(id ? `/equipes/edicao/${id}` : null, fetcher);
   const { data: matches, mutate: mutateMatches, isLoading: loadingMatches } = useSWR(id ? `/partidas/edicao/${id}` : null, fetcher);
+  const { data: editionStats } = useSWR(id ? `/publico/edicoes/${id}/estatisticas` : null, fetcher);
   const { data: modalidades } = useSWR('/modalidades', fetcher);
   const { data: locais } = useSWR('/locais', fetcher);
   const { data: arbitros } = useSWR('/arbitros', fetcher);
@@ -185,11 +186,57 @@ export default function DetalhesEdicaoPage() {
     return bracket;
   }, [filteredMatches]);
 
+  // Extrair lista de todos os jogadores com estatísticas acumuladas
+  const todosJogadores = useMemo(() => {
+    if (!equipes) return [];
+    
+    const list: any[] = [];
+    equipes.forEach((eq: any) => {
+      eq.participantes?.forEach((part: any) => {
+        let nome = "Jogador Desconhecido";
+        if (part.tipo === 'aluno' && part.aluno) {
+          nome = part.aluno.nome_completo;
+        } else if (part.tipo === 'atleta' && part.atleta) {
+          nome = part.atleta.nome_completo;
+        }
+        list.push({
+          id_participante: part.id_participante,
+          nome,
+          equipe: eq.nome,
+          id_equipe: eq.id_equipe
+        });
+      });
+    });
+
+    const statsMap: Record<number, { gols: number; assistencias: number; amarelos: number; vermelhos: number }> = {};
+    if (editionStats && Array.isArray(editionStats)) {
+      editionStats.forEach((s: any) => {
+        const pid = s.id_participante;
+        if (!statsMap[pid]) {
+          statsMap[pid] = { gols: 0, assistencias: 0, amarelos: 0, vermelhos: 0 };
+        }
+        statsMap[pid].gols += s.gols || 0;
+        statsMap[pid].assistencias += s.assistencias || 0;
+        statsMap[pid].amarelos += s.cartoes_amarelos || 0;
+        statsMap[pid].vermelhos += s.cartoes_vermelhos || 0;
+      });
+    }
+
+    return list.map((jg: any) => {
+      const pStats = statsMap[jg.id_participante] || { gols: 0, assistencias: 0, amarelos: 0, vermelhos: 0 };
+      return {
+        ...jg,
+        ...pStats
+      };
+    }).sort((a, b) => b.gols - a.gols || b.assistencias - a.assistencias || a.nome.localeCompare(b.nome));
+  }, [equipes, editionStats]);
+
   const handleAddEquipe = async (data: any) => {
     try {
       await api.post('/equipes/', {
         nome: data.nome,
-        id_edicao: parseInt(id)
+        id_edicao: parseInt(id),
+        grupo: data.grupo || null
       });
       mutate(`/equipes/edicao/${id}`);
       setIsEquipeModalOpen(false);
@@ -264,6 +311,13 @@ export default function DetalhesEdicaoPage() {
           <Trophy size={18} />
           Confrontos e Partidas
         </button>
+        <button 
+          onClick={() => setActiveTab('jogadores')}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${activeTab === 'jogadores' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+        >
+          <Users size={18} />
+          Jogadores ({todosJogadores?.length || 0})
+        </button>
       </div>
 
       {/* Conteúdo Aba Equipes */}
@@ -299,7 +353,14 @@ export default function DetalhesEdicaoPage() {
                 </div>
                 
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800">{equipe.nome}</h3>
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    {equipe.nome}
+                    {equipe.grupo && (
+                      <span className="text-[10px] font-extrabold bg-blue-50 text-blue-605 px-2 py-0.5 rounded-full uppercase">
+                        Grupo {equipe.grupo}
+                      </span>
+                    )}
+                  </h3>
                   <p className="text-sm text-slate-500">{equipe.participantes?.length || 0} jogadores</p>
                 </div>
 
@@ -376,7 +437,7 @@ export default function DetalhesEdicaoPage() {
               >
                 Lista de Jogos
               </button>
-              {edicao?.tipo_competicao === 'Pontos Corridos' && (
+              {(edicao?.tipo_competicao === 'Pontos Corridos' || edicao?.tipo_competicao === 'Grupos') && (
                 <button 
                   onClick={() => setPartidasSubTab('tabela')}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${partidasSubTab === 'tabela' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
@@ -384,7 +445,7 @@ export default function DetalhesEdicaoPage() {
                   Tabela Classificação
                 </button>
               )}
-              {edicao?.tipo_competicao === 'Mata-Mata' && (
+              {(edicao?.tipo_competicao === 'Mata-Mata' || edicao?.tipo_competicao === 'Grupos') && (
                 <button 
                   onClick={() => setPartidasSubTab('arvore')}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${partidasSubTab === 'arvore' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
@@ -434,42 +495,61 @@ export default function DetalhesEdicaoPage() {
 
           {/* Visualização Tabela de Classificação */}
           {filteredMatches.length > 0 && partidasSubTab === 'tabela' && (
-            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm animate-in fade-in duration-200">
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs font-bold uppercase">
-                    <th className="py-4 px-6 text-center w-12">Pos</th>
-                    <th className="py-4 px-6">Equipe</th>
-                    <th className="py-4 px-6 text-center">P</th>
-                    <th className="py-4 px-6 text-center">J</th>
-                    <th className="py-4 px-6 text-center">V</th>
-                    <th className="py-4 px-6 text-center">E</th>
-                    <th className="py-4 px-6 text-center">D</th>
-                    <th className="py-4 px-6 text-center">GP</th>
-                    <th className="py-4 px-6 text-center">GC</th>
-                    <th className="py-4 px-6 text-center">SG</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700 text-sm">
-                  {classificationTable.map((row: any, idx: number) => (
-                    <tr key={row.id_equipe} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-6 text-center font-bold text-slate-500">{idx + 1}</td>
-                      <td className="py-4 px-6 font-bold text-slate-800">{row.nome}</td>
-                      <td className="py-4 px-6 text-center font-black text-blue-600">{row.pontos}</td>
-                      <td className="py-4 px-6 text-center">{row.jogos}</td>
-                      <td className="py-4 px-6 text-center text-green-600 font-semibold">{row.vitorias}</td>
-                      <td className="py-4 px-6 text-center text-slate-500">{row.empates}</td>
-                      <td className="py-4 px-6 text-center text-red-500">{row.derrotas}</td>
-                      <td className="py-4 px-6 text-center">{row.golsPro}</td>
-                      <td className="py-4 px-6 text-center">{row.golsContra}</td>
-                      <td className={`py-4 px-6 text-center font-semibold ${row.saldoGols > 0 ? 'text-green-600' : row.saldoGols < 0 ? 'text-red-600' : 'text-slate-500'}`}>
-                        {row.saldoGols > 0 ? `+${row.saldoGols}` : row.saldoGols}
-                      </td>
+            edicao?.tipo_competicao === 'Grupos' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-200">
+                <GroupClassificationTable 
+                  titulo="Grupo A"
+                  rows={classificationTable.filter((r: any) => {
+                    const eqObj = equipes.find((e: any) => e.id_equipe === r.id_equipe);
+                    return eqObj?.grupo === 'A' || !eqObj?.grupo;
+                  })} 
+                />
+                <GroupClassificationTable 
+                  titulo="Grupo B"
+                  rows={classificationTable.filter((r: any) => {
+                    const eqObj = equipes.find((e: any) => e.id_equipe === r.id_equipe);
+                    return eqObj?.grupo === 'B';
+                  })} 
+                />
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm animate-in fade-in duration-200">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs font-bold uppercase">
+                      <th className="py-4 px-6 text-center w-12">Pos</th>
+                      <th className="py-4 px-6">Equipe</th>
+                      <th className="py-4 px-6 text-center">P</th>
+                      <th className="py-4 px-6 text-center">J</th>
+                      <th className="py-4 px-6 text-center">V</th>
+                      <th className="py-4 px-6 text-center">E</th>
+                      <th className="py-4 px-6 text-center">D</th>
+                      <th className="py-4 px-6 text-center">GP</th>
+                      <th className="py-4 px-6 text-center">GC</th>
+                      <th className="py-4 px-6 text-center">SG</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700 text-sm">
+                    {classificationTable.map((row: any, idx: number) => (
+                      <tr key={row.id_equipe} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-4 px-6 text-center font-bold text-slate-500">{idx + 1}</td>
+                        <td className="py-4 px-6 font-bold text-slate-800">{row.nome}</td>
+                        <td className="py-4 px-6 text-center font-black text-blue-600">{row.pontos}</td>
+                        <td className="py-4 px-6 text-center">{row.jogos}</td>
+                        <td className="py-4 px-6 text-center text-green-600 font-semibold">{row.vitorias}</td>
+                        <td className="py-4 px-6 text-center text-slate-500">{row.empates}</td>
+                        <td className="py-4 px-6 text-center text-red-500">{row.derrotas}</td>
+                        <td className="py-4 px-6 text-center">{row.golsPro}</td>
+                        <td className="py-4 px-6 text-center">{row.golsContra}</td>
+                        <td className={`py-4 px-6 text-center font-semibold ${row.saldoGols > 0 ? 'text-green-600' : row.saldoGols < 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                          {row.saldoGols > 0 ? `+${row.saldoGols}` : row.saldoGols}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           )}
 
           {/* Visualização de Árvore Mata-Mata */}
@@ -532,6 +612,66 @@ export default function DetalhesEdicaoPage() {
         </div>
       )}
 
+      {/* Conteúdo Aba Jogadores */}
+      {activeTab === 'jogadores' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-slate-700 flex items-center gap-2">
+              <Users className="text-blue-600" size={20} />
+              Jogadores da Competição
+            </h2>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs font-bold uppercase">
+                    <th className="py-4 px-6">Jogador</th>
+                    <th className="py-4 px-6">Equipe</th>
+                    <th className="py-4 px-6 text-center">Gols</th>
+                    <th className="py-4 px-6 text-center">Assistências</th>
+                    <th className="py-4 px-6 text-center">C. Amarelo</th>
+                    <th className="py-4 px-6 text-center">C. Vermelho</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 text-sm">
+                  {todosJogadores.map((row: any) => (
+                    <tr key={row.id_participante} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 px-6 font-bold text-slate-800">{row.nome}</td>
+                      <td className="py-4 px-6 text-slate-500">{row.equipe}</td>
+                      <td className="py-4 px-6 text-center font-extrabold text-slate-850">{row.gols}</td>
+                      <td className="py-4 px-6 text-center text-slate-650">{row.assistencias}</td>
+                      <td className="py-4 px-6 text-center">
+                        {row.amarelos > 0 ? (
+                          <span className="inline-block bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-xs">
+                            {row.amarelos} 🟨
+                          </span>
+                        ) : '0'}
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        {row.vermelhos > 0 ? (
+                          <span className="inline-block bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded text-xs">
+                            {row.vermelhos} 🟥
+                          </span>
+                        ) : '0'}
+                      </td>
+                    </tr>
+                  ))}
+                  {todosJogadores.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-450 italic">
+                        Nenhum jogador cadastrado nas equipes participantes.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Inscrever Equipe */}
       {isEquipeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -541,12 +681,27 @@ export default function DetalhesEdicaoPage() {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
-              handleAddEquipe({ nome: formData.get('nome') });
+              handleAddEquipe({ 
+                nome: formData.get('nome'),
+                grupo: formData.get('grupo')
+              });
             }} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-slate-700">Nome da Equipe</label>
                 <input name="nome" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20" placeholder="Ex: Estrelas de Goianira" />
               </div>
+              {edicao?.tipo_competicao === 'Grupos' && (
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-700">Grupo</label>
+                  <select name="grupo" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <option value="">Automático (Dividir igualmente)</option>
+                    <option value="A">Grupo A</option>
+                    <option value="B">Grupo B</option>
+                    <option value="C">Grupo C</option>
+                    <option value="D">Grupo D</option>
+                  </select>
+                </div>
+              )}
               <div className="flex gap-3 pt-6">
                 <button type="button" onClick={() => setIsEquipeModalOpen(false)} className="flex-1 py-3 rounded-xl border border-slate-200 font-semibold text-slate-600">Cancelar</button>
                 <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-100">Criar Equipe</button>
@@ -1236,7 +1391,54 @@ function ModalEstatisticas({ match, onClose }: any) {
         <div className="flex justify-end pt-6 mt-6 border-t border-slate-100">
           <button onClick={onClose} className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl text-xs">Fechar Painel</button>
         </div>
+  
+      </div>
+    </div>
+  );
+}
 
+function GroupClassificationTable({ titulo, rows }: { titulo: string, rows: any[] }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+      <div className="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-800">
+        {titulo}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-[10px] font-bold uppercase">
+              <th className="py-3 px-4 text-center w-10">Pos</th>
+              <th className="py-3 px-4">Equipe</th>
+              <th className="py-3 px-4 text-center">P</th>
+              <th className="py-3 px-4 text-center">J</th>
+              <th className="py-3 px-4 text-center">V</th>
+              <th className="py-3 px-4 text-center">E</th>
+              <th className="py-3 px-4 text-center">D</th>
+              <th className="py-3 px-4 text-center">SG</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-700 text-xs">
+            {rows.map((row: any, idx: number) => (
+              <tr key={row.id_equipe} className="hover:bg-slate-50/50 transition-colors">
+                <td className="py-3 px-4 text-center font-bold text-slate-500">{idx + 1}</td>
+                <td className="py-3 px-4 font-bold text-slate-800">{row.nome}</td>
+                <td className="py-3 px-4 text-center font-black text-blue-600">{row.pontos}</td>
+                <td className="py-3 px-4 text-center">{row.jogos}</td>
+                <td className="py-3 px-4 text-center text-green-600">{row.vitorias}</td>
+                <td className="py-3 px-4 text-center text-slate-500">{row.empates}</td>
+                <td className="py-3 px-4 text-center text-red-500">{row.derrotas}</td>
+                <td className={`py-3 px-4 text-center font-semibold ${row.saldoGols > 0 ? 'text-green-600' : row.saldoGols < 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                  {row.saldoGols > 0 ? `+${row.saldoGols}` : row.saldoGols}
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-6 text-center text-slate-400 italic">Nenhuma equipe neste grupo.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

@@ -158,7 +158,7 @@ def atualizar_partida(db: Session, id_partida: int, partida_atualizada: schemas.
 
     for chave, valor in dados.items():
         setattr(db_partida, chave, valor)
-    
+
     # Se a partida foi finalizada e tem próxima partida, promover o vencedor
     if db_partida.status == "Finalizada" and db_partida.id_proxima_partida:
         if db_partida.placar_casa == db_partida.placar_visitante:
@@ -167,17 +167,25 @@ def atualizar_partida(db: Session, id_partida: int, partida_atualizada: schemas.
         vencedor_id = db_partida.id_equipe_casa if db_partida.placar_casa > db_partida.placar_visitante else db_partida.id_equipe_visitante
         
         if status_anterior != "Finalizada" or placar_casa_anterior != db_partida.placar_casa or placar_visitante_anterior != db_partida.placar_visitante:
+            proxima = db.query(models.Partida).filter(models.Partida.id_partida == db_partida.id_proxima_partida).first()
+            if proxima and proxima.status != "Agendada":
+                # Se mudou o vencedor ou a partida estava finalizada e mudou o status, mas a próxima não está agendada
+                if status_anterior == "Finalizada":
+                    vencedor_antigo_id = db_partida.id_equipe_casa if placar_casa_anterior > placar_visitante_anterior else db_partida.id_equipe_visitante
+                    if vencedor_antigo_id != vencedor_id:
+                        raise ValueError("Não é possível alterar o vencedor pois a próxima partida do chaveamento já foi iniciada ou concluída.")
+                else:
+                    raise ValueError("Não é possível finalizar a partida pois a próxima partida do chaveamento já foi iniciada ou concluída.")
+
             if status_anterior == "Finalizada":
                 vencedor_antigo_id = db_partida.id_equipe_casa if placar_casa_anterior > placar_visitante_anterior else db_partida.id_equipe_visitante
                 if vencedor_antigo_id != vencedor_id:
-                    proxima = db.query(models.Partida).filter(models.Partida.id_partida == db_partida.id_proxima_partida).first()
                     if proxima and proxima.status == "Agendada":
                         if proxima.id_equipe_casa == vencedor_antigo_id:
                             proxima.id_equipe_casa = None
                         elif proxima.id_equipe_visitante == vencedor_antigo_id:
                             proxima.id_equipe_visitante = None
             
-            proxima = db.query(models.Partida).filter(models.Partida.id_partida == db_partida.id_proxima_partida).first()
             if proxima:
                 if proxima.id_equipe_casa != vencedor_id and proxima.id_equipe_visitante != vencedor_id:
                     if proxima.id_equipe_casa is None:
@@ -189,8 +197,11 @@ def atualizar_partida(db: Session, id_partida: int, partida_atualizada: schemas.
 
     # Se a partida deixou de ser finalizada, remover da próxima
     elif db_partida.status != "Finalizada" and status_anterior == "Finalizada" and db_partida.id_proxima_partida:
-        vencedor_antigo_id = db_partida.id_equipe_casa if placar_casa_anterior > placar_visitante_anterior else db_partida.id_equipe_visitante
         proxima = db.query(models.Partida).filter(models.Partida.id_partida == db_partida.id_proxima_partida).first()
+        if proxima and proxima.status != "Agendada":
+            raise ValueError("Não é possível reabrir a partida pois a próxima partida do chaveamento já foi iniciada ou concluída.")
+            
+        vencedor_antigo_id = db_partida.id_equipe_casa if placar_casa_anterior > placar_visitante_anterior else db_partida.id_equipe_visitante
         if proxima and proxima.status == "Agendada":
             if proxima.id_equipe_casa == vencedor_antigo_id:
                 proxima.id_equipe_casa = None

@@ -24,7 +24,11 @@ def salvar_arquivo(file: UploadFile, subpasta: str) -> str:
     if not file or not file.filename:
         return None
     
-    extensao = file.filename.split(".")[-1].lower()
+    filename = file.filename
+    if "." not in filename:
+        raise HTTPException(status_code=400, detail="O nome do arquivo deve conter uma extensão válida.")
+        
+    extensao = filename.split(".")[-1].lower()
     if extensao not in {"jpg", "jpeg", "png", "pdf"}:
         raise HTTPException(status_code=400, detail=f"Extensão de arquivo '.{extensao}' não é permitida. Use apenas JPG, JPEG, PNG ou PDF.")
         
@@ -40,7 +44,7 @@ def salvar_arquivo(file: UploadFile, subpasta: str) -> str:
     with open(caminho_arquivo, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    return str(Path("uploads") / subpasta / nome_arquivo)
+    return f"uploads/{subpasta}/{nome_arquivo}"
 
 @router.post("/", summary="Cadastrar um novo aluno", response_model=schemas.Aluno, status_code=status.HTTP_201_CREATED)
 def criar_aluno(
@@ -114,19 +118,12 @@ def listar_alunos(
         if not current_user.professores:
             return []
         
-        turmas_professor = servico_turmas.listar_turmas_professor(db=db, id_professor=current_user.professores.id_professor)
+        alunos = db.query(models.Aluno).join(models.Matricula).join(models.Turma).filter(
+            models.Turma.id_professor == current_user.professores.id_professor,
+            models.Matricula.ativo == True
+        ).distinct().offset(skip).limit(limit).all()
         
-        alunos_filtrados = []
-        ids_alunos = set()
-        
-        for turma in turmas_professor:
-            alunos_turma = servico_alunos.listar_alunos_por_turma(db=db, id_turma=turma.id_turma)
-            for aluno in alunos_turma:
-                if aluno.id_aluno not in ids_alunos:
-                    alunos_filtrados.append(aluno)
-                    ids_alunos.add(aluno.id_aluno)
-        
-        return alunos_filtrados
+        return alunos
 
     return servico_alunos.listar_alunos(db=db, skip=skip, limit=limit)
 
@@ -220,11 +217,58 @@ def buscar_alunos_por_serie(
 @router.put("/{id_aluno}", summary="Atualizar um aluno existente", response_model=schemas.Aluno, status_code=status.HTTP_200_OK)
 def atualizar_aluno(
     id_aluno: int, 
-    aluno: schemas.AlunoUpdate, 
+    nome_completo: Optional[str] = Form(None, max_length=500),
+    data_nascimento: Optional[date] = Form(None),
+    escola: Optional[str] = Form(None, max_length=100),
+    serie_ano: Optional[str] = Form(None),
+    nome_mae: Optional[str] = Form(None, max_length=500),
+    nome_pai: Optional[str] = Form(None, max_length=500),
+    telefone_1: Optional[str] = Form(None, max_length=20),
+    telefone_2: Optional[str] = Form(None, max_length=20),
+    endereco: Optional[str] = Form(None),
+    recomendacoes_medicas: Optional[str] = Form(None),
+    foto: UploadFile = File(None),
+    documento: UploadFile = File(None),
+    atestado: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    db_aluno = servico_alunos.atualizar_aluno(db=db, id_aluno=id_aluno, aluno_atualizado=aluno)
+    foto_path = salvar_arquivo(foto, "fotos")
+    doc_path = salvar_arquivo(documento, "documentos")
+    atestado_path = salvar_arquivo(atestado, "atestados")
+
+    update_data = {}
+    if nome_completo is not None:
+        update_data["nome_completo"] = nome_completo
+    if data_nascimento is not None:
+        update_data["data_nascimento"] = data_nascimento
+    if escola is not None:
+        update_data["escola"] = escola
+    if serie_ano is not None:
+        update_data["serie_ano"] = serie_ano
+    if nome_mae is not None:
+        update_data["nome_mae"] = nome_mae
+    if nome_pai is not None:
+        update_data["nome_pai"] = nome_pai
+    if telefone_1 is not None:
+        update_data["telefone_1"] = telefone_1
+    if telefone_2 is not None:
+        update_data["telefone_2"] = telefone_2
+    if endereco is not None:
+        update_data["endereco"] = endereco
+    if recomendacoes_medicas is not None:
+        update_data["recomendacoes_medicas"] = recomendacoes_medicas
+
+    aluno_update = schemas.AlunoUpdate(**update_data)
+
+    db_aluno = servico_alunos.atualizar_aluno(
+        db=db, 
+        id_aluno=id_aluno, 
+        aluno_atualizado=aluno_update,
+        foto=foto_path,
+        documento=doc_path,
+        atestado=atestado_path
+    )
     if not db_aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado.")
     return db_aluno
