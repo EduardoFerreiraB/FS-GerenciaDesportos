@@ -16,7 +16,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-node: '3.12'
+        python-version: '3.10'
 
     - name: Install dependencies
       run: |
@@ -35,6 +35,6 @@ jobs:
     steps:
     - name: Trigger Render Deploy Webhook
       run: |
-        curl -X POST "https://api.render.com/deploy/srv-d5nqsm4hg0os73dlig0g?key=Aa9OXl08Jj4"
+        curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
 
 

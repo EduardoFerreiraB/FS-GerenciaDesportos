@@ -14,7 +14,21 @@ from routers import (
 import os
 from pathlib import Path
 
-models.Base.metadata.create_all(bind=engine)
+import time
+from sqlalchemy.exc import OperationalError
+
+# Retry connection to database on startup (especially useful for slow docker DB boots)
+for i in range(15):
+    try:
+        # Tenta se conectar e criar as tabelas
+        models.Base.metadata.create_all(bind=engine)
+        break
+    except OperationalError as e:
+        if i == 14:
+            print("Could not connect to the database after 15 attempts. Exiting.")
+            raise e
+        print(f"Database connection failed, retrying in 2 seconds... ({i+1}/15)")
+        time.sleep(2)
 
 app = FastAPI(
     title="Gerencia Esportes API",

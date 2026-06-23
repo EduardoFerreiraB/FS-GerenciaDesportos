@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # --- Stage 2: Production runner ---
 FROM python:3.12-slim AS runner
@@ -21,8 +21,7 @@ RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -m -s /sbin/nologin appuser
 
 # Copy installed python dependencies from builder stage
-COPY --from=builder /root/.local /home/appuser/.local
-ENV PATH=/home/appuser/.local/bin:$PATH
+COPY --from=builder /usr/local /usr/local
 
 # Copy app files and change owner to appuser
 COPY --chown=appuser:appgroup ./app /app/app
