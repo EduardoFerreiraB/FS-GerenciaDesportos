@@ -81,7 +81,7 @@ class Turma(Base):
 
     modalidade = relationship("Modalidade", back_populates="turmas")
     professor = relationship("Professor", back_populates="turmas")
-    matriculas = relationship("Matricula", back_populates="turma")
+    matriculas = relationship("Matricula", back_populates="turma", cascade="all, delete-orphan")
     dias = relationship("TurmaDia", back_populates="turma", cascade="all, delete-orphan")
 
     @property
@@ -150,7 +150,7 @@ class Aluno(Base):
     ativo = Column(Boolean, default=True)
 
     participante = relationship("Participante", back_populates="aluno")
-    matriculas = relationship("Matricula", back_populates="aluno")
+    matriculas = relationship("Matricula", back_populates="aluno", cascade="all, delete-orphan")
 
 class Matricula(Base):
     __tablename__ = "matriculas"
@@ -163,7 +163,7 @@ class Matricula(Base):
 
     aluno = relationship("Aluno", back_populates="matriculas")
     turma = relationship("Turma", back_populates="matriculas")
-    presencas = relationship("Presenca", back_populates="matricula")
+    presencas = relationship("Presenca", back_populates="matricula", cascade="all, delete-orphan")
 
 class Presenca(Base):
     __tablename__ = "presencas"
@@ -230,6 +230,7 @@ class Equipe(Base):
     id_equipe = Column(Integer, primary_key=True, index=True)
     nome = Column(String(200), nullable=False)
     id_edicao = Column(Integer, ForeignKey("edicoes.id_edicao"), nullable=False)
+    grupo = Column(String(50), nullable=True)
 
     edicao = relationship("Edicao", back_populates="equipes")
     participantes = relationship("Participante", secondary=equipes_participantes)

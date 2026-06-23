@@ -39,7 +39,7 @@ def listar_edicao(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    db_edicao = edicao_service.listar_evento(db=db, edicao_id=edicao_id)
+    db_edicao = edicao_service.listar_edicao_id(db=db, edicao_id=edicao_id)
 
     if not db_edicao:
         raise HTTPException(status_code=404, detail="Edição não encontrada.")

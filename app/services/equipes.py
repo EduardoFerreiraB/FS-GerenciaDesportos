@@ -12,6 +12,9 @@ def criar_equipe(db: Session, equipe: schemas.EquipeCreate):
     db_equipe = db.query(models.Equipe).filter(models.Equipe.id_equipe == db_equipe.id_equipe).first()
     return db_equipe
 
+def listar_equipes(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.Equipe).offset(skip).limit(limit).all()
+
 def listar_equipes_edicao(db: Session, id_edicao: int):
     return db.query(models.Equipe).filter(models.Equipe.id_edicao == id_edicao).all()
 

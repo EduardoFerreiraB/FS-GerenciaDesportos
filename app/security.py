@@ -14,6 +14,12 @@ load_dotenv()
 
 # Configurações JWT
 SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == "chave_secreta_para_desenvolvimento_local":
+    # Em um cenário real, você pode lançar uma exceção ou emitir um aviso crítico.
+    # Para garantir a segurança, exigiremos que a SECRET_KEY seja definida.
+    if os.getenv("ENV") == "production":
+        raise ValueError("SECRET_KEY deve ser definida e segura em ambiente de produção!")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -83,7 +89,7 @@ async def check_assistente_role(current_user: models.Usuario = Depends(get_curre
 
 def create_refresh_token(db: Session, id_usuario: int) -> str:
     token_str = str(uuid.uuid4())
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    expires_at = datetime.utcnow() + timedelta(days=7)
     
     db_token = models.RefreshToken(
         id_usuario=id_usuario,
@@ -92,6 +98,15 @@ def create_refresh_token(db: Session, id_usuario: int) -> str:
         revoked=False
     )
     db.add(db_token)
+
+    # Limpar tokens antigos revogados ou expirados do mesmo usuário para evitar crescimento infinito
+    now = datetime.utcnow()
+    db.query(models.RefreshToken).filter(
+        models.RefreshToken.id_usuario == id_usuario,
+        (models.RefreshToken.revoked == True) | 
+        (models.RefreshToken.expires_at < now)
+    ).delete(synchronize_session=False)
+
     db.commit()
     db.refresh(db_token)
     return token_str

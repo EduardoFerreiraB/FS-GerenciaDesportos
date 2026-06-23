@@ -46,6 +46,9 @@ def verificar_conflito_horario(db: Session, id_professor: int, dias: list, inici
     return checar_conflito_agenda(dias, inicio, fim, turmas_prof, id_turma_ignorar=id_turma_atual)
 
 def criar_turma(db:Session, turma: schemas.TurmaCreate):
+    if turma.horario_inicio >= turma.horario_fim:
+        raise ValueError("O horário de início deve ser anterior ao horário de término.")
+
     if verificar_conflito_horario(db, turma.id_professor, turma.dias_semana, turma.horario_inicio, turma.horario_fim):
         raise ValueError("Conflito de horário: O professor já possui aula neste período.")
 
@@ -94,6 +97,9 @@ def atualizar_turma(db: Session, id_turma: int, turma_atualizada: schemas.TurmaU
     novos_dias = dados_atualizados.get('dias_semana', [])
     novo_inicio = dados_atualizados.get('horario_inicio', db_turma.horario_inicio)
     novo_fim = dados_atualizados.get('horario_fim', db_turma.horario_fim)
+
+    if novo_inicio >= novo_fim:
+        raise ValueError("O horário de início deve ser anterior ao horário de término.")
 
     if 'dias_semana' not in dados_atualizados:
         novos_dias = db_turma.dias_semana

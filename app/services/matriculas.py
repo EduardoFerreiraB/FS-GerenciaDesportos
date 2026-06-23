@@ -42,7 +42,10 @@ def listar_matriculas(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Matricula).offset(skip).limit(limit).all()
 
 def listar_matriculas_turma(db: Session, id_turma: int):
-    return db.query(models.Matricula).filter(models.Matricula.id_turma == id_turma).all()
+    return db.query(models.Matricula).filter(
+        models.Matricula.id_turma == id_turma,
+        models.Matricula.ativo == True
+    ).all()
 
 def listar_matriculas_aluno(db: Session, id_aluno: int):
     return db.query(models.Matricula).filter(

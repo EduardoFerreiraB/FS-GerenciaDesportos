@@ -27,7 +27,7 @@ def listar_equipes(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_active_user)
 ):
-    return db.query(models.Equipe).offset(skip).limit(limit).all()
+    return service_equipes.listar_equipes(db=db, skip=skip, limit=limit)
 
 @router.get("/{id_equipe}", summary="Obter uma equipe por ID", response_model=schemas.Equipe)
 def obter_equipe(

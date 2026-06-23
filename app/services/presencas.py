@@ -4,9 +4,19 @@ import models
 import schemas
 
 def registrar_presenca_lote(db: Session, lista_presenca: schemas.ListaPresenca):
+    # Obter todas as matrículas ativas da turma
+    matriculas_validas = db.query(models.Matricula).filter(
+        models.Matricula.id_turma == lista_presenca.id_turma,
+        models.Matricula.ativo == True
+    ).all()
+    ids_validos = {m.id_matricula for m in matriculas_validas}
+
     registros = []
     
     for item in lista_presenca.presencas:
+        if item.id_matricula not in ids_validos:
+            raise ValueError(f"Matrícula ID {item.id_matricula} é inválida, inativa ou não pertence à turma {lista_presenca.id_turma}.")
+
         presenca_existente = db.query(models.Presenca).filter(
             models.Presenca.id_matricula == item.id_matricula,
             models.Presenca.data_aula == lista_presenca.data_aula

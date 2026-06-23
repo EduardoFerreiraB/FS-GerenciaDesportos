@@ -70,20 +70,28 @@ export default function AlunoForm({ initialData, isEditing = false }: AlunoFormP
 
     try {
       if (isEditing) {
-        const jsonPayload = {
-          nome_completo: data.nome_completo,
-          data_nascimento: data.data_nascimento,
-          escola: data.escola,
-          serie_ano: data.serie_ano,
-          nome_mae: data.nome_mae,
-          nome_pai: data.nome_pai || null,
-          telefone_1: data.telefone_1,
-          telefone_2: data.telefone_2 || null,
-          endereco: data.endereco,
-          recomendacoes_medicas: data.recomendacoes_medicas || null,
-        };
+        const formData = new FormData();
+        formData.append('nome_completo', data.nome_completo);
+        formData.append('data_nascimento', data.data_nascimento);
+        formData.append('escola', data.escola);
+        formData.append('serie_ano', data.serie_ano);
+        formData.append('nome_mae', data.nome_mae);
+        
+        if (data.nome_pai) formData.append('nome_pai', data.nome_pai);
+        formData.append('telefone_1', data.telefone_1);
+        if (data.telefone_2) formData.append('telefone_2', data.telefone_2);
+        formData.append('endereco', data.endereco);
+        if (data.recomendacoes_medicas) formData.append('recomendacoes_medicas', data.recomendacoes_medicas);
+        
+        if (fotoFile) formData.append('foto', fotoFile);
+        if (documentoFile) formData.append('documento', documentoFile);
+        if (atestadoFile) formData.append('atestado', atestadoFile);
 
-        await api.put(`/alunos/${initialData.id_aluno}`, jsonPayload);
+        await api.put(`/alunos/${initialData.id_aluno}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
         alert('Aluno atualizado com sucesso!');
       } else {
         const formData = new FormData();
@@ -408,7 +416,7 @@ function FileUploadField({ label, file, onFileChange, accept, required }: any) {
         <div className="relative">
           <input 
             type="file" 
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
             accept={accept}
             onChange={(e) => onFileChange(e.target.files?.[0] || null)}
           />

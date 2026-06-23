@@ -1,5 +1,7 @@
 # SMCE 🏆
 
+[![CI/CD Pipeline](https://github.com/EduardoFerreiraB/FS-GerenciaDesportos/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/EduardoFerreiraB/FS-GerenciaDesportos/actions/workflows/ci-cd.yml)
+
 Sistema de matricula e controle esportivo, permitindo o controle de alunos, turmas, matrículas, frequências e modalidades.
 
 ## 🚀 Como Rodar Localmente

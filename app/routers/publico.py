@@ -121,7 +121,11 @@ def listar_edicoes_publicas(db: Session = Depends(get_db)):
 
 @router.get("/edicoes/{id_edicao}/equipes", response_model=List[EquipePublica])
 def listar_equipes_publicas(id_edicao: int, db: Session = Depends(get_db)):
-    equipes = db.query(models.Equipe).filter(models.Equipe.id_edicao == id_edicao).all()
+    from sqlalchemy.orm import selectinload
+    equipes = db.query(models.Equipe).filter(models.Equipe.id_edicao == id_edicao).options(
+        selectinload(models.Equipe.participantes).selectinload(models.Participante.aluno),
+        selectinload(models.Equipe.participantes).selectinload(models.Participante.atleta)
+    ).all()
     
     equipes_publicas = []
     for eq in equipes:
@@ -148,7 +152,11 @@ def listar_partidas_publicas(id_edicao: int, db: Session = Depends(get_db)):
 
 @router.get("/partidas/{id_partida}/estatisticas", response_model=List[EstatisticaPublica])
 def listar_estatisticas_publicas(id_partida: int, db: Session = Depends(get_db)):
-    stats = db.query(models.EstatisticaPartida).filter(models.EstatisticaPartida.id_partida == id_partida).all()
+    from sqlalchemy.orm import selectinload
+    stats = db.query(models.EstatisticaPartida).filter(models.EstatisticaPartida.id_partida == id_partida).options(
+        selectinload(models.EstatisticaPartida.participante).selectinload(models.Participante.aluno),
+        selectinload(models.EstatisticaPartida.participante).selectinload(models.Participante.atleta)
+    ).all()
     
     stats_publicas = []
     for s in stats:
@@ -175,9 +183,13 @@ def listar_estatisticas_publicas(id_partida: int, db: Session = Depends(get_db))
 
 @router.get("/edicoes/{id_edicao}/estatisticas", response_model=List[EstatisticaPublica])
 def listar_estatisticas_edicao_publicas(id_edicao: int, db: Session = Depends(get_db)):
+    from sqlalchemy.orm import selectinload
     stats = db.query(models.EstatisticaPartida)\
               .join(models.Partida)\
-              .filter(models.Partida.id_edicao == id_edicao).all()
+              .filter(models.Partida.id_edicao == id_edicao).options(
+                  selectinload(models.EstatisticaPartida.participante).selectinload(models.Participante.aluno),
+                  selectinload(models.EstatisticaPartida.participante).selectinload(models.Participante.atleta)
+              ).all()
               
     stats_publicas = []
     for s in stats:

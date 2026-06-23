@@ -14,7 +14,21 @@ from routers import (
 import os
 from pathlib import Path
 
-models.Base.metadata.create_all(bind=engine)
+import time
+from sqlalchemy.exc import OperationalError
+
+# Retry connection to database on startup (especially useful for slow docker DB boots)
+for i in range(15):
+    try:
+        # Tenta se conectar e criar as tabelas
+        models.Base.metadata.create_all(bind=engine)
+        break
+    except OperationalError as e:
+        if i == 14:
+            print("Could not connect to the database after 15 attempts. Exiting.")
+            raise e
+        print(f"Database connection failed, retrying in 2 seconds... ({i+1}/15)")
+        time.sleep(2)
 
 app = FastAPI(
     title="Gerencia Esportes API",
@@ -22,10 +36,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+import os
+
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+else:
+    origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +91,6 @@ async def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         return {"status": "error", "database": str(e)}
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
