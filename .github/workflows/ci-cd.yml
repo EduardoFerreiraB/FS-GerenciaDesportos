@@ -25,6 +25,9 @@ jobs:
         pip install pytest pytest-cov httpx
 
     - name: Run tests with coverage
+      env:
+        DATABASE_URL: sqlite:///./test.db
+        SECRET_KEY: test_secret_key_for_ci_pipeline
       run: |
         python -m pytest --cov=app --cov-report=xml -p no:warnings
 
