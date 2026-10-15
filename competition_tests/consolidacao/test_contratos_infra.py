@@ -237,7 +237,7 @@ def test_main_registra_tratadores_e_router_central_inclui_subrouters():
 
     assert router.prefix == "/competicoes"
     assert router.tags == ["Competições"]
-    assert organizacao.router.routes == [] and elencos.router.routes == []
+    assert len(organizacao.router.routes) > 0 and len(elencos.router.routes) > 0
     assert NaoEncontrado in app.exception_handlers
 
 
