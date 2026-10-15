@@ -33,35 +33,45 @@ def atualizar_edicao(db: Session, edicao_id: int, edicao_atualizada: schemas.Edi
 
 def excluir_edicao(db: Session, id_edicao: int):
     db_edicao = listar_edicao_id(db, id_edicao)
+    if not db_edicao:
+        return False
 
-    if db_edicao:
-        db.delete(db_edicao)
-        db.commit()
-        return True
-    return False
+    competicoes = getattr(db_edicao, "competicoes", None)
+    if competicoes is None:
+        competicoes = db.query(models.Competicao).filter(models.Competicao.id_edicao == id_edicao).all()
+
+    for comp in competicoes:
+        if comp.status != "RASCUNHO":
+            raise ValueError(
+                "Não é possível excluir a edição porque existem competições ativas ou iniciadas vinculadas. "
+                "Remova as competições primeiro."
+            )
+        tem_equipes = bool(getattr(comp, "equipes", None))
+        tem_confrontos = bool(getattr(comp, "confrontos", None))
+        tem_provas = bool(getattr(comp, "provas", None))
+        tem_inscricoes = bool(getattr(comp, "inscricoes_individuais", None))
+
+        if not (tem_equipes or tem_confrontos or tem_provas or tem_inscricoes) and hasattr(comp, "id_competicao") and comp.id_competicao is not None:
+            tem_equipes = db.query(models.Equipe.id_equipe).filter(models.Equipe.id_competicao == comp.id_competicao).first() is not None
+            tem_confrontos = db.query(models.Confronto.id_confronto).filter(models.Confronto.id_competicao == comp.id_competicao).first() is not None
+            tem_provas = db.query(models.Prova.id_prova).filter(models.Prova.id_competicao == comp.id_competicao).first() is not None
+            tem_inscricoes = db.query(models.InscricaoIndividual.id_inscricao).filter(models.InscricaoIndividual.id_competicao == comp.id_competicao).first() is not None
+
+        if tem_equipes or tem_confrontos or tem_provas or tem_inscricoes:
+            raise ValueError(
+                "Não é possível excluir a edição porque existem competições com dados vinculados (equipes, confrontos ou provas). "
+                "Remova as competições primeiro."
+            )
+
+    db.delete(db_edicao)
+    db.commit()
+    return True
 
 def clonar_equipes(db: Session, id_edicao_origem: int, id_edicao_destino: int):
-    # 1. Buscar equipes da edição de origem
-    equipes_origem = db.query(models.Equipe).filter(models.Equipe.id_edicao == id_edicao_origem).all()
-    
-    novas_equipes = []
-    for eq_origem in equipes_origem:
-        # 2. Criar nova equipe para o destino
-        nova_equipe = models.Equipe(
-            nome=eq_origem.nome,
-            id_edicao=id_edicao_destino
-        )
-        db.add(nova_equipe)
-        db.flush() # Para gerar o id_equipe
-        
-        # 3. Copiar os participantes (vínculos)
-        for participante in eq_origem.participantes:
-            nova_equipe.participantes.append(participante)
-        
-        novas_equipes.append(nova_equipe)
-    
-    db.commit()
-    return novas_equipes
+    raise ValueError(
+        "Clonagem de equipes por edição está indisponível até que exista "
+        "clonagem direcionada por competição."
+    )
 
 def gerar_confrontos_pontos_corridos(db: Session, edicao_id: int, id_modalidade: int, data_inicio: date, part_hora: time = None):
     # 1. Obter a edição
