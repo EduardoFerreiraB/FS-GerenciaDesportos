@@ -25,7 +25,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        'cd .. && DATABASE_URL=sqlite:///./frontend/e2e.db .venv/bin/python frontend/e2e/setup-db.py && DATABASE_URL=sqlite:///./frontend/e2e.db SECRET_KEY=e2e-playwright-secret-key-1234567890 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000',
+        'cd .. && DATABASE_URL=sqlite:///./frontend/e2e.db .venv/bin/python frontend/e2e/setup-db.py && PYTHONPATH=app DATABASE_URL=sqlite:///./frontend/e2e.db SECRET_KEY=e2e-playwright-secret-key-1234567890 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000',
       url: 'http://127.0.0.1:8000/docs',
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
