@@ -64,3 +64,24 @@ SQLite temporário). Ela é a única `head` e não tem `down_revision`.
 
 Execuções normais do Alembic não carregam os modelos (`target_metadata` é
 `None`); somente o gerador injeta o metadata via `config.attributes`.
+
+## Verificação em MySQL descartável (obrigatória antes de release)
+
+Antes de qualquer release, rode o harness de equivalência schema/ORM contra um
+servidor MySQL-compatível (MySQL local ou TiDB):
+
+```bash
+env HARNESS_MYSQL_URL='mysql+pymysql://user:pass@localhost:3306/' PYTHONPATH=app:. .venv/bin/python scripts/testar_mysql_competicoes.py
+```
+
+A URL é do **servidor**, sem nome de banco (com nome, o harness recusa). Ele
+cria um banco `harness_<id>` aleatório, aplica `alembic upgrade head`,
+compara tabelas, colunas, nulabilidade, tipos, defaults de servidor, chaves
+primárias, unicidade, índices, chaves estrangeiras e `ondelete` com
+`models.Base.metadata` e descarta esse mesmo banco ao terminar (inclusive em
+erro); só remove o banco que ele próprio criou. Exige privilégio
+`CREATE`/`DROP DATABASE`. **Nunca toca o banco configurado da aplicação:**
+ignora `DATABASE_URL` e `.env`, e `--usar-database-url` é recusado. Sucesso:
+"sem divergências" e código de saída 0. Também disponível como
+`pytest -m mysql migration_tests/test_harness_mysql.py` (pula se
+`HARNESS_MYSQL_URL` não estiver definida); a suíte padrão usa `-m 'not mysql'`.
