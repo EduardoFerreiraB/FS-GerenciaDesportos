@@ -3,7 +3,7 @@
 from datetime import date
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import event
@@ -18,7 +18,7 @@ from competicoes.contratos.elencos import (
 )
 from competicoes.contratos.organizacao import (
     CompeticaoComEdicaoCriar, EdicaoCompeticaoAtualizar,
-    EdicaoCompeticaoCriar, EventoComEdicaoCriar,
+    EdicaoCompeticaoCriar, EdicaoEventoAtualizar, EdicaoEventoCriar, EventoComEdicaoCriar,
 )
 from competicoes.erros import (
     ConfiguracaoInvalida, ConflitoEstado, ConflitoRevisao, Duplicidade,
@@ -239,3 +239,96 @@ def test_main_registra_tratadores_e_router_central_inclui_subrouters():
     assert router.tags == ["Competições"]
     assert organizacao.router.routes == [] and elencos.router.routes == []
     assert NaoEncontrado in app.exception_handlers
+
+
+@pytest.mark.parametrize("dados,campos", [
+    ({"nome": "Ana", "escola": "dado privado"}, ["escola"]),
+    ({"nome": ""}, ["nome"]),
+])
+def test_validacao_http_responde_envelope_sem_expor_entrada(dados, campos):
+    app = FastAPI()
+    registrar_tratadores(app)
+
+    @app.post("/competicoes/competidores")
+    def criar(dados: CompetidorCriar):
+        return dados
+
+    resposta = TestClient(app).post("/competicoes/competidores", json=dados)
+    assert resposta.status_code == 422
+    assert resposta.json() == {
+        "codigo": "CONFIGURACAO_INVALIDA",
+        "mensagem": "Dados da requisicao invalidos.",
+        "campos": campos,
+    }
+
+
+@pytest.mark.parametrize("schema,extras", [
+    (EdicaoEventoCriar, {"identificacao": "2026"}),
+    (EdicaoCompeticaoCriar, {"identificacao": "2026", "formato": "MATA_MATA",
+                            "configuracao": {"formato": "MATA_MATA"}}),
+    (EdicaoCompeticaoAtualizar, {"identificacao": "2026", "formato": "MATA_MATA",
+                               "configuracao": {"formato": "MATA_MATA"}, "revisao": 1}),
+    (EdicaoEventoAtualizar, {}),
+])
+def test_contratos_rejeitam_periodo_invertido(schema, extras):
+    with pytest.raises(ValidationError):
+        schema(**extras, data_inicio="2026-12-31", data_fim="2026-01-01")
+
+
+@pytest.mark.parametrize("dados", [
+    {"data_inicio": "2026-01-01"},
+    {"data_fim": "2026-12-31"},
+    {"data_inicio": "2026-01-01", "data_fim": "2026-01-01"},
+])
+def test_patch_aceita_data_parcial_ou_periodo_de_um_dia(dados):
+    assert EdicaoEventoAtualizar(**dados).model_dump(exclude_unset=True, mode="json") == dados
+
+
+@pytest.fixture()
+def rota_fixture_usuario():
+    from database import get_db
+    from main import app
+    from security import get_current_active_user
+
+    rotas_anteriores = list(app.router.routes)
+
+    @app.get("/__teste_contratos__/usuario")
+    def consultar(
+        db: Session = Depends(get_db),
+        autor: models.Usuario = Depends(get_current_active_user),
+    ):
+        return {"id_usuario": autor.id_usuario, "role": autor.role,
+                "eventos": db.query(Evento).count()}
+
+    try:
+        yield "/__teste_contratos__/usuario"
+    finally:
+        app.router.routes[:] = rotas_anteriores
+
+
+@pytest.mark.parametrize("papel,esperado", [
+    (None, 401), ("admin", 200), ("coordenador", 200),
+    ("professor", 200), ("assistente", 200),
+])
+def test_fixtures_autenticam_por_papel_na_mesma_sessao_sqlite(
+    client, db, usuario, cabecalhos_por_papel, rota_fixture_usuario, papel, esperado,
+):
+    evento = criar_evento(db)
+    headers = cabecalhos_por_papel(papel)
+    resposta = client.get(rota_fixture_usuario, headers=headers)
+    assert resposta.status_code == esperado
+    if papel is not None:
+        assert resposta.json()["role"] == papel
+        assert resposta.json()["eventos"] == 1
+        if papel == "coordenador":
+            assert resposta.json()["id_usuario"] == usuario.id_usuario
+        # A fábrica reaproveita a conta na mesma sessão em chamadas repetidas.
+        assert client.get(rota_fixture_usuario, headers=cabecalhos_por_papel(papel)).json() == resposta.json()
+    assert db.get(Evento, evento.id_evento) is evento
+
+
+def test_fixture_usuario_persiste_apos_rollback_de_operacao(db, usuario):
+    id_usuario = usuario.id_usuario
+    db.rollback()
+    db.expire_all()
+    assert db.get(models.Usuario, id_usuario).role == "coordenador"

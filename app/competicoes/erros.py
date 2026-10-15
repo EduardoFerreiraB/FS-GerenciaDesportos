@@ -1,6 +1,7 @@
 """Erros de dominio com codigos estaveis e resposta HTTP explicita."""
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -47,6 +48,21 @@ def registrar_tratadores(app: FastAPI) -> None:
 
         resposta = ErroResposta(codigo=erro.codigo, mensagem=erro.mensagem, campos=erro.campos)
         return JSONResponse(status_code=erro.status_code, content=resposta.model_dump())
+
+    async def responder_validacao(request: Request, erro: RequestValidationError) -> JSONResponse:
+        campos = []
+        for item in erro.errors():
+            caminho = item["loc"]
+            if caminho and caminho[0] in {"body", "query", "path", "header", "cookie"}:
+                caminho = caminho[1:]
+            campo = ".".join(str(parte) for parte in caminho) or "requisicao"
+            if campo not in campos:
+                campos.append(campo)
+        return await responder(request, ConfiguracaoInvalida(
+            "Dados da requisicao invalidos.", campos=campos,
+        ))
+
+    app.add_exception_handler(RequestValidationError, responder_validacao)
 
     for classe in (ErroCompeticao, NaoEncontrado, ConflitoEstado, ConflitoRevisao,
                    Duplicidade, ConfiguracaoInvalida):

@@ -23,16 +23,26 @@ class EventoAtualizar(Contrato):
     arquivado: StrictBool | None = None
 
 
-class EdicaoEventoCriar(Contrato):
+class _PeriodoEdicao(Contrato):
+    data_inicio: date | None = None
+    data_fim: date | None = None
+
+    @model_validator(mode="after")
+    def periodo_ordenado(self) -> Self:
+        if self.data_inicio is not None and self.data_fim is not None:
+            if self.data_inicio > self.data_fim:
+                raise ValueError("A data de inicio deve ser anterior ou igual a data de fim.")
+        return self
+
+
+class EdicaoEventoCriar(_PeriodoEdicao):
     identificacao: Identificacao
     data_inicio: date
     data_fim: date
 
 
-class EdicaoEventoAtualizar(Contrato):
+class EdicaoEventoAtualizar(_PeriodoEdicao):
     identificacao: Identificacao | None = None
-    data_inicio: date | None = None
-    data_fim: date | None = None
 
 
 class EdicaoEventoDetalhe(EdicaoEventoCriar):
