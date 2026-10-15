@@ -23,3 +23,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Artefatos locais de skills
+.superpowers/
+.coverage
+coverage.xml

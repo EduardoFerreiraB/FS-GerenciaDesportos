@@ -3,32 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from database import get_db, engine
+from database import get_db
 import models
 from routers import (
     modalidades, professores, turmas, alunos, 
     matriculas, presencas, arbitros, locais, 
-    eventos, edicoes, auth, equipes, partidas, atletas,
-    publico
+    eventos, edicoes, auth, equipes, partidas, atletas, competicoes,
+    publico, confrontos, individuais, classificacao,
+    publico_competicoes, publico_individuais,
+    competicoes_v2, publico_v2
 )
 import os
 from pathlib import Path
-
-import time
-from sqlalchemy.exc import OperationalError
-
-# Retry connection to database on startup (especially useful for slow docker DB boots)
-for i in range(15):
-    try:
-        # Tenta se conectar e criar as tabelas
-        models.Base.metadata.create_all(bind=engine)
-        break
-    except OperationalError as e:
-        if i == 14:
-            print("Could not connect to the database after 15 attempts. Exiting.")
-            raise e
-        print(f"Database connection failed, retrying in 2 seconds... ({i+1}/15)")
-        time.sleep(2)
 
 app = FastAPI(
     title="Gerencia Esportes API",
@@ -74,10 +60,18 @@ app.include_router(arbitros.router)
 app.include_router(locais.router)
 app.include_router(eventos.router)
 app.include_router(edicoes.router)
+app.include_router(competicoes.router)
+app.include_router(confrontos.router)
+app.include_router(individuais.router)
+app.include_router(classificacao.router)
 app.include_router(equipes.router)
 app.include_router(partidas.router)
 app.include_router(atletas.router)
 app.include_router(publico.router)
+app.include_router(publico_competicoes.router)
+app.include_router(publico_individuais.router)
+app.include_router(competicoes_v2.router)
+app.include_router(publico_v2.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():

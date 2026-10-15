@@ -5,9 +5,11 @@ from datetime import time, date
 
 def setup_edicao_locais_arbitros_e_equipes(db, num_equipes=4):
     # 1. Evento e Modalidade
-    mod = models.Modalidade(nome="Futebol", duracao_minutos=90)
-    db.add(mod)
-    db.flush()
+    mod = db.query(models.Modalidade).filter(models.Modalidade.nome == "Futebol").first()
+    if not mod:
+        mod = models.Modalidade(nome="Futebol", duracao_minutos=90)
+        db.add(mod)
+        db.flush()
 
     evt = models.Evento(even_nome="Copa Local")
     db.add(evt)
@@ -28,11 +30,16 @@ def setup_edicao_locais_arbitros_e_equipes(db, num_equipes=4):
     db.flush()
 
     # 3. Local e Árbitro
-    local = models.Local(loca_nome="Estádio Principal", ativo=True)
-    db.add(local)
-    arbitro = models.Arbitro(apito_nome="Árbitro Central", apito_doc="123", apito_tel="123")
-    db.add(arbitro)
-    db.flush()
+    local = db.query(models.Local).filter(models.Local.ativo == True).first()
+    if not local:
+        local = models.Local(loca_nome="Estádio Principal", ativo=True)
+        db.add(local)
+        db.flush()
+    arbitro = db.query(models.Arbitro).first()
+    if not arbitro:
+        arbitro = models.Arbitro(apito_nome="Árbitro Central", apito_doc="arbitro_comp_123", apito_tel="123")
+        db.add(arbitro)
+        db.flush()
 
     # 4. Equipes
     equipes = []

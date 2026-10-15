@@ -55,6 +55,17 @@ def get_auth_headers(client, db, role: str, username: str):
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
+
+def criar_competicao_equipe(db, id_edicao, id_modalidade):
+    competicao = models.Competicao(
+        id_edicao=id_edicao, id_modalidade=id_modalidade, nome=get_unique_name("competicao"),
+        categoria="Livre", modo_inscricao="EQUIPE", formato="PONTOS_CORRIDOS",
+        criterio_resultado="PLACAR", data_inicio=date(2026, 1, 1), data_fim=date(2026, 12, 31),
+    )
+    db.add(competicao)
+    db.commit()
+    return competicao.id_competicao
+
 # ==================== DIRECT FUNCTION TESTS ====================
 
 def test_salvar_arquivo_direct():
@@ -317,12 +328,15 @@ def test_alunos_coverage(client, db):
 def test_atletas_coverage(client, db):
     u_coord = get_unique_name("coord")
     coord_headers = get_auth_headers(client, db, "coordenador", u_coord)
+    res = client.post("/modalidades/", json={"nome": get_unique_name("mod"), "descricao": "d"}, headers=coord_headers)
+    id_mod = res.json()["id_modalidade"]
     
     res = client.post("/eventos/", json={"even_nome": get_unique_name("evt"), "descricao": "d"}, headers=coord_headers)
     id_evt = res.json()["id_evento"]
     res = client.post("/edicoes/", json={"id_evento": id_evt, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"}, headers=coord_headers)
     id_ed = res.json()["id_edicao"]
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq"), "id_edicao": id_ed}, headers=coord_headers)
+    id_competicao = criar_competicao_equipe(db, id_ed, id_mod)
+    res = client.post("/equipes/", json={"nome": get_unique_name("eq"), "id_competicao": id_competicao}, headers=coord_headers)
     id_eq = res.json()["id_equipe"]
     
     # 1. /atletas/equipe/{id_equipe} team doesn't exist
@@ -489,7 +503,7 @@ def test_edicoes_coverage(client, db):
     # ValueError on clonar-equipes (mocked) (lines 82-83)
     with patch("routers.edicoes.edicao_service.clonar_equipes", side_effect=ValueError("Cannot clone")):
         res = client.post("/edicoes/1/clonar-equipes?edicao_origem_id=2", headers=coord_headers)
-        assert res.status_code == 400
+        assert res.status_code == 409
 
 def test_equipes_partidas_presencas_coverage(client, db):
     u_coord = get_unique_name("coord")
@@ -787,9 +801,10 @@ def test_extra_routers_coverage(client, db):
     id_evt = res.json()["id_evento"]
     res = client.post("/edicoes/", json={"id_evento": id_evt, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"}, headers=coord_headers)
     id_ed = res.json()["id_edicao"]
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq1"), "id_edicao": id_ed}, headers=coord_headers)
+    id_competicao = criar_competicao_equipe(db, id_ed, id_mod)
+    res = client.post("/equipes/", json={"nome": get_unique_name("eq1"), "id_competicao": id_competicao}, headers=coord_headers)
     id_eq1 = res.json()["id_equipe"]
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq2"), "id_edicao": id_ed}, headers=coord_headers)
+    res = client.post("/equipes/", json={"nome": get_unique_name("eq2"), "id_competicao": id_competicao}, headers=coord_headers)
     id_eq2 = res.json()["id_equipe"]
     res = client.post("/locais/", json={"loca_nome": "Local 1", "loca_descricao": "Addr"}, headers=coord_headers)
     assert res.status_code == 201
