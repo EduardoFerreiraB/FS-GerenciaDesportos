@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db
 import models
+from competicoes.api import router as competicoes_router
+from competicoes.erros import registrar_tratadores
 from routers import (
     modalidades, professores, turmas, alunos,
     matriculas, presencas, arbitros, locais,
@@ -56,6 +58,8 @@ app.include_router(presencas.router)
 app.include_router(arbitros.router)
 app.include_router(locais.router)
 app.include_router(atletas.router)
+app.include_router(competicoes_router)
+registrar_tratadores(app)
 
 @app.get("/", tags=["Root"])
 async def read_root():
