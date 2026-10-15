@@ -6,12 +6,9 @@ from sqlalchemy import text
 from database import get_db
 import models
 from routers import (
-    modalidades, professores, turmas, alunos, 
-    matriculas, presencas, arbitros, locais, 
-    eventos, edicoes, auth, equipes, partidas, atletas, competicoes,
-    publico, confrontos, individuais, classificacao,
-    publico_competicoes, publico_individuais,
-    competicoes_v2, publico_v2
+    modalidades, professores, turmas, alunos,
+    matriculas, presencas, arbitros, locais,
+    auth, atletas,
 )
 import os
 from pathlib import Path
@@ -58,20 +55,7 @@ app.include_router(matriculas.router)
 app.include_router(presencas.router)
 app.include_router(arbitros.router)
 app.include_router(locais.router)
-app.include_router(eventos.router)
-app.include_router(edicoes.router)
-app.include_router(competicoes.router)
-app.include_router(confrontos.router)
-app.include_router(individuais.router)
-app.include_router(classificacao.router)
-app.include_router(equipes.router)
-app.include_router(partidas.router)
 app.include_router(atletas.router)
-app.include_router(publico.router)
-app.include_router(publico_competicoes.router)
-app.include_router(publico_individuais.router)
-app.include_router(competicoes_v2.router)
-app.include_router(publico_v2.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():

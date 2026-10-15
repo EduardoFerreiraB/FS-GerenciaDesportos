@@ -94,9 +94,8 @@ class MockQuery:
                 col_table = getattr(col, 'table', None)
                 if col_table is not None:
                     table_name = getattr(col_table, 'name', str(col_table))
-                    for c in [models.Usuario, models.RefreshToken, models.Professor, models.Turma, 
-                              models.TurmaDia, models.Aluno, models.Matricula, models.Presenca, 
-                              models.Evento, models.Edicao, models.Equipe, models.Partida, 
+                    for c in [models.Usuario, models.RefreshToken, models.Professor, models.Turma,
+                              models.TurmaDia, models.Aluno, models.Matricula, models.Presenca,
                               models.Local, models.Arbitro]:
                         if getattr(c, '__tablename__', None) == table_name:
                             col_class = c
@@ -226,13 +225,6 @@ class MockSession:
             (models.Matricula, 'turma'): (models.Turma, 'id_turma', 'id_turma'),
             (models.Presenca, 'aluno'): (models.Aluno, 'id_aluno', 'id_aluno'),
             (models.Presenca, 'turma'): (models.Turma, 'id_turma', 'id_turma'),
-            (models.Edicao, 'evento'): (models.Evento, 'id_evento', 'id_evento'),
-            (models.Equipe, 'edicao'): (models.Edicao, 'id_edicao', 'id_edicao'),
-            (models.Partida, 'edicao'): (models.Edicao, 'id_edicao', 'id_edicao'),
-            (models.Partida, 'local'): (models.Local, 'id_local', 'id_local'),
-            (models.Partida, 'arbitro'): (models.Arbitro, 'id_arbitro', 'id_arbitro'),
-            (models.Partida, 'equipe_casa'): (models.Equipe, 'id_equipe_casa', 'id_equipe'),
-            (models.Partida, 'equipe_visitante'): (models.Equipe, 'id_equipe_visitante', 'id_equipe'),
             (models.TurmaDia, 'turma'): (models.Turma, 'id_turma', 'id_turma'),
             (models.Aluno, 'participante'): (models.Participante, 'id_participante', 'id_participante'),
             (models.Atleta, 'participante'): (models.Participante, 'id_participante', 'id_participante'),

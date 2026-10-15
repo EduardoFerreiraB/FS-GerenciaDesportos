@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 import models
 import schemas
-from services import equipes as service_equipes
 
 def criar_atleta(db: Session, atleta: schemas.AtletaCreate, foto: str = None):
     # 1. Criar Participante
@@ -22,22 +21,6 @@ def criar_atleta(db: Session, atleta: schemas.AtletaCreate, foto: str = None):
     db.add(db_atleta)
     db.commit()
     db.refresh(db_atleta)
-    return db_atleta
-
-def criar_atleta_equipe(db: Session, atleta: schemas.AtletaCreate, id_equipe: int, foto: str = None):
-    # 1. Criar Atleta (e Participante)
-    db_atleta = criar_atleta(db, atleta, foto)
-    
-    # 2. Vincular à Equipe
-    sucesso = service_equipes.adicionar_participante_equipe(
-        db, 
-        id_equipe=id_equipe, 
-        id_participante=db_atleta.id_participante
-    )
-    
-    if not sucesso:
-        raise ValueError("Equipe não encontrada.")
-    
     return db_atleta
 
 def listar_atletas(db: Session, skip: int = 0, limit: int = 100):
@@ -62,15 +45,7 @@ def excluir_atleta(db: Session, id_atleta: int):
     db_atleta = listar_atleta(db, id_atleta)
     if db_atleta:
         id_participante = db_atleta.id_participante
-        
-        # Remover de equipes primeiro (tabela associativa)
-        # SQLAlchemy cuida disso se o relacionamento estiver configurado, mas garantimos:
-        db.execute(
-            models.equipes_participantes.delete().where(
-                models.equipes_participantes.c.id_participante == id_participante
-            )
-        )
-        
+
         db.delete(db_atleta)
         
         db_participante = db.query(models.Participante).filter(
