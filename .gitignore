@@ -28,3 +28,8 @@ Thumbs.db
 .superpowers/
 .coverage
 coverage.xml
+
+# Artefatos de cobertura e rascunho
+htmlcov/
+scratch/
+coverage_output.txt

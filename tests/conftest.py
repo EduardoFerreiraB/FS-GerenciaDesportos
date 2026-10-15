@@ -13,28 +13,33 @@ import models
 from database import Base, get_db
 from main import app
 
-# Configura o SQLite para rodar testes locais isolados
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# SQLite de teste isolado em diretório temporário (nunca na raiz do repositório)
+@pytest.fixture(scope="session")
+def engine(tmp_path_factory):
+    caminho = tmp_path_factory.mktemp("banco_teste") / "testes.sqlite"
+    eng = create_engine(f"sqlite:///{caminho}", connect_args={"check_same_thread": False})
+    yield eng
+    eng.dispose()
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_db():
+def setup_db(engine):
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
-def db():
+def db(engine):
     connection = engine.connect()
     transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection, join_transaction_mode="create_savepoint")
-    
+    session = sessionmaker(autocommit=False, autoflush=False, bind=connection)(
+        join_transaction_mode="create_savepoint"
+    )
+
     # Garante tabelas limpas a cada teste
     Base.metadata.create_all(bind=engine)
-    
+
     yield session
-    
+
     session.close()
     transaction.rollback()
     connection.close()
