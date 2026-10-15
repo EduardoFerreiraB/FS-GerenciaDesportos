@@ -37,8 +37,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _alembic_config(url: str) -> Config:
     config = Config(str(ROOT / "alembic.ini"))
-    config.set_main_option("sqlalchemy.url", url)
-    # Tem precedencia sobre DATABASE_URL/.env em alembic/env.py.
+    # Nao usar set_main_option("sqlalchemy.url", ...): o configparser interpreta
+    # '%' (senhas percent-encoded como 'p%2C') e levanta ValueError. O env.py
+    # resolve a URL por config.attributes["database_url"], que tem precedencia
+    # sobre DATABASE_URL/.env e nao passa por interpolacao.
     config.attributes["database_url"] = url
     return config
 

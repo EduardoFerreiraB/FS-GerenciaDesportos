@@ -102,3 +102,21 @@ def test_indice_implicito_de_fk_e_ignorado_mas_indice_avulso_e_reportado():
         "t", set(), {"ix_t_id_pai": ("id_pai",)}, [implicito], [], fks
     )
     assert any("fk_t_pai" in linha for linha in linhas)
+
+
+def test_alembic_config_aceita_senha_percent_encoded():
+    """Regressao: '%' na URL quebrava o configparser (ValueError de interpolacao)."""
+    from sqlalchemy.engine import URL, make_url
+    from scripts.testar_mysql_competicoes import _alembic_config
+
+    servidor = URL.create(
+        "mysql+pymysql", username="user", password="p,a@s%s", host="localhost", port=3306
+    )
+    url = servidor.set(database="harness_abcd1234").render_as_string(hide_password=False)
+    assert "%2C" in url and "***" not in url
+
+    config = _alembic_config(url)  # nao pode levantar
+
+    resolvida = config.attributes["database_url"]  # o que alembic/env.py usa
+    assert resolvida == url
+    assert make_url(resolvida).password == "p,a@s%s"
