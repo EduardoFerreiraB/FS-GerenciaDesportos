@@ -18,6 +18,7 @@ Nunca usa ``DATABASE_URL`` nem ``.env``. Codigo de saida: 0 sem divergencias;
 from __future__ import annotations
 
 import argparse
+import re
 import os
 import sys
 import uuid
@@ -47,9 +48,15 @@ def _alembic_config(url: str) -> Config:
 
 def _tipo(tipo, dialeto) -> str:
     texto = str(tipo.compile(dialect=dialeto)).lower().strip()
+    # Charset/collation do tipo refletido dependem do default do banco.
+    texto = re.sub(r"\s+(character set|charset|collate)\s+\w+", "", texto)
     # MySQL reflete BOOL como TINYINT(1); o ORM compila Boolean como BOOL.
     if texto in ("bool", "boolean"):
         return "tinyint(1)"
+    # Largura de exibicao de inteiros (MySQL < 8.0.19) nao e semantica.
+    texto = re.sub(r"^(bigint|int|integer|mediumint|smallint)\(\d+\)", r"\1", texto)
+    texto = re.sub(r"^integer\b", "int", texto)
+    texto = re.sub(r"^tinyint\(\d+\)", lambda m: "tinyint(1)" if m.group(0) == "tinyint(1)" else "tinyint", texto)
     return texto
 
 
@@ -62,6 +69,8 @@ def _default(valor) -> str | None:
     if len(texto) > 1 and texto[0] == texto[-1] and texto[0] in "'\"":
         texto = texto[1:-1]
     texto = texto.lower()
+    if texto == "null":
+        return None
     if texto in ("true", "false"):
         texto = "1" if texto == "true" else "0"
     if texto in ("now()", "current_timestamp()", "current_timestamp"):
@@ -73,6 +82,23 @@ def _acao(valor) -> str:
     valor = (valor or "NO ACTION").upper()
     # NO ACTION e RESTRICT sao equivalentes em MySQL/InnoDB.
     return "NO ACTION" if valor == "RESTRICT" else valor
+
+
+def _pk_atual(pk_constraint) -> dict:
+    """Colunas da PK a partir de ``get_pk_constraint`` (portavel; get_columns nao e)."""
+    return {c: True for c in ((pk_constraint or {}).get("constrained_columns") or [])}
+
+
+def _fks_atuais(fks: list) -> dict:
+    """FKs refletidas -> {colunas: (tabela, colunas_ref, ondelete)}; options/ondelete opcionais."""
+    return {
+        tuple(fk["constrained_columns"]): (
+            fk["referred_table"],
+            tuple(fk["referred_columns"]),
+            _acao((fk.get("options") or {}).get("ondelete")),
+        )
+        for fk in fks
+    }
 
 
 def _diff(rotulo: str, esperado: dict, atual: dict) -> list[str]:
@@ -104,8 +130,8 @@ def _comparar_indices(
     (MySQL marca ``duplicates_constraint``). Por isso a unicidade e comparada
     por tupla de colunas, sem distinguir o mecanismo.
     """
-    atual_unicos = {tuple(i["column_names"]) for i in refletidos if i.get("unique")}
-    atual_unicos |= {tuple(u["column_names"]) for u in refletidas_unicas}
+    atual_unicos = {tuple(i.get("column_names") or ()) for i in refletidos if i.get("unique")}
+    atual_unicos |= {tuple(u.get("column_names") or ()) for u in refletidas_unicas}
     linhas = _diff(
         f"{nome}.unicidade",
         {c: None for c in tabela_unicos},
@@ -123,7 +149,7 @@ def _comparar_indices(
     for idx in refletidos:
         if idx.get("unique"):
             continue
-        cols = tuple(idx["column_names"])
+        cols = tuple(idx.get("column_names") or ())
         if idx["name"] not in tabela_indices and idx["name"] in implicitos and len(cols) == 1:
             continue  # indice implicito que o MySQL cria para a FK
         atual_indices[idx["name"]] = cols
@@ -164,17 +190,17 @@ def comparar_schema(url: str) -> list[str]:
             divergencias += _diff(
                 rotulo("coluna nulabilidade"),
                 {c.name: c.nullable for c in tabela.columns},
-                {n: c["nullable"] for n, c in colunas.items()},
+                {n: bool(c.get("nullable", True)) for n, c in colunas.items()},
             )
             divergencias += _diff(
                 rotulo("coluna default"),
                 {c.name: _default(c.server_default) for c in tabela.columns},
-                {n: _default(c["default"]) for n, c in colunas.items()},
+                {n: _default(c.get("default")) for n, c in colunas.items()},
             )
             divergencias += _diff(
                 rotulo("chave primaria"),
                 {c.name: True for c in tabela.primary_key.columns},
-                {n: True for n, c in colunas.items() if c["primary_key"]},
+                _pk_atual(atual.get_pk_constraint(nome)),
             )
 
             divergencias += _comparar_indices(
@@ -203,14 +229,7 @@ def comparar_schema(url: str) -> list[str]:
                     tuple(e.column.name for e in constraint.elements),
                     _acao(constraint.ondelete),
                 )
-            atual_fk = {
-                tuple(fk["constrained_columns"]): (
-                    fk["referred_table"],
-                    tuple(fk["referred_columns"]),
-                    _acao(fk.get("options", {}).get("ondelete")),
-                )
-                for fk in atual.get_foreign_keys(nome)
-            }
+            atual_fk = _fks_atuais(atual.get_foreign_keys(nome))
             divergencias += _diff(rotulo("chave estrangeira/ondelete"), esperado_fk, atual_fk)
         return divergencias
     finally:

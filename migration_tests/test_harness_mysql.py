@@ -120,3 +120,51 @@ def test_alembic_config_aceita_senha_percent_encoded():
     resolvida = config.attributes["database_url"]  # o que alembic/env.py usa
     assert resolvida == url
     assert make_url(resolvida).password == "p,a@s%s"
+
+
+def test_pk_atual_aceita_forma_mysql_e_vazia():
+    from scripts.testar_mysql_competicoes import _pk_atual
+
+    assert _pk_atual({"constrained_columns": ["a", "b"], "name": "PRIMARY"}) == {"a": True, "b": True}
+    assert _pk_atual({"constrained_columns": [], "name": None}) == {}
+    assert _pk_atual(None) == {}
+
+
+def test_fks_atuais_sem_ondelete_nem_options():
+    from scripts.testar_mysql_competicoes import _fks_atuais
+
+    fks = [
+        {"name": "fk1", "constrained_columns": ["x"], "referred_table": "t",
+         "referred_columns": ["id"], "options": {}},
+        {"name": "fk2", "constrained_columns": ["y"], "referred_table": "t",
+         "referred_columns": ["id"], "options": {"ondelete": "CASCADE"}},
+        {"name": "fk3", "constrained_columns": ["z"], "referred_table": "t",
+         "referred_columns": ["id"]},
+    ]
+    r = _fks_atuais(fks)
+    assert r[("x",)][2] == "NO ACTION" and r[("z",)][2] == "NO ACTION"
+    assert r[("y",)][2] == "CASCADE"
+
+
+def test_tipos_e_defaults_na_forma_refletida_pelo_mysql():
+    from sqlalchemy import Boolean, DateTime, Enum, Integer, JSON, String, Text
+    from sqlalchemy.dialects import mysql
+    from scripts.testar_mysql_competicoes import _default, _tipo
+
+    d = mysql.dialect()
+    pares = [
+        (Integer(), mysql.INTEGER(display_width=11)),
+        (Boolean(), mysql.TINYINT(display_width=1)),
+        (DateTime(), mysql.DATETIME()),
+        (String(100), mysql.VARCHAR(100, collation="utf8mb4_0900_ai_ci")),
+        (Enum("a", "b"), mysql.ENUM("a", "b", charset="utf8mb4")),
+        (Text(), mysql.TEXT()),
+        (JSON(), mysql.JSON()),
+    ]
+    for orm, refletido in pares:
+        assert _tipo(orm, d) == _tipo(refletido, d), (orm, refletido)
+    # defaults refletidos como texto
+    assert _default(None) is None and _default("NULL") is None
+    assert _default("'ATIVO'") == "ativo"
+    assert _default("CURRENT_TIMESTAMP") == "current_timestamp"
+    assert _default("1") == _default("true")
