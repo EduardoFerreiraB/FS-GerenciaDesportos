@@ -4,14 +4,17 @@ from sqlalchemy import (
     String,
     Boolean,
     Date,
+    DateTime,
+    JSON,
     Table,
     Time,
     Text,
     ForeignKey,
     Enum,
     TIMESTAMP,
+    UniqueConstraint,
 )
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -33,6 +36,7 @@ class Modalidade(Base):
 
     turmas = relationship("Turma", back_populates="modalidade")
     eventos = relationship("Evento", secondary=modalidades_evento, back_populates="modalidades")
+    competicoes = relationship("Competicao", back_populates="modalidade")
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -216,6 +220,48 @@ class Edicao(Base):
     evento = relationship("Evento", back_populates="edicoes")
     partidas = relationship("Partida", back_populates="edicao", cascade="all, delete-orphan")
     equipes = relationship("Equipe", back_populates="edicao", cascade="all, delete-orphan")
+    competicoes = relationship("Competicao", back_populates="edicao", cascade="all, delete-orphan")
+
+class GrupoCompeticoes(Base):
+    __tablename__ = "grupos_competicoes"
+
+    id_grupo = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(100), nullable=False)
+    descricao = Column(Text, nullable=True)
+    slug = Column(String(120), unique=True, index=True, nullable=False)
+    data_inicio = Column(Date, nullable=True)
+    data_fim = Column(Date, nullable=True)
+    status = Column(String(20), default="ATIVO", nullable=False)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    competicoes = relationship("Competicao", back_populates="grupo", cascade="all, delete-orphan")
+
+
+class Competicao(Base):
+    __tablename__ = "competicoes"
+
+    id_competicao = Column(Integer, primary_key=True, index=True)
+    id_edicao = Column(Integer, ForeignKey("edicoes.id_edicao"), nullable=True)
+    id_modalidade = Column(Integer, ForeignKey("modalidades.id_modalidade"), nullable=False)
+    id_grupo = Column(Integer, ForeignKey("grupos_competicoes.id_grupo", ondelete="SET NULL"), nullable=True, index=True)
+    nome = Column(String(200), nullable=False)
+    categoria = Column(String(100), nullable=False)
+    modo_inscricao = Column(Enum("EQUIPE", "INDIVIDUAL"), nullable=True)
+    formato = Column(Enum("PONTOS_CORRIDOS", "GRUPOS", "MATA_MATA", "PROVAS"), nullable=True)
+    criterio_resultado = Column(Enum("PLACAR", "TEMPO", "PONTOS", "POSICAO"), nullable=True)
+    data_inicio = Column(Date, nullable=True)
+    data_fim = Column(Date, nullable=True)
+    regras = Column(Text, nullable=True)
+    regras_formato = Column(JSON, nullable=True)
+    status = Column(String(50), nullable=False, default="RASCUNHO")
+
+    edicao = relationship("Edicao", back_populates="competicoes")
+    modalidade = relationship("Modalidade", back_populates="competicoes")
+    grupo = relationship("GrupoCompeticoes", back_populates="competicoes")
+    equipes = relationship("Equipe", back_populates="competicao")
+    confrontos = relationship("Confronto", back_populates="competicao")
+    inscricoes_individuais = relationship("InscricaoIndividual", back_populates="competicao")
+    provas = relationship("Prova", back_populates="competicao")
 
 equipes_participantes = Table(
     "equipes_participantes",
@@ -224,16 +270,63 @@ equipes_participantes = Table(
     Column("id_participante", Integer, ForeignKey("participantes.id_participante"), primary_key=True)
 )
 
+# Audit-only lineage written by the additive Passo 3 migration.  It is not a
+# runtime domain aggregate; keeping it in metadata makes fresh databases match
+# the versioned schema and gives the offline validator an unambiguous mapping.
+migracao_equipes_origem = Table(
+    "migracao_equipes_origem",
+    Base.metadata,
+    Column("id_migracao", Integer, primary_key=True),
+    Column("id_equipe_origem", Integer, ForeignKey("equipes.id_equipe"), nullable=False),
+    Column("id_equipe_resultante", Integer, ForeignKey("equipes.id_equipe"), nullable=True),
+    Column("id_competicao", Integer, ForeignKey("competicoes.id_competicao"), nullable=True),
+    Column("status", String(20), nullable=False),
+    Column("motivo", Text, nullable=True),
+)
+
+# Audit-only lineage written by the additive Passo 4 migration.
+migracao_partidas_origem = Table(
+    "migracao_partidas_origem",
+    Base.metadata,
+    Column("id_migracao", Integer, primary_key=True),
+    Column("id_partida_origem", Integer, ForeignKey("partidas.id_partida"), nullable=False),
+    Column("id_confronto_resultante", Integer, ForeignKey("confrontos.id_confronto"), nullable=True),
+    Column("id_competicao", Integer, ForeignKey("competicoes.id_competicao"), nullable=True),
+    Column("status", String(20), nullable=False),
+    Column("motivo", Text, nullable=True),
+)
+
 class Equipe(Base):
     __tablename__ = "equipes"
 
     id_equipe = Column(Integer, primary_key=True, index=True)
     nome = Column(String(200), nullable=False)
-    id_edicao = Column(Integer, ForeignKey("edicoes.id_edicao"), nullable=False)
+    id_edicao = Column(Integer, ForeignKey("edicoes.id_edicao"), nullable=True)
+    id_competicao = Column(Integer, ForeignKey("competicoes.id_competicao"), nullable=True)
     grupo = Column(String(50), nullable=True)
 
     edicao = relationship("Edicao", back_populates="equipes")
+    competicao = relationship("Competicao", back_populates="equipes")
     participantes = relationship("Participante", secondary=equipes_participantes)
+    jogadores = relationship("Jogador", back_populates="equipe", cascade="all, delete-orphan")
+
+
+class Jogador(Base):
+    __tablename__ = "jogadores"
+
+    id_jogador = Column(Integer, primary_key=True, index=True)
+    id_equipe = Column(Integer, ForeignKey("equipes.id_equipe", ondelete="CASCADE"), nullable=False, index=True)
+    nome = Column(String(100), nullable=False)
+    numero_camisa = Column(Integer, nullable=True)
+    posicao = Column(String(50), nullable=True)
+    documento = Column(String(30), nullable=True)
+    data_nascimento = Column(Date, nullable=True)
+    foto_url = Column(String(255), nullable=True)
+    ativo = Column(Boolean, default=True, nullable=False)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    equipe = relationship("Equipe", back_populates="jogadores")
+    ocorrencias = relationship("OcorrenciaPartida", back_populates="jogador", cascade="all, delete-orphan")
 
 class Partida(Base):
     __tablename__ = "partidas"
@@ -276,4 +369,116 @@ class EstatisticaPartida(Base):
     assistencias = Column(Integer, default=0, nullable=False)
 
     partida = relationship("Partida", back_populates="estatisticas")
+    participante = relationship("Participante")
+
+class Confronto(Base):
+    __tablename__ = "confrontos"
+
+    id_confronto = Column(Integer, primary_key=True, index=True)
+    id_competicao = Column(Integer, ForeignKey("competicoes.id_competicao"), nullable=False)
+    id_equipe_mandante = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
+    id_equipe_visitante = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
+    id_proximo_confronto = Column(Integer, ForeignKey("confrontos.id_confronto"), nullable=True)
+    fase = Column(String(100), nullable=True)
+    rodada = Column(Integer, nullable=True)
+    grupo = Column(String(50), nullable=True)
+    data = Column(Date, nullable=False)
+    hora = Column(Time, nullable=False)
+    id_local = Column(Integer, ForeignKey("locais.id_local"), nullable=False)
+    id_arbitro = Column(Integer, ForeignKey("arbitros.id_arbitro"), nullable=False)
+    placar_mandante = Column(Integer, default=0, nullable=False)
+    placar_visitante = Column(Integer, default=0, nullable=False)
+    id_equipe_vencedora = Column(Integer, ForeignKey("equipes.id_equipe"), nullable=True)
+    status = Column(Enum("Agendado", "Em Andamento", "Finalizado", "Cancelado"), default="Agendado", nullable=False)
+    sumula_arquivo = Column(String(500), nullable=True)
+    observacoes = Column(Text, nullable=True)
+
+    ordem_jogo = Column(Integer, default=1, nullable=False)
+    penaltis_mandante = Column(Integer, nullable=True)
+    penaltis_visitante = Column(Integer, nullable=True)
+    id_confronto_ida = Column(Integer, ForeignKey("confrontos.id_confronto", ondelete="SET NULL"), nullable=True)
+
+    competicao = relationship("Competicao", back_populates="confrontos")
+    equipe_mandante = relationship("Equipe", foreign_keys=[id_equipe_mandante])
+    equipe_visitante = relationship("Equipe", foreign_keys=[id_equipe_visitante])
+    proximo_confronto = relationship("Confronto", foreign_keys=[id_proximo_confronto], remote_side=[id_confronto])
+    confronto_ida = relationship("Confronto", foreign_keys=[id_confronto_ida], remote_side=[id_confronto])
+    local = relationship("Local")
+    arbitro = relationship("Arbitro")
+    equipe_vencedora = relationship("Equipe", foreign_keys=[id_equipe_vencedora])
+    ocorrencias = relationship("OcorrenciaPartida", back_populates="confronto", cascade="all, delete-orphan")
+
+
+class OcorrenciaPartida(Base):
+    __tablename__ = "ocorrencias_partida"
+
+    id_ocorrencia = Column(Integer, primary_key=True, index=True)
+    id_confronto = Column(Integer, ForeignKey("confrontos.id_confronto", ondelete="CASCADE"), nullable=False, index=True)
+    id_equipe = Column(Integer, ForeignKey("equipes.id_equipe", ondelete="CASCADE"), nullable=False, index=True)
+    id_jogador = Column(Integer, ForeignKey("jogadores.id_jogador", ondelete="SET NULL"), nullable=True, index=True)
+    tipo = Column(String(30), nullable=False)
+    minuto = Column(Integer, nullable=True)
+    tempo_jogo = Column(String(10), default="1T", nullable=True)
+    observacao = Column(String(200), nullable=True)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    confronto = relationship("Confronto", back_populates="ocorrencias")
+    equipe = relationship("Equipe")
+    jogador = relationship("Jogador", back_populates="ocorrencias")
+
+
+class InscricaoIndividual(Base):
+    __tablename__ = "inscricoes_individuais"
+
+    id_inscricao = Column(Integer, primary_key=True, index=True)
+    id_competicao = Column(Integer, ForeignKey("competicoes.id_competicao"), nullable=False)
+    id_participante = Column(Integer, ForeignKey("participantes.id_participante"), nullable=False)
+    numero_peito = Column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("id_competicao", "id_participante", name="uq_inscricao_competicao_participante"),
+    )
+
+    competicao = relationship("Competicao", back_populates="inscricoes_individuais")
+    participante = relationship("Participante")
+
+
+class Prova(Base):
+    __tablename__ = "provas"
+
+    id_prova = Column(Integer, primary_key=True, index=True)
+    id_competicao = Column(Integer, ForeignKey("competicoes.id_competicao"), nullable=False)
+    nome = Column(String(200), nullable=False)
+    data = Column(Date, nullable=True)
+    hora = Column(Time, nullable=True)
+    id_local = Column(Integer, ForeignKey("locais.id_local"), nullable=True)
+    status = Column(
+        Enum("Agendada", "Em Andamento", "Finalizada", "Cancelada"),
+        default="Agendada",
+        nullable=False,
+    )
+    observacoes = Column(Text, nullable=True)
+
+    competicao = relationship("Competicao", back_populates="provas")
+    local = relationship("Local")
+    resultados = relationship("ResultadoProva", back_populates="prova", cascade="all, delete-orphan")
+
+
+class ResultadoProva(Base):
+    __tablename__ = "resultados_prova"
+
+    id_resultado = Column(Integer, primary_key=True, index=True)
+    id_prova = Column(Integer, ForeignKey("provas.id_prova"), nullable=False)
+    id_participante = Column(Integer, ForeignKey("participantes.id_participante"), nullable=False)
+    tempo_ms = Column(Integer, nullable=False)
+    posicao = Column(Integer, nullable=True)
+    desqualificado = Column(Boolean, default=False, nullable=False)
+    motivo_desqualificacao = Column(String(255), nullable=True)
+    observacoes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("id_prova", "id_participante", name="uq_prova_participante"),
+    )
+
+    prova = relationship("Prova", back_populates="resultados")
     participante = relationship("Participante")

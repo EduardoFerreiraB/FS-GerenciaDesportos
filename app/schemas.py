@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from typing import Optional, List, Union, Any, Dict
 from datetime import date, time, datetime
 from enum import Enum
 
@@ -32,6 +32,20 @@ class StatusPartidaEnum(str, Enum):
     EmAndamento = "Em Andamento"
     Finalizada = "Finalizada"
     Cancelada = "Cancelada"
+
+class StatusConfrontoEnum(str, Enum):
+    Agendado = "Agendado"
+    EmAndamento = "Em Andamento"
+    Finalizado = "Finalizado"
+    Cancelado = "Cancelado"
+
+class StatusProvaEnum(str, Enum):
+    Agendada = "Agendada"
+    EmAndamento = "Em Andamento"
+    Finalizada = "Finalizada"
+    Cancelada = "Cancelada"
+
+
 
 class ModalidadeBase(BaseModel):
     nome: str = Field(..., max_length=100)
@@ -292,6 +306,235 @@ class Edicao(EdicaoBase):
     class Config:
         from_attributes = True
 
+class ModoInscricaoCompeticaoEnum(str, Enum):
+    EQUIPE = "EQUIPE"
+    INDIVIDUAL = "INDIVIDUAL"
+
+class FormatoCompeticaoEnum(str, Enum):
+    PONTOS_CORRIDOS = "PONTOS_CORRIDOS"
+    GRUPOS = "GRUPOS"
+    MATA_MATA = "MATA_MATA"
+    PROVAS = "PROVAS"
+
+class CriterioResultadoCompeticaoEnum(str, Enum):
+    PLACAR = "PLACAR"
+    TEMPO = "TEMPO"
+    PONTOS = "PONTOS"
+    POSICAO = "POSICAO"
+
+def validar_modo_formato_competicao(modo_inscricao, formato):
+    if formato in (FormatoCompeticaoEnum.PROVAS, "TABELA_UNICA") and modo_inscricao != ModoInscricaoCompeticaoEnum.INDIVIDUAL:
+        raise ValueError("O formato PROVAS requer inscrição INDIVIDUAL.")
+    if formato in {
+        FormatoCompeticaoEnum.PONTOS_CORRIDOS,
+        FormatoCompeticaoEnum.GRUPOS,
+        FormatoCompeticaoEnum.MATA_MATA,
+    } and modo_inscricao != ModoInscricaoCompeticaoEnum.EQUIPE:
+        raise ValueError("PONTOS_CORRIDOS, GRUPOS e MATA_MATA requerem inscrição EQUIPE.")
+
+class GrupoCompeticoesBase(BaseModel):
+    nome: str = Field(..., min_length=1, max_length=100)
+    descricao: Optional[str] = None
+    slug: str = Field(..., min_length=1, max_length=120)
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    status: str = Field("ATIVO", max_length=20)
+
+
+class GrupoCompeticoesCreate(GrupoCompeticoesBase):
+    pass
+
+
+class GrupoCompeticoesUpdate(BaseModel):
+    nome: Optional[str] = Field(None, min_length=1, max_length=100)
+    descricao: Optional[str] = None
+    slug: Optional[str] = Field(None, min_length=1, max_length=120)
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    status: Optional[str] = Field(None, max_length=20)
+
+
+class GrupoCompeticoesResponse(GrupoCompeticoesBase):
+    id_grupo: int
+    criado_em: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RegrasPontosCorridosSchema(BaseModel):
+    turno_e_returno: bool = False
+    vitoria_pontos: int = 3
+    empate_pontos: int = 1
+    derrota_pontos: int = 0
+    criterios_desempate: list[str] = ["pontos", "vitorias", "saldo_gols", "gols_pro", "confronto_direto"]
+
+
+class RegrasGruposMataMataSchema(BaseModel):
+    qtd_grupos: int = Field(..., ge=1)
+    times_por_grupo: Optional[int] = None
+    classificados_por_grupo: int = Field(..., ge=1)
+    jogos_ida_volta_grupo: bool = False
+    jogos_ida_volta_mata_mata: bool = False
+    disputa_terceiro_lugar: bool = True
+    penaltis_desempate: bool = True
+
+
+class RegrasMataMataSchema(BaseModel):
+    fase_inicial: str = "FINAL"
+    jogos_ida_volta: bool = False
+    disputa_terceiro_lugar: bool = True
+    penaltis_desempate: bool = True
+
+
+class CompeticaoBase(BaseModel):
+    id_modalidade: int
+    id_grupo: Optional[int] = None
+    nome: str = Field(..., max_length=200)
+    categoria: str = Field(..., min_length=1, max_length=100)
+    modo_inscricao: Optional[ModoInscricaoCompeticaoEnum] = None
+    formato: Optional[FormatoCompeticaoEnum] = None
+    criterio_resultado: Optional[CriterioResultadoCompeticaoEnum] = None
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    regras: Optional[str] = None
+    regras_formato: Optional[Union[dict, Any]] = None
+    status: Optional[str] = Field(None, max_length=50)
+
+    @field_validator("formato", mode="before")
+    @classmethod
+    def normalizar_formato(cls, value):
+        if value == "TABELA_UNICA":
+            return "PROVAS"
+        return value
+
+    @field_validator("nome", "categoria")
+    @classmethod
+    def campos_textuais_nao_vazios(cls, value):
+        if not value.strip():
+            raise ValueError("O campo não pode ser vazio.")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validar_modo_e_formato(self):
+        if self.modo_inscricao is not None and self.formato is not None:
+            validar_modo_formato_competicao(self.modo_inscricao, self.formato)
+        if self.data_inicio is not None and self.data_fim is not None and self.data_inicio > self.data_fim:
+            raise ValueError("A data de início não pode ser posterior à data de fim.")
+        return self
+
+
+class CompeticaoCreate(CompeticaoBase):
+    @model_validator(mode="after")
+    def aceitar_apenas_status_rascunho(self):
+        if self.status not in (None, "RASCUNHO"):
+            raise ValueError("O status é definido pelo ciclo da competição.")
+        return self
+
+
+class CompeticaoUpdate(BaseModel):
+    id_modalidade: Optional[int] = None
+    id_grupo: Optional[int] = None
+    nome: Optional[str] = Field(None, max_length=200)
+    categoria: Optional[str] = Field(None, min_length=1, max_length=100)
+    modo_inscricao: Optional[ModoInscricaoCompeticaoEnum] = None
+    formato: Optional[FormatoCompeticaoEnum] = None
+    criterio_resultado: Optional[CriterioResultadoCompeticaoEnum] = None
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    regras: Optional[str] = None
+    regras_formato: Optional[Union[dict, Any]] = None
+    status: Optional[str] = Field(None, max_length=50)
+
+    @field_validator("formato", mode="before")
+    @classmethod
+    def normalizar_formato(cls, value):
+        if value == "TABELA_UNICA":
+            return "PROVAS"
+        return value
+
+    @field_validator("nome", "categoria")
+    @classmethod
+    def campos_textuais_nao_vazios(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("O campo não pode ser vazio.")
+        return value.strip() if value is not None else value
+
+    @model_validator(mode="after")
+    def validar_par_completo(self):
+        for field in ("id_modalidade", "nome", "categoria"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} não pode ser nulo.")
+        if "status" in self.model_fields_set:
+            raise ValueError("O status não pode ser alterado por atualização.")
+        if self.modo_inscricao is not None and self.formato is not None:
+            validar_modo_formato_competicao(self.modo_inscricao, self.formato)
+        if self.data_inicio is not None and self.data_fim is not None and self.data_inicio > self.data_fim:
+            raise ValueError("A data de início não pode ser posterior à data de fim.")
+        return self
+
+
+class Competicao(CompeticaoBase):
+    id_competicao: int
+    id_edicao: Optional[int] = None
+    modalidade: Optional[Modalidade] = None
+    grupo: Optional[GrupoCompeticoesResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CompeticaoV2Create(BaseModel):
+    nome: str = Field(..., min_length=1, max_length=200)
+    id_modalidade: int
+    id_grupo: Optional[int] = None
+    id_edicao: Optional[int] = None
+    categoria: Optional[str] = Field(None, max_length=100)
+    modo_inscricao: str = "EQUIPE"
+    formato: str
+    criterio_resultado: Optional[str] = "PONTOS"
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    regras_formato: Optional[Union[dict, Any]] = None
+
+
+class CompeticaoV2Response(BaseModel):
+    id_competicao: int
+    nome: str
+    id_modalidade: int
+    id_grupo: Optional[int] = None
+    id_edicao: Optional[int] = None
+    categoria: Optional[str] = None
+    modo_inscricao: Optional[str] = None
+    formato: Optional[str] = None
+    criterio_resultado: Optional[str] = None
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    status: Optional[str] = None
+    regras_formato: Optional[Union[dict, Any]] = None
+    modalidade: Optional[Modalidade] = None
+    grupo: Optional[GrupoCompeticoesResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompeticaoV2Update(BaseModel):
+    nome: Optional[str] = Field(None, min_length=1, max_length=200)
+    id_modalidade: Optional[int] = None
+    id_grupo: Optional[int] = None
+    id_edicao: Optional[int] = None
+    categoria: Optional[str] = Field(None, max_length=100)
+    modo_inscricao: Optional[str] = None
+    formato: Optional[str] = None
+    criterio_resultado: Optional[str] = None
+    data_inicio: Optional[date] = None
+    data_fim: Optional[date] = None
+    status: Optional[str] = None
+    regras_formato: Optional[Union[dict, Any]] = None
+
+
+class GrupoCompeticoesDetalhadoResponse(GrupoCompeticoesResponse):
+    competicoes: List[CompeticaoV2Response] = []
+
 class AtletaBase(BaseModel):
     nome_completo: str = Field(..., max_length=500)
     data_nascimento: date
@@ -326,20 +569,61 @@ class ParticipanteResponse(BaseModel):
 
 class EquipeBase(BaseModel):
     nome: str = Field(..., max_length=200)
-    id_edicao: int
+    id_edicao: Optional[int] = None
     grupo: Optional[str] = Field(None, max_length=50)
 
 class EquipeCreate(EquipeBase):
-    pass
+    # Transitional payload for the deprecated legacy endpoint. The route
+    # requires id_competicao and derives the edition from that competition.
+    id_edicao: Optional[int] = None
+    id_competicao: Optional[int] = None
+
+class EquipeCompeticaoCreate(BaseModel):
+    nome: str = Field(..., max_length=200)
+    grupo: Optional[str] = Field(None, max_length=50)
 
 class EquipeUpdate(BaseModel):
     nome: Optional[str] = Field(None, max_length=200)
     grupo: Optional[str] = Field(None, max_length=50)
 
+class JogadorBase(BaseModel):
+    nome: str = Field(..., min_length=1, max_length=100)
+    numero_camisa: Optional[int] = None
+    posicao: Optional[str] = Field(None, max_length=50)
+    documento: Optional[str] = Field(None, max_length=30)
+    data_nascimento: Optional[date] = None
+    foto_url: Optional[str] = Field(None, max_length=255)
+    ativo: bool = True
+
+
+class JogadorCreate(JogadorBase):
+    pass
+
+
+class JogadorUpdate(BaseModel):
+    nome: Optional[str] = Field(None, min_length=1, max_length=100)
+    numero_camisa: Optional[int] = None
+    posicao: Optional[str] = Field(None, max_length=50)
+    documento: Optional[str] = Field(None, max_length=30)
+    data_nascimento: Optional[date] = None
+    foto_url: Optional[str] = Field(None, max_length=255)
+    ativo: Optional[bool] = None
+
+
+class JogadorResponse(JogadorBase):
+    id_jogador: int
+    id_equipe: int
+    criado_em: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class Equipe(EquipeBase):
     id_equipe: int
+    id_competicao: Optional[int] = None
     edicao: Optional[Edicao] = None
     participantes: List[ParticipanteResponse] = []
+    jogadores: List[JogadorResponse] = []
     class Config:
         from_attributes = True
 
@@ -441,6 +725,200 @@ class EstatisticaPartidaResponse(EstatisticaPartidaBase):
     id_estatistica: int
     id_partida: int
     participante: Optional[ParticipanteResponse] = None
+    class Config:
+        from_attributes = True
+
+class OcorrenciaPartidaBase(BaseModel):
+    id_equipe: int
+    id_jogador: Optional[int] = None
+    tipo: str = Field(..., max_length=30)
+    minuto: Optional[int] = None
+    tempo_jogo: Optional[str] = Field("1T", max_length=10)
+    observacao: Optional[str] = Field(None, max_length=200)
+
+
+class OcorrenciaPartidaCreate(OcorrenciaPartidaBase):
+    contra: Optional[bool] = False
+
+
+class FinalizarConfrontoRequest(BaseModel):
+    penaltis_mandante: Optional[int] = None
+    penaltis_visitante: Optional[int] = None
+    observacoes: Optional[str] = None
+
+
+class OcorrenciaPartidaResponse(OcorrenciaPartidaBase):
+    id_ocorrencia: int
+    id_confronto: int
+    criado_em: datetime
+    nome_jogador: Optional[str] = None
+    nome_equipe: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConfrontoBase(BaseModel):
+    id_equipe_mandante: Optional[int] = None
+    id_equipe_visitante: Optional[int] = None
+    id_proximo_confronto: Optional[int] = None
+    fase: Optional[str] = None
+    rodada: Optional[int] = None
+    grupo: Optional[str] = None
+    data: date
+    hora: time
+    id_local: int
+    id_arbitro: int
+    placar_mandante: int = 0
+    placar_visitante: int = 0
+    id_equipe_vencedora: Optional[int] = None
+    status: StatusConfrontoEnum = StatusConfrontoEnum.Agendado
+    observacoes: Optional[str] = None
+    ordem_jogo: int = 1
+    penaltis_mandante: Optional[int] = None
+    penaltis_visitante: Optional[int] = None
+    id_confronto_ida: Optional[int] = None
+
+
+class ConfrontoCreate(BaseModel):
+    id_equipe_mandante: Optional[int] = None
+    id_equipe_visitante: Optional[int] = None
+    id_proximo_confronto: Optional[int] = None
+    fase: Optional[str] = None
+    rodada: Optional[int] = None
+    grupo: Optional[str] = None
+    data: date
+    hora: time
+    id_local: int
+    id_arbitro: int
+    placar_mandante: int = 0
+    placar_visitante: int = 0
+    status: StatusConfrontoEnum = StatusConfrontoEnum.Agendado
+    observacoes: Optional[str] = None
+    ordem_jogo: Optional[int] = 1
+    penaltis_mandante: Optional[int] = None
+    penaltis_visitante: Optional[int] = None
+    id_confronto_ida: Optional[int] = None
+
+
+class ConfrontoUpdate(BaseModel):
+    id_equipe_mandante: Optional[int] = None
+    id_equipe_visitante: Optional[int] = None
+    id_proximo_confronto: Optional[int] = None
+    fase: Optional[str] = None
+    rodada: Optional[int] = None
+    grupo: Optional[str] = None
+    data: Optional[date] = None
+    hora: Optional[time] = None
+    id_local: Optional[int] = None
+    id_arbitro: Optional[int] = None
+    placar_mandante: Optional[int] = None
+    placar_visitante: Optional[int] = None
+    id_equipe_vencedora: Optional[int] = None
+    status: Optional[StatusConfrontoEnum] = None
+    observacoes: Optional[str] = None
+    ordem_jogo: Optional[int] = None
+    penaltis_mandante: Optional[int] = None
+    penaltis_visitante: Optional[int] = None
+    id_confronto_ida: Optional[int] = None
+
+
+class Confronto(ConfrontoBase):
+    id_confronto: int
+    id_competicao: int
+    sumula_arquivo: Optional[str] = None
+    equipe_mandante: Optional[Equipe] = None
+    equipe_visitante: Optional[Equipe] = None
+    equipe_vencedora: Optional[Equipe] = None
+    local: Optional[Local] = None
+    arbitro: Optional[Arbitro] = None
+    ocorrencias: List[OcorrenciaPartidaResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class GerarConfrontosCompeticaoRequest(BaseModel):
+    fase_inicial: Optional[str] = None
+    data_inicio: Optional[date] = None
+    hora_padrao: Optional[time] = None
+    id_local_padrao: Optional[int] = None
+    id_arbitro_padrao: Optional[int] = None
+
+
+class InscricaoIndividualBase(BaseModel):
+    id_participante: int
+    numero_peito: Optional[int] = None
+
+
+class InscricaoIndividualCreate(InscricaoIndividualBase):
+    pass
+
+
+class InscricaoIndividual(InscricaoIndividualBase):
+    id_inscricao: int
+    id_competicao: int
+    participante: Optional[ParticipanteResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ResultadoProvaBase(BaseModel):
+    id_participante: int
+    tempo_ms: int = Field(..., gt=0)
+    desqualificado: bool = False
+    motivo_desqualificacao: Optional[str] = Field(None, max_length=255)
+    observacoes: Optional[str] = None
+
+
+class ResultadoProvaCreate(ResultadoProvaBase):
+    pass
+
+
+class ResultadoProvaUpdate(BaseModel):
+    tempo_ms: Optional[int] = Field(None, gt=0)
+    desqualificado: Optional[bool] = None
+    motivo_desqualificacao: Optional[str] = Field(None, max_length=255)
+    observacoes: Optional[str] = None
+
+
+class ResultadoProva(ResultadoProvaBase):
+    id_resultado: int
+    id_prova: int
+    posicao: Optional[int] = None
+    participante: Optional[ParticipanteResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProvaBase(BaseModel):
+    nome: str = Field(..., max_length=200)
+    data: Optional[date] = None
+    hora: Optional[time] = None
+    id_local: Optional[int] = None
+    status: StatusProvaEnum = StatusProvaEnum.Agendada
+    observacoes: Optional[str] = None
+
+
+class ProvaCreate(ProvaBase):
+    pass
+
+
+class ProvaUpdate(BaseModel):
+    nome: Optional[str] = Field(None, max_length=200)
+    data: Optional[date] = None
+    hora: Optional[time] = None
+    id_local: Optional[int] = None
+    status: Optional[StatusProvaEnum] = None
+    observacoes: Optional[str] = None
+
+
+class Prova(ProvaBase):
+    id_prova: int
+    id_competicao: int
+    local: Optional[Local] = None
+    resultados: List[ResultadoProva] = []
+
     class Config:
         from_attributes = True
 

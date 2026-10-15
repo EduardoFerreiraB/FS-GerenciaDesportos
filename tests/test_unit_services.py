@@ -456,10 +456,9 @@ def test_equipes_crud_unitario():
     eq_mock = create_mock_model(models.Equipe, id_equipe=1, nome="Eq A", id_edicao=1)
     db.query().filter().first.return_value = eq_mock
     
-    # Criar
-    eq = serv_equipes.criar_equipe(db, schemas.EquipeCreate(nome="Eq A", id_edicao=1))
-    assert eq.nome == "Eq A"
-    db.add.assert_called()
+    # The former edition-only creation service is deliberately closed.
+    with pytest.raises(ValueError, match="id_competicao"):
+        serv_equipes.criar_equipe(db, schemas.EquipeCreate(nome="Eq A", id_edicao=1))
     
     # Listar
     db.query().offset().limit().all.return_value = [eq_mock]
@@ -701,14 +700,9 @@ def test_edicoes_crud_unitario():
 
 def test_clonar_equipes_unitario():
     db = MagicMock()
-    eqs = [create_mock_model(models.Equipe, id_equipe=1, nome="Eq 1", participantes=[create_mock_model(models.Participante, id_participante=10)])]
-    
-    db.query().filter().all.return_value = eqs
-    
-    res = serv_edic.clonar_equipes(db, 1, 2)
-    assert len(res) == 1
-    assert res[0].nome == "Eq 1"
-    db.add.assert_called()
+
+    with pytest.raises(ValueError, match="clonagem direcionada por competição"):
+        serv_edic.clonar_equipes(db, 1, 2)
 
 def test_gerar_confrontos_pontos_corridos_sem_edicao():
     db = MagicMock()

@@ -23,8 +23,11 @@ RUN groupadd -g 10001 appgroup && \
 # Copy installed python dependencies from builder stage
 COPY --from=builder /usr/local /usr/local
 
-# Copy app files and change owner to appuser
+# Copy app and Alembic artifacts.  Deploy orchestration runs
+# `alembic upgrade head` explicitly before starting the API.
 COPY --chown=appuser:appgroup ./app /app/app
+COPY --chown=appuser:appgroup ./alembic /app/alembic
+COPY --chown=appuser:appgroup ./alembic.ini /app/alembic.ini
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

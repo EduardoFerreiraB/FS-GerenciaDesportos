@@ -64,7 +64,10 @@ def excluir_edicao(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    sucesso = edicao_service.excluir_edicao(db=db, id_edicao=edicao_id)
+    try:
+        sucesso = edicao_service.excluir_edicao(db=db, id_edicao=edicao_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not sucesso:
         raise HTTPException(status_code=404, detail="Edição não encontrada.")
     return None
@@ -79,8 +82,8 @@ def clonar_equipes(
     try:
         equipes = edicao_service.clonar_equipes(db, id_edicao_origem=edicao_origem_id, id_edicao_destino=edicao_id)
         return {"message": f"{len(equipes)} equipes clonadas com sucesso."}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 @router.post("/{edicao_id}/gerar-confrontos", summary="Gerar confrontos automaticamente para a edição")
 def gerar_confrontos(

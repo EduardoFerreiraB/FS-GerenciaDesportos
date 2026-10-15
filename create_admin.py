@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
 from sqlalchemy.orm import Session
-from database import SessionLocal, engine
+from database import SessionLocal
 import models
 import security
 
@@ -45,6 +45,4 @@ def create_super_user():
         db.close()
 
 if __name__ == "__main__":
-    # Garante que as tabelas existem
-    models.Base.metadata.create_all(bind=engine)
     create_super_user()

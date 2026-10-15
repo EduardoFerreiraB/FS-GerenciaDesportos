@@ -46,6 +46,17 @@ def get_auth_headers(client, db, role: str, username: str):
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
+
+def criar_competicao_equipe(db, id_edicao, id_modalidade):
+    competicao = models.Competicao(
+        id_edicao=id_edicao, id_modalidade=id_modalidade, nome=get_unique_name("competicao"),
+        categoria="Livre", modo_inscricao="EQUIPE", formato="MATA_MATA",
+        criterio_resultado="PLACAR", data_inicio=date(2026, 6, 22), data_fim=date(2026, 6, 23),
+    )
+    db.add(competicao)
+    db.commit()
+    return competicao.id_competicao
+
 def test_integration_flow_competition(client, db):
     u_coord = get_unique_name("coord")
     coord_headers = get_auth_headers(client, db, "coordenador", u_coord)
@@ -71,11 +82,12 @@ def test_integration_flow_competition(client, db):
     )
     assert res.status_code == 201
     id_ed = res.json()["id_edicao"]
+    id_competicao = criar_competicao_equipe(db, id_ed, id_mod)
 
     # 2. Create 2 Teams
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq1"), "id_edicao": id_ed}, headers=coord_headers)
+    res = client.post("/equipes/", json={"nome": get_unique_name("eq1"), "id_competicao": id_competicao}, headers=coord_headers)
     id_eq1 = res.json()["id_equipe"]
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq2"), "id_edicao": id_ed}, headers=coord_headers)
+    res = client.post("/equipes/", json={"nome": get_unique_name("eq2"), "id_competicao": id_competicao}, headers=coord_headers)
     id_eq2 = res.json()["id_equipe"]
 
     # 3. Register participants (1 Aluno, 1 Atleta)
