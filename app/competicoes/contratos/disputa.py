@@ -19,6 +19,7 @@ class GrupoDetalhe(Contrato):
     id_edicao_competicao: int
     nome: Nome
     ordem: int
+    equipes: list[int] = Field(default_factory=list)
 
 
 class DistribuicaoGruposEntrada(Contrato):
@@ -52,6 +53,7 @@ class DueloDetalhe(Contrato):
 
 
 class PartidaSimples(Contrato):
+    id_partida: int | None = None
     id_equipe_mandante: int
     id_equipe_visitante: int
     rodada: int | None = None
@@ -59,6 +61,7 @@ class PartidaSimples(Contrato):
     id_grupo: int | None = None
     nome_grupo: str | None = None
     id_duelo: int | None = None
+    estado: str = "AGENDADA"
 
 
 class RodadaGerada(Contrato):
@@ -69,3 +72,18 @@ class RodadaGerada(Contrato):
 class TabelaGeradaResultado(Contrato):
     rodadas: list[RodadaGerada] = Field(default_factory=list)
     duelos: list[DueloDetalhe] = Field(default_factory=list)
+
+
+class TabelaGerar(Contrato):
+    distribuicao_grupos: dict[str, list[int]] | None = None
+
+
+class EstruturaDisputaDetalhe(Contrato):
+    id_edicao_competicao: int
+    formato: str
+    estado: str
+    grupos: list[GrupoDetalhe] = Field(default_factory=list)
+    duelos: list[DueloDetalhe] = Field(default_factory=list)
+    rodadas: list[RodadaGerada] = Field(default_factory=list)
+    partidas: list[PartidaSimples] = Field(default_factory=list)
+    total_partidas: int = 0
