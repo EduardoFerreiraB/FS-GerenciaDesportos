@@ -27,6 +27,9 @@ def alembic_config(database_url: str, output_buffer=None) -> Config:
     config = Config(str(ROOT / "alembic.ini"), output_buffer=output_buffer)
     config.set_main_option("sqlalchemy.url", database_url)
     config.attributes["database_url"] = database_url
+    # Bancos descartaveis destes testes: autoriza a consolidacao 20261015_0200,
+    # que exige opcao explicita de descarte das tabelas esportivas antigas.
+    config.attributes["descartar_competicoes_teste"] = True
     return config
 
 
@@ -129,27 +132,32 @@ def test_mysql_offline_upgrade_compiles_initial_schema():
     command.upgrade(config, "head", sql=True)
 
     ddl = output.getvalue().lower()
+    # Baseline: schema herdado, inclusive o dominio esportivo antigo.
     assert "create table competicoes" in ddl
-    assert "id_competicao" in ddl
     assert "foreign key(id_competicao) references competicoes" in ddl
-    assert "create table migracao_equipes_origem" in ddl
     assert "create table confrontos" in ddl
-    assert "create table migracao_partidas_origem" in ddl
-    assert "create table inscricoes_individuais" in ddl
-    assert "create table provas" in ddl
-    assert "create table resultados_prova" in ddl
+    # Consolidacao: descarta o antigo e cria o dominio novo.
+    assert "drop table confrontos" in ddl
+    assert "drop table equipes_participantes" in ddl
+    assert "create table integrantes_equipe" in ddl
+    assert "foreign key(id_edicao_competicao, id_equipe) references equipes" in ddl
+    assert "check (data_inicio <= data_fim)" in ddl
 
 
 def test_baseline_roundtrip_em_banco_vazio(tmp_path):
-    """Banco vazio: upgrade, downgrade ao base e novo upgrade."""
+    """Banco vazio: upgrade do baseline, downgrade ao base e novo upgrade.
+
+    A consolidacao 20261015_0200 nao tem downgrade (restauracao por backup),
+    entao o roundtrip vale para o baseline isolado.
+    """
     database_url = f"sqlite:///{tmp_path / 'roundtrip.sqlite'}"
     cfg = alembic_config(database_url)
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "20261015_0100")
     engine = create_engine(database_url)
     assert inspect(engine).has_table("competicoes")
     command.downgrade(cfg, "base")
     assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "20261015_0100")
     assert inspect(engine).has_table("resultados_prova")
 
 
@@ -173,10 +181,11 @@ def test_importing_api_does_not_create_database_schema(tmp_path):
     assert inspect(create_engine(f"sqlite:///{database_path}")).get_table_names() == []
 
 
-def test_baseline_e_unica_head(tmp_path):
+def test_cadeia_linear_baseline_e_consolidacao(tmp_path):
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_config(f"sqlite:///{tmp_path / 'x.sqlite'}"))
-    assert [revision.revision for revision in script.get_revisions("heads")] == ["20261015_0100"]
+    assert [revision.revision for revision in script.get_revisions("heads")] == ["20261015_0200"]
+    assert script.get_revision("20261015_0200").down_revision == "20261015_0100"
     assert script.get_revision("20261015_0100").down_revision is None
 
 

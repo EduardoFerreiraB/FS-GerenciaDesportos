@@ -56,16 +56,6 @@ def get_auth_headers(client, db, role: str, username: str):
     return {"Authorization": f"Bearer {token}"}
 
 
-def criar_competicao_equipe(db, id_edicao, id_modalidade):
-    competicao = models.Competicao(
-        id_edicao=id_edicao, id_modalidade=id_modalidade, nome=get_unique_name("competicao"),
-        categoria="Livre", modo_inscricao="EQUIPE", formato="PONTOS_CORRIDOS",
-        criterio_resultado="PLACAR", data_inicio=date(2026, 1, 1), data_fim=date(2026, 12, 31),
-    )
-    db.add(competicao)
-    db.commit()
-    return competicao.id_competicao
-
 # ==================== DIRECT FUNCTION TESTS ====================
 
 def test_salvar_arquivo_direct():
@@ -328,34 +318,14 @@ def test_alunos_coverage(client, db):
 def test_atletas_coverage(client, db):
     u_coord = get_unique_name("coord")
     coord_headers = get_auth_headers(client, db, "coordenador", u_coord)
-    res = client.post("/modalidades/", json={"nome": get_unique_name("mod"), "descricao": "d"}, headers=coord_headers)
-    id_mod = res.json()["id_modalidade"]
-    
-    res = client.post("/eventos/", json={"even_nome": get_unique_name("evt"), "descricao": "d"}, headers=coord_headers)
-    id_evt = res.json()["id_evento"]
-    res = client.post("/edicoes/", json={"id_evento": id_evt, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"}, headers=coord_headers)
-    id_ed = res.json()["id_edicao"]
-    id_competicao = criar_competicao_equipe(db, id_ed, id_mod)
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq"), "id_competicao": id_competicao}, headers=coord_headers)
-    id_eq = res.json()["id_equipe"]
-    
-    # 1. /atletas/equipe/{id_equipe} team doesn't exist
+    # 1. Inscricao de atleta em equipe antiga foi retirada: 410
     res = client.post(
         "/atletas/equipe/99999",
         data={"nome_completo": "A", "data_nascimento": "2005-01-01", "documento_pessoal": "1234"},
         headers=coord_headers
     )
-    assert res.status_code == 404
-    
-    # 2. ValueError when creating athlete (via mock)
-    with patch("routers.atletas.service_atletas.criar_atleta_equipe", side_effect=ValueError("validation error")):
-        res = client.post(
-            f"/atletas/equipe/{id_eq}",
-            data={"nome_completo": "A", "data_nascimento": "2005-01-01", "documento_pessoal": "1234"},
-            headers=coord_headers
-        )
-        assert res.status_code == 400
-    
+    assert res.status_code == 410
+
     # 3. GET/DELETE non-existent athlete
     assert client.get("/atletas/99999", headers=coord_headers).status_code == 404
     assert client.delete("/atletas/99999", headers=coord_headers).status_code == 404
@@ -483,58 +453,13 @@ def test_matriculas_coverage(client, db):
     # 3. cancelar_matricula non-existent -> 404
     assert client.delete("/matriculas/99999", headers=coord_headers).status_code == 404
 
-# ==================== ROUTERS: EDICOES, EQUIPES, PARTIDAS, PRESENCAS, PROFESSORES ====================
+# ==================== ROUTERS: PRESENCAS, PROFESSORES ====================
 
-def test_edicoes_coverage(client, db):
+
+def test_presencas_coverage(client, db):
     u_coord = get_unique_name("coord")
     coord_headers = get_auth_headers(client, db, "coordenador", u_coord)
-    
-    assert client.get("/edicoes/99999", headers=coord_headers).status_code == 404
-    assert client.delete("/edicoes/99999", headers=coord_headers).status_code == 404
-    
-    # 404 Evento não encontrado para a edição (line 24)
-    res = client.post(
-        "/edicoes/",
-        json={"id_evento": 99999, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"},
-        headers=coord_headers
-    )
-    assert res.status_code == 404
 
-    # ValueError on clonar-equipes (mocked) (lines 82-83)
-    with patch("routers.edicoes.edicao_service.clonar_equipes", side_effect=ValueError("Cannot clone")):
-        res = client.post("/edicoes/1/clonar-equipes?edicao_origem_id=2", headers=coord_headers)
-        assert res.status_code == 409
-
-def test_equipes_partidas_presencas_coverage(client, db):
-    u_coord = get_unique_name("coord")
-    coord_headers = get_auth_headers(client, db, "coordenador", u_coord)
-    
-    # --- Equipes ---
-    assert client.get("/equipes/99999", headers=coord_headers).status_code == 404
-    
-    # --- Partidas ---
-    assert client.get("/partidas/edicao/99999", headers=coord_headers).status_code == 200
-    assert client.get("/partidas/99999", headers=coord_headers).status_code == 405
-    assert client.delete("/partidas/99999", headers=coord_headers).status_code == 404
-    
-    # Upload sumula non-existent match
-    res = client.post(
-        "/partidas/99999/sumula",
-        files={"file": ("sumula.png", io.BytesIO(b"fake png"), "image/png")},
-        headers=coord_headers
-    )
-    assert res.status_code == 404
-    
-    # Registrar/atualizar/deletar estatisticas non-existent
-    res = client.post("/partidas/99999/estatisticas", json={"id_participante": 1, "gols": 1}, headers=coord_headers)
-    assert res.status_code == 404
-    
-    res = client.put("/partidas/1/estatisticas/99999", json={"id_participante": 1, "gols": 1}, headers=coord_headers)
-    assert res.status_code == 404
-    
-    res = client.delete("/partidas/1/estatisticas/99999", headers=coord_headers)
-    assert res.status_code == 404
-    
     # --- Presencas ---
     res = client.post(
         "/presencas/lote",
@@ -628,14 +553,11 @@ def test_professores_coverage(client, db):
     res = client.delete(f"/professores/{id_prof_self}", headers=coord_headers)
     assert res.status_code == 400
 
-# ==================== ROUTERS: PUBLICO, TURMAS ====================
+# ==================== ROUTERS: TURMAS ====================
 
-def test_publico_turmas_coverage(client, db):
+def test_turmas_coverage(client, db):
     u_coord = get_unique_name("coord")
     coord_headers = get_auth_headers(client, db, "coordenador", u_coord)
-    
-    # --- Publico ---
-    assert client.get("/publico/eventos/99999").status_code == 404
     
     # --- Turmas ---
     u_prof = get_unique_name("prof_tu")
@@ -764,147 +686,15 @@ def test_extra_routers_coverage(client, db):
     )
     assert res.status_code == 200
 
-    # 2. EQUIPES
-    res = client.post("/equipes/99999/participantes/99999", headers=coord_headers)
-    assert res.status_code == 404
-
     # 3. MATRICULAS
     res = client.get("/matriculas/", params={"aluno_id": id_aluno}, headers=coord_headers)
     assert res.status_code == 200
-
-    # 4. PARTIDAS
-    # - create with mocked ValueError
-    with patch("routers.partidas.service_partidas.criar_partida", side_effect=ValueError("Mock value error")):
-        res = client.post(
-            "/partidas/",
-            json={
-                "id_edicao": 1,
-                "id_modalidade": 1,
-                "id_equipe_casa": 1,
-                "id_equipe_visitante": 2,
-                "id_local": 1,
-                "id_arbitro": 1,
-                "part_data": "2026-06-22",
-                "part_hora": "15:00:00",
-                "fase": "Semifinal"
-            },
-            headers=coord_headers
-        )
-        assert res.status_code == 400
-        
-    # - update 404
-    res = client.put("/partidas/99999", json={"status": "Finalizada"}, headers=coord_headers)
-    assert res.status_code == 404
-    
-    # Setup for sumula and statistics
-    res = client.post("/eventos/", json={"even_nome": get_unique_name("evt"), "descricao": "d"}, headers=coord_headers)
-    id_evt = res.json()["id_evento"]
-    res = client.post("/edicoes/", json={"id_evento": id_evt, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"}, headers=coord_headers)
-    id_ed = res.json()["id_edicao"]
-    id_competicao = criar_competicao_equipe(db, id_ed, id_mod)
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq1"), "id_competicao": id_competicao}, headers=coord_headers)
-    id_eq1 = res.json()["id_equipe"]
-    res = client.post("/equipes/", json={"nome": get_unique_name("eq2"), "id_competicao": id_competicao}, headers=coord_headers)
-    id_eq2 = res.json()["id_equipe"]
-    res = client.post("/locais/", json={"loca_nome": "Local 1", "loca_descricao": "Addr"}, headers=coord_headers)
-    assert res.status_code == 201
-    id_loc = res.json()["id_local"]
-    res = client.post("/arbitros/", json={"apito_nome": "Arb 1", "apito_doc": "doc123", "apito_tel": "123456"}, headers=coord_headers)
-    assert res.status_code == 201
-    id_arb = res.json()["id_arbitro"]
-    
-    # Create valid match
-    res = client.post(
-        "/partidas/",
-        json={
-            "id_edicao": id_ed,
-            "id_modalidade": id_mod,
-            "id_equipe_casa": id_eq1,
-            "id_equipe_visitante": id_eq2,
-            "id_local": id_loc,
-            "id_arbitro": id_arb,
-            "part_data": "2026-06-22",
-            "part_hora": "15:00:00",
-            "fase": "Final"
-        },
-        headers=coord_headers
-    )
-    assert res.status_code == 201
-    id_partida = res.json()["id_partida"]
-    
-    # - sumula upload invalid MIME type
-    res = client.post(
-        f"/partidas/{id_partida}/sumula",
-        files={"file": ("sumula.png", io.BytesIO(b"fake png"), "text/plain")},
-        headers=coord_headers
-    )
-    assert res.status_code == 400
-    
-    # - sumula upload file write exception
-    with patch("builtins.open", side_effect=Exception("Mock open exception")):
-        res = client.post(
-            f"/partidas/{id_partida}/sumula",
-            files={"file": ("sumula.png", io.BytesIO(b"fake png"), "image/png")},
-            headers=coord_headers
-        )
-        assert res.status_code == 500
-
-    # - statistics non-existent player
-    res = client.post(f"/partidas/{id_partida}/estatisticas", json={"id_participante": 99999, "gols": 2}, headers=coord_headers)
-    assert res.status_code == 404
-
-    # - statistics player not in match
-    p_player = models.Participante(tipo="aluno")
-    db.add(p_player)
-    db.flush()
-    al_rec = models.Aluno(id_participante=p_player.id_participante, nome_completo="Aluno Player", data_nascimento=date(2010, 1, 1), telefone_1="1", endereco="E", escola="Esc", serie_ano="9")
-    db.add(al_rec)
-    db.commit()
-    id_player = p_player.id_participante
-    
-    # Create athlete participant
-    p_athlete = models.Participante(tipo="atleta")
-    db.add(p_athlete)
-    db.flush()
-    ath_rec = models.Atleta(id_participante=p_athlete.id_participante, nome_completo="Atleta Player", data_nascimento=date(2005, 1, 1), documento_pessoal="Doc")
-    db.add(ath_rec)
-    db.commit()
-    id_athlete = p_athlete.id_participante
-    
-    res = client.post(f"/partidas/{id_partida}/estatisticas", json={"id_participante": id_player, "gols": 2}, headers=coord_headers)
-    assert res.status_code == 400
-
-    # - statistics duplicate player
-    db.execute(models.equipes_participantes.insert().values(id_equipe=id_eq1, id_participante=id_player))
-    db.execute(models.equipes_participantes.insert().values(id_equipe=id_eq2, id_participante=id_athlete))
-    db.commit()
-    
-    res = client.post(f"/partidas/{id_partida}/estatisticas", json={"id_participante": id_player, "gols": 2}, headers=coord_headers)
-    assert res.status_code == 201
-    
-    res = client.post(f"/partidas/{id_partida}/estatisticas", json={"id_participante": id_athlete, "gols": 1}, headers=coord_headers)
-    assert res.status_code == 201
-    
-    res = client.post(f"/partidas/{id_partida}/estatisticas", json={"id_participante": id_player, "gols": 3}, headers=coord_headers)
-    assert res.status_code == 400
 
     # 5. PROFESSORES
     # - view other profile as professor
     prof_self_headers = get_auth_headers(client, db, "professor", u_prof)
     res = client.get(f"/professores/99999", headers=prof_self_headers)
     assert res.status_code == 403
-
-    # 6. PUBLICO
-    res = client.get(f"/publico/eventos/{id_evt}")
-    assert res.status_code == 200
-    res = client.get("/publico/edicoes")
-    assert res.status_code == 200
-    res = client.get(f"/publico/edicoes/{id_ed}/equipes")
-    assert res.status_code == 200
-    res = client.get(f"/publico/partidas/{id_partida}/estatisticas")
-    assert res.status_code == 200
-    res = client.get(f"/publico/edicoes/{id_ed}/estatisticas")
-    assert res.status_code == 200
 
     # 7. TURMAS
     # - create with non-existent modalidade

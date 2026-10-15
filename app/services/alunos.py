@@ -143,14 +143,9 @@ def excluir_aluno(db: Session, id_aluno: int):
 
         # 4. Deletar Aluno
         id_participante = db_aluno.id_participante
-        
-        # Clean up competition team associations
-        db.execute(
-            models.equipes_participantes.delete().where(
-                models.equipes_participantes.c.id_participante == id_participante
-            )
-        )
-        
+
+        # Competidores importados deste aluno ficam com id_aluno_origem NULL
+        # (ON DELETE SET NULL no banco); o elenco historico e preservado.
         db.delete(db_aluno)
 
         # 5. Deletar Participante (se for o caso)
