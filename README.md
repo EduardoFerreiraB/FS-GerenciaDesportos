@@ -57,6 +57,17 @@ python dev.py
 
 ---
 
+## 🐳 Docker Compose
+
+O `docker-compose.yml` não contém credenciais; ele lê as variáveis abaixo do ambiente ou de um arquivo `.env` (não versionado). Defina todas antes de `docker compose up`:
+
+* `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`
+* `SECRET_KEY`
+
+O `DATABASE_URL` do serviço `web` é composto a partir das variáveis `MYSQL_*`.
+
+---
+
 ## 🛠️ Tecnologias Utilizadas
 
 **Backend:** FastAPI, SQLAlchemy, PyMySQL, JWT.
