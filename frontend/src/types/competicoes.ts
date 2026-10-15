@@ -1,222 +1,269 @@
-export type ModoInscricao = 'EQUIPE' | 'INDIVIDUAL';
-export type FormatoCompeticao = 'PONTOS_CORRIDOS' | 'GRUPOS' | 'MATA_MATA' | 'TABELA_UNICA';
-export type CriterioResultado = 'PONTOS' | 'TEMPO' | 'GOLS_SETS';
-export type StatusCompeticao = 'RASCUNHO' | 'PLANEJADA' | 'EM_ANDAMENTO' | 'FINALIZADA' | 'CANCELADA';
-export type StatusConfronto = 'Agendada' | 'Em Andamento' | 'Finalizada' | 'Cancelada' | 'Agendado' | 'Finalizado' | 'Cancelado';
-export type StatusProva = 'Agendada' | 'Em Andamento' | 'Finalizada' | 'Cancelada';
+/**
+ * Contratos TypeScript estritos para o domínio de competições esportivas (fatia 1).
+ * Espelha fielmente os modelos Pydantic de app/competicoes/contratos.
+ */
 
-export interface ModalidadeSimples {
-  id_modalidade: number;
+// ==========================================
+// Comuns e Erros
+// ==========================================
+
+export interface ErroApi {
+  codigo: string;
+  mensagem: string;
+  campos?: string[];
+}
+
+export interface Pagina<T> {
+  itens: T[];
+  total: number;
+  pagina: number;
+  tamanho: number;
+}
+
+// ==========================================
+// Configuração de Modalidade / Formato (Futebol)
+// ==========================================
+
+export type FormatoCompeticao = "PONTOS_CORRIDOS" | "GRUPOS_MATA_MATA" | "MATA_MATA";
+
+export type CriterioDesempate =
+  | "VITORIAS"
+  | "SALDO_GOLS"
+  | "GOLS_PRO"
+  | "CONFRONTO_DIRETO";
+
+export interface PontuacaoConfig {
+  vitoria: number;
+  empate: number;
+  derrota: number;
+}
+
+export interface DisciplinaConfig {
+  limite_amarelos?: number | null;
+  jogos_por_acumulo: number;
+  jogos_por_vermelho: number;
+  jogos_por_segundo_amarelo: number;
+  zerar_amarelos_ao_encerrar_grupos: boolean;
+}
+
+export interface ConfiguracaoPontosCorridos {
+  formato: "PONTOS_CORRIDOS";
+  pontuacao: PontuacaoConfig;
+  desempates: CriterioDesempate[];
+  disciplina: DisciplinaConfig;
+  turno_e_returno?: boolean;
+}
+
+export interface ConfiguracaoGruposMataMata {
+  formato: "GRUPOS_MATA_MATA";
+  pontuacao: PontuacaoConfig;
+  desempates: CriterioDesempate[];
+  disciplina: DisciplinaConfig;
+  quantidade_grupos: number;
+  classificados_por_grupo: number;
+  turno_e_returno_grupos?: boolean;
+  ida_volta_eliminatoria?: boolean;
+  final_unica?: boolean;
+  terceiro_lugar?: boolean;
+}
+
+export interface ConfiguracaoMataMata {
+  formato: "MATA_MATA";
+  disciplina: DisciplinaConfig;
+  ida_volta?: boolean;
+  final_unica?: boolean;
+  terceiro_lugar?: boolean;
+}
+
+export type Configuracao =
+  | ConfiguracaoPontosCorridos
+  | ConfiguracaoGruposMataMata
+  | ConfiguracaoMataMata;
+
+// ==========================================
+// Organização: Eventos, Competições e Edições
+// ==========================================
+
+export type EstadoEdicao = "RASCUNHO" | "EM_ANDAMENTO" | "FINALIZADA" | "CANCELADA";
+
+export interface EventoCriar {
   nome: string;
-  duracao_minutos?: number | null;
   descricao?: string | null;
 }
 
-export interface LocalSimples {
-  id_local: number;
-  loca_nome: string;
-  loca_descricao?: string | null;
+export interface EventoAtualizar {
+  nome?: string | null;
+  descricao?: string | null;
+  arquivado?: boolean | null;
 }
 
-export interface ArbitroSimples {
-  id_arbitro: number;
-  apito_nome: string;
-  apito_doc?: string | null;
-  apito_tel?: string | null;
+export interface EdicaoEventoCriar {
+  identificacao: string;
+  data_inicio: string;
+  data_fim: string;
 }
 
-export interface Competicao {
-  id_competicao: number;
-  id_edicao: number;
-  id_modalidade: number;
-  nome: string;
-  categoria: string;
-  modo_inscricao: ModoInscricao | null;
-  formato: FormatoCompeticao | null;
-  criterio_resultado: CriterioResultado | null;
-  data_inicio: string | null;
-  data_fim: string | null;
-  regras: string | null;
-  status: StatusCompeticao;
-  modalidade?: ModalidadeSimples | null;
-}
-
-export interface CompeticaoCreatePayload {
-  id_modalidade: number;
-  nome: string;
-  categoria: string;
-  modo_inscricao?: ModoInscricao | null;
-  formato?: FormatoCompeticao | null;
-  criterio_resultado?: CriterioResultado | null;
+export interface EdicaoEventoAtualizar {
+  identificacao?: string | null;
   data_inicio?: string | null;
   data_fim?: string | null;
-  regras?: string | null;
-  status?: 'RASCUNHO';
 }
 
-export interface CompeticaoUpdatePayload {
-  id_modalidade?: number;
-  nome?: string;
-  categoria?: string;
-  modo_inscricao?: ModoInscricao | null;
-  formato?: FormatoCompeticao | null;
-  criterio_resultado?: CriterioResultado | null;
-  data_inicio?: string | null;
-  data_fim?: string | null;
-  regras?: string | null;
+export interface EdicaoEventoDetalhe extends EdicaoEventoCriar {
+  id_edicao_evento: number;
+  id_evento: number;
+  criado_em: string;
 }
 
-export interface EquipeCompeticao {
-  id_equipe: number;
+export interface EventoComEdicaoCriar extends EventoCriar {
+  edicao: EdicaoEventoCriar;
+}
+
+export interface EventoDetalhe extends EventoCriar {
+  id_evento: number;
+  slug: string;
+  arquivado: boolean;
+  criado_em: string;
+  edicoes: EdicaoEventoDetalhe[];
+}
+
+export type PaginaEventos = Pagina<EventoDetalhe>;
+
+export interface CompeticaoCriar {
   nome: string;
-  id_edicao: number;
-  id_competicao: number | null;
-  grupo?: string | null;
-  participantes?: Array<{
-    id_participante: number;
-    tipo: 'aluno' | 'atleta';
-    aluno?: { id_aluno: number; nome_completo: string };
-    atleta?: { id_atleta: number; nome_completo: string };
-  }>;
+  descricao?: string | null;
+  id_modalidade: number;
 }
 
-export interface Confronto {
-  id_confronto: number;
-  id_competicao: number;
-  fase: string | null;
-  rodada: string | null;
-  grupo: string | null;
-  data: string;
-  hora: string;
-  id_local: number;
-  id_arbitro: number;
-  id_equipe_mandante: number | null;
-  id_equipe_visitante: number | null;
-  placar_mandante: number;
-  placar_visitante: number;
-  id_equipe_vencedora: number | null;
-  id_proximo_confronto: number | null;
-  status: StatusConfronto;
-  sumula_arquivo: string | null;
-  observacoes: string | null;
-  equipe_mandante?: { id_equipe: number; nome: string } | null;
-  equipe_visitante?: { id_equipe: number; nome: string } | null;
-  equipe_vencedora?: { id_equipe: number; nome: string } | null;
-  local?: LocalSimples | null;
-  arbitro?: ArbitroSimples | null;
+export interface CompeticaoAtualizar {
+  nome?: string | null;
+  descricao?: string | null;
+  arquivado?: boolean | null;
+  id_modalidade?: number | null;
 }
 
-export interface InscricaoIndividual {
-  id_inscricao: number;
-  id_competicao: number;
-  id_participante: number;
-  numero_peito: number | null;
-  participante?: {
-    id_participante: number;
-    tipo: 'aluno' | 'atleta';
-    aluno?: { id_aluno: number; nome_completo: string; data_nascimento?: string };
-    atleta?: { id_atleta: number; nome_completo: string; data_nascimento?: string };
-  };
-}
-
-export interface ResultadoProva {
-  id_resultado: number;
-  id_prova: number;
-  id_participante: number;
-  tempo_ms: number;
-  tempo_formatado?: string;
-  posicao: number | null;
-  podio?: 'ouro' | 'prata' | 'bronze' | null;
-  desqualificado: boolean;
-  motivo_desqualificacao: string | null;
-  observacoes: string | null;
-  participante?: {
-    id_participante: number;
-    tipo: 'aluno' | 'atleta';
-    aluno?: { id_aluno: number; nome_completo: string };
-    atleta?: { id_atleta: number; nome_completo: string };
-  };
-}
-
-export interface Prova {
-  id_prova: number;
-  id_competicao: number;
-  nome: string;
-  data: string | null;
-  hora: string | null;
-  id_local: number | null;
-  status: StatusProva;
-  observacoes: string | null;
-  local?: LocalSimples | null;
-  resultados?: ResultadoProva[];
-}
-
-export interface ClassificacaoEquipeRow {
-  posicao: number;
-  id_equipe: number;
-  nome_equipe: string;
-  grupo?: string | null;
-  pontos: number;
-  jogos: number;
-  vitorias: number;
-  empates: number;
-  derrotas: number;
-  gols_pro: number;
-  gols_contra: number;
-  saldo_gols: number;
-  aproveitamento: number;
-}
-
-export interface ClassificacaoEquipesResponse {
+export interface EdicaoCompeticaoCriar extends EdicaoEventoCriar {
+  id_edicao_evento?: number | null;
+  categoria?: string | null;
   formato: FormatoCompeticao;
-  total_equipes: number;
-  confrontos_disputados: number;
-  classificacao?: ClassificacaoEquipeRow[];
-  grupos?: Record<string, ClassificacaoEquipeRow[]>;
-  classificacao_por_grupo?: Array<{ grupo: string; classificacao: ClassificacaoEquipeRow[] }>;
-  campeao?: { id_equipe: number; nome_equipe: string } | null;
-  vice_campeao?: { id_equipe: number; nome_equipe: string } | null;
-  semifinalistas?: Array<{ id_equipe: number; nome_equipe: string }>;
-  arvore?: any[];
-  mata_mata?: {
-    campeao: { id_equipe: number; nome_equipe: string } | null;
-    vice_campeao: { id_equipe: number; nome_equipe: string } | null;
-    semifinalistas: Array<{ id_equipe: number; nome_equipe: string }>;
-    total_confrontos: number;
-    finalizados: number;
-    arvore?: any[];
-  };
+  configuracao: Configuracao;
 }
 
-export interface AtletaMedalhasRow {
-  id_participante: number;
-  nome_participante: string;
-  numero_peito?: number | null;
-  ouros: number;
-  pratas: number;
-  bronzes: number;
-  total_medalhas: number;
-  provas_disputadas: number;
-  melhor_posicao?: number | null;
-  posicao?: number | null;
+export interface EdicaoCompeticaoAtualizar extends EdicaoCompeticaoCriar {
+  revisao: number;
 }
 
-export interface ClassificacaoIndividualResponse {
+export interface EdicaoCompeticaoDetalhe extends EdicaoCompeticaoCriar {
+  id_edicao_competicao: number;
   id_competicao: number;
-  nome: string;
-  modo_inscricao: 'INDIVIDUAL';
-  total_provas: number;
-  provas: Array<{
-    id_prova: number;
-    nome: string;
-    status: string;
-    resultados: ResultadoProva[];
-    podio: {
-      ouro?: ResultadoProva | null;
-      prata?: ResultadoProva | null;
-      bronze?: ResultadoProva | null;
-    };
-  }>;
-  quadro_medalhas: AtletaMedalhasRow[];
-  ranking_geral: AtletaMedalhasRow[];
+  estado: EstadoEdicao;
+  publicada: boolean;
+  revisao: number;
+  criado_em: string;
 }
+
+export interface CompeticaoComEdicaoCriar extends CompeticaoCriar {
+  edicao: EdicaoCompeticaoCriar;
+}
+
+export interface CompeticaoDetalhe extends CompeticaoCriar {
+  id_competicao: number;
+  slug: string;
+  arquivado: boolean;
+  criado_em: string;
+  edicoes: EdicaoCompeticaoDetalhe[];
+}
+
+export interface PublicacaoAtualizar {
+  publicada: boolean;
+}
+
+export type PaginaCompeticoes = Pagina<CompeticaoDetalhe>;
+
+// ==========================================
+// Elencos: Competidores, Equipes e Integrantes
+// ==========================================
+
+export type SituacaoEquipe = "ATIVA" | "INATIVA";
+export type SituacaoIntegrante = "ATIVO" | "INATIVO";
+
+export interface CompetidorCriar {
+  nome: string;
+  data_nascimento?: string | null;
+  documento?: string | null;
+  foto_url?: string | null;
+  ativo?: boolean;
+}
+
+export interface CompetidorAtualizar {
+  nome?: string | null;
+  data_nascimento?: string | null;
+  documento?: string | null;
+  foto_url?: string | null;
+  ativo?: boolean | null;
+}
+
+export interface CompetidorDetalhe {
+  id_competidor: number;
+  nome: string;
+  data_nascimento?: string | null;
+  documento?: string | null;
+  foto_url?: string | null;
+  ativo: boolean;
+  id_aluno_origem?: number | null;
+  criado_em: string;
+}
+
+export type PaginaCompetidores = Pagina<CompetidorDetalhe>;
+
+export interface AlunoImportar {
+  id_aluno: number;
+}
+
+export interface EquipeCriar {
+  nome: string;
+  sigla?: string | null;
+}
+
+export interface EquipesCopiar {
+  id_edicao_origem: number;
+}
+
+export interface IntegranteCriar {
+  id_competidor: number;
+  nome_esportivo: string;
+  numero_camisa?: number | null;
+  posicao?: string | null;
+}
+
+export interface IntegranteAtualizar {
+  situacao: SituacaoIntegrante;
+}
+
+export interface IntegranteDetalhe extends IntegranteCriar {
+  id_integrante: number;
+  id_edicao_competicao: number;
+  id_equipe: number;
+  situacao: SituacaoIntegrante;
+  criado_em: string;
+}
+
+export interface EquipeDetalhe extends EquipeCriar {
+  id_equipe: number;
+  id_edicao_competicao: number;
+  situacao: SituacaoEquipe;
+  criado_em: string;
+  integrantes: IntegranteDetalhe[];
+}
+
+// ==========================================
+// Aliases Canônicos de Domínio
+// ==========================================
+
+export type Evento = EventoDetalhe;
+export type EdicaoEvento = EdicaoEventoDetalhe;
+export type Competicao = CompeticaoDetalhe;
+export type EdicaoCompeticao = EdicaoCompeticaoDetalhe;
+export type Competidor = CompetidorDetalhe;
+export type Equipe = EquipeDetalhe;
+export type IntegranteEquipe = IntegranteDetalhe;
