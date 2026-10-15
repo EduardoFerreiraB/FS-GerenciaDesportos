@@ -32,6 +32,19 @@ class ClassificacaoEdicaoDetalhe(Contrato):
     grupos: list[TabelaClassificacao] = Field(default_factory=list)
 
 
+class GrupoClassificacaoDetalhe(Contrato):
+    id_grupo: int
+    nome: str
+    linhas: list[LinhaClassificacao] = Field(default_factory=list)
+    possui_empate_persistente: bool = False
+
+
+class TabelaClassificacaoDetalhe(Contrato):
+    linhas: list[LinhaClassificacao] | None = None
+    possui_empate_persistente: bool = False
+    grupos: list[GrupoClassificacaoDetalhe] | None = None
+
+
 class ResultadoDueloResolvido(Contrato):
     id_duelo: int
     id_equipe_vencedora: int | None = None
