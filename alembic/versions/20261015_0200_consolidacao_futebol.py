@@ -33,6 +33,8 @@ OPCAO_DESCARTE = "descartar_competicoes_teste"
 
 # Ordem das chaves estrangeiras: dependentes antes das referenciadas.
 TABELAS_ANTIGAS = (
+    "suspensoes_competicao",
+    "duelos_eliminatorios",
     "ocorrencias_partida",
     "migracao_partidas_origem",
     "estatisticas_partida",
@@ -44,7 +46,11 @@ TABELAS_ANTIGAS = (
     "confrontos",
     "provas",
     "inscricoes_individuais",
+    "integrantes_equipe",
     "equipes",
+    "grupos_competicao",
+    "edicoes_competicao",
+    "regulamentos_competicao",
     "competicoes",
     "modalidades_evento",
     "edicoes",
@@ -74,8 +80,21 @@ def upgrade() -> None:
             f"'-x {OPCAO_DESCARTE}=sim' (ou config.attributes['{OPCAO_DESCARTE}'] = True)."
         )
 
-    for tabela in TABELAS_ANTIGAS:
-        op.drop_table(tabela)
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    tabelas_existentes = set(insp.get_table_names())
+
+    is_mysql = conn.dialect.name in ("mysql", "mariadb")
+    if is_mysql:
+        op.execute(sa.text("SET FOREIGN_KEY_CHECKS = 0;"))
+
+    try:
+        for tabela in TABELAS_ANTIGAS:
+            if tabela in tabelas_existentes:
+                op.drop_table(tabela)
+    finally:
+        if is_mysql:
+            op.execute(sa.text("SET FOREIGN_KEY_CHECKS = 1;"))
 
     op.create_table(
         "eventos",
