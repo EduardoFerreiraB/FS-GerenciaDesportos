@@ -2,7 +2,10 @@
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
+from starlette.responses import Response
 
 
 class ErroCompeticao(Exception):
@@ -42,6 +45,11 @@ class ConfiguracaoInvalida(ErroCompeticao):
     status_code = 422
 
 
+def _caminho_competicoes(request: Request) -> bool:
+    caminho = request.url.path
+    return caminho == "/competicoes" or caminho.startswith("/competicoes/")
+
+
 def registrar_tratadores(app: FastAPI) -> None:
     async def responder(_request: Request, erro: ErroCompeticao) -> JSONResponse:
         from competicoes.contratos.comuns import ErroResposta
@@ -50,6 +58,8 @@ def registrar_tratadores(app: FastAPI) -> None:
         return JSONResponse(status_code=erro.status_code, content=resposta.model_dump())
 
     async def responder_validacao(request: Request, erro: RequestValidationError) -> JSONResponse:
+        if not _caminho_competicoes(request):
+            return await request_validation_exception_handler(request, erro)
         campos = []
         for item in erro.errors():
             caminho = item["loc"]
@@ -62,7 +72,24 @@ def registrar_tratadores(app: FastAPI) -> None:
             "Dados da requisicao invalidos.", campos=campos,
         ))
 
+    async def responder_http(request: Request, erro: HTTPException) -> Response:
+        if not _caminho_competicoes(request):
+            return await http_exception_handler(request, erro)
+        from competicoes.contratos.comuns import ErroResposta
+
+        codigo = {
+            401: "NAO_AUTENTICADO", 403: "ACESSO_NEGADO", 404: "NAO_ENCONTRADO",
+        }.get(erro.status_code, "ERRO_HTTP")
+        resposta = ErroResposta(
+            codigo=codigo,
+            mensagem=erro.detail if isinstance(erro.detail, str) else "Requisicao recusada.",
+            campos=[],
+        )
+        return JSONResponse(status_code=erro.status_code, content=resposta.model_dump(),
+                            headers=erro.headers)
+
     app.add_exception_handler(RequestValidationError, responder_validacao)
+    app.add_exception_handler(HTTPException, responder_http)
 
     for classe in (ErroCompeticao, NaoEncontrado, ConflitoEstado, ConflitoRevisao,
                    Duplicidade, ConfiguracaoInvalida):
