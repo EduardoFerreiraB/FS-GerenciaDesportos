@@ -262,6 +262,72 @@ def test_validacao_http_responde_envelope_sem_expor_entrada(dados, campos):
     }
 
 
+@pytest.mark.parametrize("caminho,competicoes", [
+    ("/competicoes", True), ("/competicoes/competidores", True),
+    ("/alunos/", False), ("/competicoes-outro", False),
+])
+def test_envelope_de_validacao_limitado_ao_dominio_competicoes(caminho, competicoes):
+    app = FastAPI()
+    registrar_tratadores(app)
+
+    @app.post(caminho)
+    def criar(dados: CompetidorCriar):
+        return dados
+
+    resposta = TestClient(app).post(caminho, json={"nome": ""})
+    assert resposta.status_code == 422
+    if competicoes:
+        assert resposta.json() == {
+            "codigo": "CONFIGURACAO_INVALIDA",
+            "mensagem": "Dados da requisicao invalidos.",
+            "campos": ["nome"],
+        }
+    else:
+        assert set(resposta.json()) == {"detail"}
+        assert resposta.json()["detail"][0]["loc"] == ["body", "nome"]
+
+
+@pytest.mark.parametrize("caminho,competicoes", [
+    ("/competicoes/recurso", True), ("/alunos/", False),
+])
+@pytest.mark.parametrize("papel,status,codigo", [
+    (None, 401, "NAO_AUTENTICADO"),
+    ("professor", 403, "ACESSO_NEGADO"),
+    ("coordenador", 200, None),
+])
+def test_erros_de_seguranca_usam_envelope_apenas_em_competicoes(
+    db, cabecalhos_por_papel, caminho, competicoes, papel, status, codigo,
+):
+    from database import get_db
+    from security import check_coordenador_role
+
+    app = FastAPI()
+    registrar_tratadores(app)
+
+    def obter_sessao():
+        yield db
+
+    app.dependency_overrides[get_db] = obter_sessao
+
+    @app.get(caminho)
+    def consultar(autor: models.Usuario = Depends(check_coordenador_role)):
+        return {"role": autor.role}
+
+    resposta = TestClient(app).get(caminho, headers=cabecalhos_por_papel(papel))
+    assert resposta.status_code == status
+    if status == 200:
+        assert resposta.json() == {"role": "coordenador"}
+    elif competicoes:
+        assert set(resposta.json()) == {"codigo", "mensagem", "campos"}
+        assert resposta.json()["codigo"] == codigo
+        assert resposta.json()["campos"] == []
+        assert resposta.json()["mensagem"]
+    else:
+        assert set(resposta.json()) == {"detail"}
+    if status == 401:
+        assert resposta.headers["www-authenticate"] == "Bearer"
+
+
 @pytest.mark.parametrize("schema,extras", [
     (EdicaoEventoCriar, {"identificacao": "2026"}),
     (EdicaoCompeticaoCriar, {"identificacao": "2026", "formato": "MATA_MATA",
