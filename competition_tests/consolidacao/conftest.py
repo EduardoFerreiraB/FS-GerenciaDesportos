@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,6 +98,68 @@ def db(sqlite_na_head):
     finally:
         sessao.rollback()
         sessao.close()
+
+
+@pytest.fixture()
+def client(db):
+    """HTTP real sobre a mesma sessao isolada, sem substituir autenticacao."""
+    from fastapi.testclient import TestClient
+    from database import get_db
+    from main import app
+
+    overrides_anteriores = app.dependency_overrides.copy()
+
+    def obter_sessao():
+        yield db
+
+    app.dependency_overrides[get_db] = obter_sessao
+    try:
+        with TestClient(app) as cliente:
+            yield cliente
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(overrides_anteriores)
+
+
+@pytest.fixture()
+def usuario(db):
+    """Autor coordenador duravel mesmo se a operacao testada der rollback."""
+    from models import Usuario
+
+    autor = Usuario(username="teste-coordenador", password_hash="hash-nao-utilizado",
+                    role="coordenador", must_change_password=False)
+    db.add(autor)
+    db.commit()
+    db.refresh(autor)
+    return autor
+
+
+@pytest.fixture()
+def cabecalhos_por_papel(db, usuario) -> Callable[[str | None], dict[str, str]]:
+    """Use cabecalhos_por_papel(role); None representa acesso sem token.
+
+    As contas sao persistidas no setup, evitando commit de dados da operacao
+    quando o teste pedir um cabecalho. A conta coordenadora e a fixture usuario.
+    """
+    from models import Usuario
+    from security import create_access_token
+
+    usuarios = {"coordenador": usuario}
+    for papel in ("admin", "professor", "assistente"):
+        usuarios[papel] = Usuario(
+            username=f"teste-{papel}", password_hash="hash-nao-utilizado",
+            role=papel, must_change_password=False,
+        )
+        db.add(usuarios[papel])
+    db.commit()
+
+    def criar_cabecalhos(papel: str | None) -> dict[str, str]:
+        if papel is None:
+            return {}
+        token = create_access_token({"sub": usuarios[papel].username})
+        return {"Authorization": f"Bearer {token}"}
+
+    return criar_cabecalhos
 
 
 @pytest.fixture()
