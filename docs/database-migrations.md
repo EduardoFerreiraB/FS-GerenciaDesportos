@@ -44,6 +44,19 @@ SQLite temporário). Ela é a única `head` e não tem `down_revision`.
   Somente se o schema for exatamente equivalente, **o usuário** executa
   `alembic stamp 20261015_0100`. Qualquer divergência interrompe a adoção: não
   execute `stamp`; registre a diferença e trate-a numa etapa aprovada.
+- **Diferenças conhecidas** entre um banco criado pela cadeia antiga e o
+  baseline (que segue o metadata ORM). Espere vê-las na comparação:
+  - defaults de servidor ausentes no baseline: `grupos_competicoes.status='ATIVO'`
+    e `criado_em=now()`; `jogadores.ativo=true` e `criado_em=now()`;
+    `ocorrencias_partida.tempo_jogo='1T'` e `criado_em=now()`;
+    `confrontos.ordem_jogo='1'`;
+  - `grupos_competicoes.slug`: constraint única `uq_grupos_competicoes_slug` +
+    índice não único, contra um único índice único no baseline;
+  - `equipes.id_edicao`: NOT NULL no banco antigo, anulável no baseline.
+
+  Essas tabelas serão todas recriadas/descartadas pela revisão de consolidação
+  seguinte. A decisão do usuário é: aceitar as diferenças e executar `stamp`,
+  ou recriar o banco de desenvolvimento. Não há migração corretiva.
 - `stamp` apenas marca a revisão em `alembic_version`; não cria nem altera
   tabelas. Marcá-lo contra um schema diferente oculta o desvio.
 - `alembic downgrade` segue proibido contra banco com dados: o downgrade do

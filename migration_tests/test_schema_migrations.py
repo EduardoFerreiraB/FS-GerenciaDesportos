@@ -184,3 +184,32 @@ def test_env_sem_metadata_por_padrao():
     fonte = (ROOT / "alembic" / "env.py").read_text()
     assert 'config.attributes.get("target_metadata")' in fonte
     assert "import models" not in fonte
+
+
+def _autogenerar_revisao(tmp_path, metadata):
+    from alembic.script import ScriptDirectory
+
+    url = f"sqlite:///{tmp_path / 'vazio.sqlite'}"
+    versions = tmp_path / "versions"
+    versions.mkdir()
+    config = alembic_config(url)
+    config.set_main_option("version_locations", str(versions))
+    if metadata is not None:
+        config.attributes["target_metadata"] = metadata
+    command.revision(config, autogenerate=True, rev_id="teste_0001", message="t")
+    arquivo = next(versions.glob("teste_0001_*.py"))
+    return arquivo.read_text()
+
+
+def test_autogenerate_sem_metadata_injetado_nao_gera_ddl(tmp_path):
+    # Sem metadata o Alembic recusa o autogenerate (nenhum DDL e produzido).
+    from alembic.util.exc import CommandError
+
+    with pytest.raises(CommandError, match="MetaData"):
+        _autogenerar_revisao(tmp_path, None)
+    assert not list((tmp_path / "versions").glob("*.py"))
+
+
+def test_autogenerate_com_metadata_injetado_gera_create_table(tmp_path):
+    fonte = _autogenerar_revisao(tmp_path, _model_schema())
+    assert "op.create_table('competicoes'" in fonte
