@@ -31,67 +31,23 @@ command com as mesmas variáveis do serviço e execute `alembic upgrade head`
 antes de liberar a nova instância. Não inclua esse comando no `CMD` da API: a
 execução deve ser coordenada uma vez por release.
 
-## Banco existente: baseline seguro
+## Baseline `20261015_0100`
 
-A revisão `20260824_0001` é um retrato do schema atual, incluindo
-`competicoes` e `equipes.id_competicao`; ela não transforma dados históricos.
+A cadeia de migrações foi consolidada em uma única revisão, `20261015_0100`,
+gerada a partir do metadata ORM por `scripts/gerar_baseline.py` (apenas contra
+SQLite temporário). Ela é a única `head` e não tem `down_revision`.
 
-1. Faça backup e verifique o ambiente e o alvo antes de qualquer comando.
-2. Compare tabelas, colunas, chaves estrangeiras, índices e constraints do
-   banco existente com a revisão. Confirme também o estado atual com
-   `alembic current`.
-3. Somente se o schema já for exatamente equivalente à revisão, registre o
-   baseline com `alembic stamp 20260824_0001`.
-4. Se houver qualquer diferença — por exemplo, o banco legado não possuir
-   `competicoes` ou `equipes.id_competicao` — **não execute `stamp`**. Registre
-   a diferença e crie/revise uma migração corretiva em uma etapa aprovada.
-5. Depois de um `stamp` validado ou de uma atualização normal, rode
-   `alembic upgrade head` antes de iniciar a API.
+- **Banco novo:** `alembic upgrade head` cria todo o schema e chega à
+  `20261015_0100`.
+- **Banco existente:** faça backup, compare tabelas, colunas, chaves
+  estrangeiras, índices e constraints com a revisão e confira `alembic current`.
+  Somente se o schema for exatamente equivalente, **o usuário** executa
+  `alembic stamp 20261015_0100`. Qualquer divergência interrompe a adoção: não
+  execute `stamp`; registre a diferença e trate-a numa etapa aprovada.
+- `stamp` apenas marca a revisão em `alembic_version`; não cria nem altera
+  tabelas. Marcá-lo contra um schema diferente oculta o desvio.
+- `alembic downgrade` segue proibido contra banco com dados: o downgrade do
+  baseline remove as tabelas.
 
-`stamp` apenas marca uma revisão na tabela `alembic_version`; ele não cria nem
-altera tabelas. Marcá-lo contra um schema diferente ocultaria o desvio e pode
-causar perda de dados em releases posteriores.
-
-Não use `alembic downgrade` contra um banco adotado por `stamp` ou contendo
-dados de produção: o downgrade da revisão inicial remove as tabelas do schema.
-
-## Passo 3: reconciliação de equipes históricas
-
-A revisão `20260824_0003` é aditiva: conserva `equipes.id_edicao`, mantém
-`id_competicao` anulável durante o rollout e cria a auditoria
-`migracao_equipes_origem`. Para uma equipe histórica sem competição, ela usa
-as partidas por modalidade e a competição `EQUIPE` da mesma edição. Se houver
-mais de uma modalidade, mantém o registro original para uma competição, cria
-uma cópia para cada competição adicional, copia integralmente o elenco e
-redireciona as partidas da modalidade correspondente. Não cria participantes
-nem apaga equipes ou partidas.
-
-Antes do primeiro rollout, produza dois dumps SQLite **anonimizados**: um na
-revisão `20260824_0002` e outro após aplicar `20260824_0003` somente à cópia.
-Valide-os sem credenciais e sem escrita no dump:
-
-```bash
-python scripts/validar_migracao_equipes.py \
-  --antes /copia/anonimizada-0002.sqlite \
-  --depois /copia/anonimizada-0003.sqlite \
-  --relatorio /tmp/relatorio-equipes.json
-```
-
-O relatório contém cada `equipe original → equipe/competição`, as contagens
-pré/pós de partidas e os conjuntos de participantes. O processo deve ser
-revisado manualmente antes do rollout. O validador termina com erro se uma
-equipe com partidas não tiver exatamente uma competição EQUIPE inferível para
-cada modalidade, ou se houver divergência de partidas/elenco.
-
-Equipes sem partidas e sem modalidade inferível não são alteradas: recebem
-`PENDENTE` na auditoria e entram no relatório para decisão manual. O downgrade
-de `20260824_0003` é bloqueado após qualquer reconciliação, pois desfazer
-clones e partidas não é seguro automaticamente. A geração MySQL offline só
-emite DDL; ela não reconcilia dados. Não execute a migração em `.env`, banco
-local de desenvolvimento ou produção antes da aprovação do relatório.
-
-As alterações de elenco de equipes vinculadas bloqueiam a linha da competição
-antes de reler o elenco e inserir o participante. A consulta inicial usada
-somente para descobrir a competição é descartada com rollback antes do lock,
-para não reutilizar um snapshot anterior no MySQL. O participante continua
-permitido em outra competição e a resposta de conflito segue sendo `422`.
+Execuções normais do Alembic não carregam os modelos (`target_metadata` é
+`None`); somente o gerador injeta o metadata via `config.attributes`.

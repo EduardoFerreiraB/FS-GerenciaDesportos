@@ -18,8 +18,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Revisions are explicit, frozen DDL.  Do not import application models here:
-# runtime model changes must never alter an already-issued migration.
-target_metadata = None
+# runtime model changes must never alter an already-issued migration.  Normal
+# runs therefore have no metadata; only scripts/gerar_baseline.py injects it
+# (via config.attributes) to autogenerate the baseline revision.
+target_metadata = config.attributes.get("target_metadata")
 
 
 def database_url():
