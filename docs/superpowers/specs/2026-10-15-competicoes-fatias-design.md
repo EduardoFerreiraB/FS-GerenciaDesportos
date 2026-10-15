@@ -389,9 +389,10 @@ geração, inscrição e alteração estrutural. Bloquear a partida para súmula
 Promoção de chaves e correções bloqueiam a edição e as partidas afetadas em ordem
 estável.
 
-### 5.9 Portão de saída da fatia 1
+### 5.9 Portão de saída da fatia 1 (Concluída em 2026-10-15)
 
-- Schema migrado ≡ ORM em SQLite e em MySQL 8 real pelo harness da fatia 0.
+- **Status:** ✅ Concluída em 2026-10-15.
+- Schema migrado ≡ ORM em SQLite e em MySQL 8 real pelo harness (`Schema do MySQL equivalente ao metadata ORM: sem divergencias.`).
 - Upgrade de banco vazio e de snapshot sintético com dados de escolinhas chegam
   ao mesmo schema, com os dados compartilhados preservados.
 - Integrante apontando equipe de outra edição levanta `IntegrityError` no flush.
@@ -400,9 +401,10 @@ estável.
 - Terceiro cadastrado sem aluno; aluno importado uma vez, inclusive sob
   concorrência; excluir aluno não remove competidor; copiar elenco não duplica
   inscrição nem altera histórico.
-- Regressão de escolinhas e autenticação verde; nenhum consumidor restante das
-  rotas esportivas retiradas.
-- `tsc --noEmit` e `npm run build` sem novos erros; `git diff --check` limpo.
+- Regressão de escolinhas e autenticação verde: 106 testes passando em `tests` e `migration_tests`.
+- Suíte de consolidação de competições: 154 testes passando em `competition_tests/consolidacao`.
+- Frontend Playwright E2E: 8 testes passando em `frontend/e2e/`.
+- `tsc --noEmit` com 0 erros, `npm run build` compilando 19 páginas com sucesso e `git diff --check` limpo.
 
 ## 6. Fatia 2 — estrutura da disputa e resultado simples
 
