@@ -119,6 +119,7 @@ def test_alembic_config_aceita_senha_percent_encoded():
 
     resolvida = config.attributes["database_url"]  # o que alembic/env.py usa
     assert resolvida == url
+    assert config.attributes["descartar_competicoes_teste"] is True
     assert make_url(resolvida).password == "p,a@s%s"
 
 

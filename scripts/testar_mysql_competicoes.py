@@ -43,6 +43,8 @@ def _alembic_config(url: str) -> Config:
     # resolve a URL por config.attributes["database_url"], que tem precedencia
     # sobre DATABASE_URL/.env e nao passa por interpolacao.
     config.attributes["database_url"] = url
+    # Seguro: o harness so faz upgrade em banco descartavel, recem-criado e vazio.
+    config.attributes["descartar_competicoes_teste"] = True
     return config
 
 
