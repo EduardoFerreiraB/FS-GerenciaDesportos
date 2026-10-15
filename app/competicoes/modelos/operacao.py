@@ -51,8 +51,7 @@ class RequisicaoPartida(Base):
     """Chave de idempotencia por partida.
 
     Mesma chave e mesmo ``hash_payload`` devolvem ``resultado``; mesma chave com
-    payload diferente e conflito. ``id_partida`` ainda nao tem FK: a tabela de
-    partidas nasce na fatia 2, que acrescenta a chave estrangeira.
+    payload diferente e conflito.
     """
 
     __tablename__ = "requisicoes_partida"
@@ -63,7 +62,9 @@ class RequisicaoPartida(Base):
     )
 
     id_requisicao = Column(Integer, primary_key=True)
-    id_partida = Column(Integer, nullable=False)
+    id_partida = Column(
+        Integer, ForeignKey("partidas.id_partida", ondelete="CASCADE"), nullable=False
+    )
     chave_idempotencia = Column(String(64), nullable=False)
     hash_payload = Column(String(64), nullable=False)
     resultado = Column(JSON, nullable=True)

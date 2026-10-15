@@ -31,6 +31,7 @@ os.environ.setdefault("SECRET_KEY", "competition-test-secret")
 
 REVISAO_ANTERIOR = "20261015_0100"
 REVISAO_CONSOLIDACAO = "20261015_0200"
+REVISAO_FATIA2 = "20261015_0300"
 
 
 @dataclass

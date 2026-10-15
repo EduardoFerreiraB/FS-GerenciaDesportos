@@ -23,10 +23,10 @@ def test_tabelas_novas_existem(schema_migrado):
 
 def test_tabelas_antigas_removidas(schema_migrado):
     assert not {
-        "equipes_participantes", "partidas", "estatisticas_partida", "confrontos",
+        "equipes_participantes", "estatisticas_partida", "confrontos",
         "jogadores", "grupos_competicoes", "edicoes", "modalidades_evento",
         "inscricoes_individuais", "provas", "resultados_prova",
-        "migracao_equipes_origem", "migracao_partidas_origem", "ocorrencias_partida",
+        "migracao_equipes_origem", "migracao_partidas_origem",
     } & set(schema_migrado.get_table_names())
 
 
@@ -206,14 +206,31 @@ def test_auditoria_preserva_autor_legivel_se_conta_sumir(db):
 
 def test_requisicao_partida_chave_unica_por_partida(db):
     from competicoes.modelos import RequisicaoPartida
+    from competicoes.modelos.partidas import Partida
+
+    edicao = f.criar_edicao_competicao(db)
+    equipe_a = f.criar_equipe(db, edicao, nome="Equipe A")
+    equipe_b = f.criar_equipe(db, edicao, nome="Equipe B")
+    p1 = Partida(
+        id_edicao_competicao=edicao.id_edicao_competicao,
+        id_equipe_mandante=equipe_a.id_equipe,
+        id_equipe_visitante=equipe_b.id_equipe,
+    )
+    p2 = Partida(
+        id_edicao_competicao=edicao.id_edicao_competicao,
+        id_equipe_mandante=equipe_b.id_equipe,
+        id_equipe_visitante=equipe_a.id_equipe,
+    )
+    db.add_all([p1, p2])
+    db.flush()
 
     def nova(id_partida):
         return RequisicaoPartida(
             id_partida=id_partida, chave_idempotencia="k1", hash_payload="h" * 64,
         )
 
-    db.add_all([nova(1), nova(2)])
+    db.add_all([nova(p1.id_partida), nova(p2.id_partida)])
     db.flush()
-    db.add(nova(1))
+    db.add(nova(p1.id_partida))
     with pytest.raises(IntegrityError, match="UNIQUE"):
         db.flush()

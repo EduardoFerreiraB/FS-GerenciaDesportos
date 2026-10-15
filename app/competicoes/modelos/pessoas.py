@@ -55,12 +55,19 @@ class Equipe(Base):
         UniqueConstraint("id_edicao_competicao", "nome", name="uq_equipes_edicao_nome"),
         # Alvo da FK composta de integrantes_equipe; id_equipe ja e PK.
         UniqueConstraint("id_edicao_competicao", "id_equipe", name="uq_equipes_edicao_equipe"),
+        ForeignKeyConstraint(
+            ["id_edicao_competicao", "id_grupo"],
+            ["grupos_competicao.id_edicao_competicao", "grupos_competicao.id_grupo"],
+            name="fk_equipes_grupo_edicao",
+        ),
+        Index("ix_equipes_edicao_grupo", "id_edicao_competicao", "id_grupo"),
     )
 
     id_equipe = Column(Integer, primary_key=True)
     id_edicao_competicao = Column(
         Integer, ForeignKey("edicoes_competicao.id_edicao_competicao"), nullable=False
     )
+    id_grupo = Column(Integer, nullable=True)
     nome = Column(String(200), nullable=False)
     sigla = Column(String(10), nullable=True)
     situacao = Column(
@@ -72,6 +79,12 @@ class Equipe(Base):
 
     edicao_competicao = relationship("EdicaoCompeticao", back_populates="equipes")
     integrantes = relationship("IntegranteEquipe", back_populates="equipe")
+    grupo = relationship(
+        "GrupoCompeticao",
+        back_populates="equipes",
+        foreign_keys="[Equipe.id_edicao_competicao, Equipe.id_grupo]",
+        overlaps="edicao_competicao,equipes",
+    )
 
 
 class IntegranteEquipe(Base):

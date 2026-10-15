@@ -23,9 +23,11 @@ def _revisao_atual(engine):
 
 def test_revisao_encadeada_no_baseline():
     from alembic.script import ScriptDirectory
+    from .conftest import REVISAO_FATIA2
 
     script = ScriptDirectory.from_config(config_alembic("sqlite://", descartar=False))
-    assert [r.revision for r in script.get_revisions("heads")] == [REVISAO_CONSOLIDACAO]
+    assert [r.revision for r in script.get_revisions("heads")] == [REVISAO_FATIA2]
+    assert script.get_revision(REVISAO_FATIA2).down_revision == REVISAO_CONSOLIDACAO
     assert script.get_revision(REVISAO_CONSOLIDACAO).down_revision == REVISAO_ANTERIOR
 
 
@@ -76,7 +78,8 @@ def test_upgrade_preserva_dados_de_escolinhas(sqlite_com_dados_sinteticos):
         assert depois[tabela] == antes[tabela], tabela
     tabelas = sqlite_com_dados_sinteticos.tabelas()
     assert "equipes_participantes" not in tabelas and "confrontos" not in tabelas
-    assert _revisao_atual(engine) == REVISAO_CONSOLIDACAO
+    from .conftest import REVISAO_FATIA2
+    assert _revisao_atual(engine) == REVISAO_FATIA2
 
 
 def test_upgrade_de_snapshot_e_de_banco_vazio_chegam_ao_mesmo_schema(
@@ -104,6 +107,10 @@ def test_upgrade_de_snapshot_e_de_banco_vazio_chegam_ao_mesmo_schema(
 
 def test_downgrade_da_consolidacao_falha_sem_mutar(sqlite_na_head):
     engine = sqlite_na_head.engine
+    # Downgrade da fatia 2 (0300 -> 0200) e seguro e suportado:
+    command.downgrade(config_alembic(sqlite_na_head.url, descartar=True), REVISAO_CONSOLIDACAO)
+    assert _revisao_atual(engine) == REVISAO_CONSOLIDACAO
+    # Downgrade da consolidacao (0200 -> 0100) e bloqueado com instrucao de restauracao por backup:
     antes = set(inspect(engine).get_table_names())
     with pytest.raises(RuntimeError, match="backup"):
         command.downgrade(config_alembic(sqlite_na_head.url, descartar=True), "-1")
