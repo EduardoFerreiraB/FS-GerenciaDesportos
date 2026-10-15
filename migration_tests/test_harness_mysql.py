@@ -70,3 +70,35 @@ def test_schema_equivale_orm_em_mysql():
         pytest.skip("defina HARNESS_MYSQL_URL (servidor MySQL/TiDB sem nome de banco)")
     from scripts.testar_mysql_competicoes import main
     assert main([]) == 0
+
+
+def test_unicidade_ignora_mecanismo_como_o_mysql_reflete():
+    """ORM: Index unico ix_*; MySQL: indice com duplicates_constraint + constraint."""
+    from scripts.testar_mysql_competicoes import _comparar_indices
+
+    refletidos = [
+        {"name": "ix_t_email", "column_names": ["email"], "unique": True,
+         "duplicates_constraint": "ix_t_email"},
+    ]
+    refletidas_unicas = [{"name": "ix_t_email", "column_names": ["email"]}]
+    assert _comparar_indices(
+        "t", {("email",)}, {}, refletidos, refletidas_unicas, []
+    ) == []
+    # unicidade realmente ausente continua sendo reportada
+    assert _comparar_indices("t", {("email",)}, {}, [], [], [])
+
+
+def test_indice_implicito_de_fk_e_ignorado_mas_indice_avulso_e_reportado():
+    from scripts.testar_mysql_competicoes import _comparar_indices
+
+    fks = [{"name": "fk_t_pai", "constrained_columns": ["id_pai"]}]
+    implicito = {"name": "fk_t_pai", "column_names": ["id_pai"], "unique": False}
+    avulso = {"name": "ix_qualquer", "column_names": ["id_pai"], "unique": False}
+    assert _comparar_indices("t", set(), {}, [implicito], [], fks) == []
+    linhas = _comparar_indices("t", set(), {}, [avulso], [], fks)
+    assert any("ix_qualquer" in linha for linha in linhas)
+    # se o ORM ja declara indice nessa coluna, o implicito nao e tolerado
+    linhas = _comparar_indices(
+        "t", set(), {"ix_t_id_pai": ("id_pai",)}, [implicito], [], fks
+    )
+    assert any("fk_t_pai" in linha for linha in linhas)

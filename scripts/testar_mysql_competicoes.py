@@ -87,6 +87,47 @@ def _diff(rotulo: str, esperado: dict, atual: dict) -> list[str]:
     return linhas
 
 
+def _comparar_indices(
+    nome: str,
+    tabela_unicos: set,
+    tabela_indices: dict,
+    refletidos: list,
+    refletidas_unicas: list,
+    fks: list,
+) -> list[str]:
+    """Compara unicidade (um unico conjunto por colunas) e indices nao unicos.
+
+    No ORM, ``unique=True, index=True`` gera um Index unico, enquanto no banco a
+    mesma garantia pode aparecer como constraint, como indice unico ou ambos
+    (MySQL marca ``duplicates_constraint``). Por isso a unicidade e comparada
+    por tupla de colunas, sem distinguir o mecanismo.
+    """
+    atual_unicos = {tuple(i["column_names"]) for i in refletidos if i.get("unique")}
+    atual_unicos |= {tuple(u["column_names"]) for u in refletidas_unicas}
+    linhas = _diff(
+        f"{nome}.unicidade",
+        {c: None for c in tabela_unicos},
+        {c: None for c in atual_unicos},
+    )
+
+    cobertas_orm = set(tabela_indices.values()) | tabela_unicos
+    implicitos = set()
+    for fk in fks:
+        cols = tuple(fk["constrained_columns"])
+        if len(cols) != 1 or cols in cobertas_orm:
+            continue
+        implicitos |= {fk.get("name"), cols[0]}
+    atual_indices = {}
+    for idx in refletidos:
+        if idx.get("unique"):
+            continue
+        cols = tuple(idx["column_names"])
+        if idx["name"] not in tabela_indices and idx["name"] in implicitos and len(cols) == 1:
+            continue  # indice implicito que o MySQL cria para a FK
+        atual_indices[idx["name"]] = cols
+    return linhas + _diff(f"{nome}.indice", tabela_indices, atual_indices)
+
+
 def comparar_schema(url: str) -> list[str]:
     """Aplica ``upgrade head`` em ``url`` e devolve as divergencias para o ORM."""
     import models
@@ -134,33 +175,23 @@ def comparar_schema(url: str) -> list[str]:
                 {n: True for n, c in colunas.items() if c["primary_key"]},
             )
 
-            esperado_uq = {
-                tuple(c.name for c in uq.columns): None
-                for uq in tabela.constraints
-                if uq.__class__.__name__ == "UniqueConstraint"
-            }
-            atual_uq = {
-                tuple(uq["column_names"]): None
-                for uq in atual.get_unique_constraints(nome)
-            }
-            divergencias += _diff(rotulo("unicidade"), esperado_uq, atual_uq)
-
-            esperado_idx = {
-                i.name: (tuple(c.name for c in i.columns), bool(i.unique))
-                for i in tabela.indexes
-            }
-            fks_cols = {tuple(fk["constrained_columns"]) for fk in atual.get_foreign_keys(nome)}
-            atual_idx = {}
-            for idx in atual.get_indexes(nome):
-                cols = tuple(idx["column_names"])
-                if idx.get("duplicates_constraint"):
-                    continue  # espelho de UNIQUE constraint (MySQL)
-                if idx["name"] not in esperado_idx and cols in fks_cols:
-                    continue  # indice implicito criado pelo MySQL para a FK
-                if idx["name"] not in esperado_idx and bool(idx.get("unique")) and cols in atual_uq:
-                    continue  # espelho de UNIQUE constraint (SQLite)
-                atual_idx[idx["name"]] = (cols, bool(idx.get("unique")))
-            divergencias += _diff(rotulo("indice"), esperado_idx, atual_idx)
+            divergencias += _comparar_indices(
+                nome,
+                tabela_unicos={
+                    tuple(c.name for c in obj.columns)
+                    for obj in (*tabela.constraints, *tabela.indexes)
+                    if obj.__class__.__name__ == "UniqueConstraint"
+                    or (obj.__class__.__name__ == "Index" and obj.unique)
+                },
+                tabela_indices={
+                    i.name: tuple(c.name for c in i.columns)
+                    for i in tabela.indexes
+                    if not i.unique
+                },
+                refletidos=atual.get_indexes(nome),
+                refletidas_unicas=atual.get_unique_constraints(nome),
+                fks=atual.get_foreign_keys(nome),
+            )
 
             esperado_fk = {}
             for constraint in tabela.foreign_key_constraints:
