@@ -81,8 +81,11 @@ def upgrade() -> None:
         )
 
     conn = op.get_bind()
-    insp = sa.inspect(conn)
-    tabelas_existentes = set(insp.get_table_names())
+    if context.is_offline_mode():
+        tabelas_existentes = set(TABELAS_ANTIGAS)
+    else:
+        insp = sa.inspect(conn)
+        tabelas_existentes = set(insp.get_table_names())
 
     is_mysql = conn.dialect.name in ("mysql", "mariadb")
     if is_mysql:

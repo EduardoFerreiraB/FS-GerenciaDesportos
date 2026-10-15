@@ -8,6 +8,13 @@ por padrao, entao a camada de servico precisa repetir cada uma (lista em
 ``CHECKS_PARA_SERVICO``).
 """
 
+from competicoes.modelos.disputa import (
+    DueloEliminatorio,
+    ESTADOS_DUELO,
+    GrupoCompeticao,
+    ORIGENS_VAGA,
+    VagaDuelo,
+)
 from competicoes.modelos.operacao import AuditoriaCompeticao, RequisicaoPartida
 from competicoes.modelos.organizacao import (
     Competicao,
@@ -16,6 +23,12 @@ from competicoes.modelos.organizacao import (
     Evento,
     ESTADOS_EDICAO,
     FORMATOS_EDICAO,
+)
+from competicoes.modelos.partidas import (
+    ESTADOS_PARTIDA,
+    OcorrenciaPartida,
+    Partida,
+    TIPOS_OCORRENCIA,
 )
 from competicoes.modelos.pessoas import (
     Competidor,
@@ -29,6 +42,7 @@ CHECKS_PARA_SERVICO = {
     "ck_edicoes_evento_periodo": ("edicoes_evento", "data_inicio <= data_fim"),
     "ck_edicoes_competicao_periodo": ("edicoes_competicao", "data_inicio <= data_fim"),
     "ck_edicoes_competicao_revisao": ("edicoes_competicao", "revisao >= 1"),
+    "ck_partidas_equipes_distintas": ("partidas", "id_equipe_mandante <> id_equipe_visitante"),
 }
 
 __all__ = [
@@ -36,14 +50,23 @@ __all__ = [
     "CHECKS_PARA_SERVICO",
     "Competicao",
     "Competidor",
+    "DueloEliminatorio",
+    "ESTADOS_DUELO",
     "ESTADOS_EDICAO",
+    "ESTADOS_PARTIDA",
     "EdicaoCompeticao",
     "EdicaoEvento",
     "Equipe",
     "Evento",
     "FORMATOS_EDICAO",
+    "GrupoCompeticao",
     "IntegranteEquipe",
+    "OcorrenciaPartida",
+    "ORIGENS_VAGA",
+    "Partida",
     "RequisicaoPartida",
     "SITUACOES_EQUIPE",
     "SITUACOES_INTEGRANTE",
+    "TIPOS_OCORRENCIA",
+    "VagaDuelo",
 ]

@@ -142,6 +142,9 @@ def test_mysql_offline_upgrade_compiles_initial_schema():
     assert "create table integrantes_equipe" in ddl
     assert "foreign key(id_edicao_competicao, id_equipe) references equipes" in ddl
     assert "check (data_inicio <= data_fim)" in ddl
+    # Fatia 2: disputa, duelos e partidas.
+    assert "create table partidas" in ddl
+    assert "create table ocorrencias_partida" in ddl
 
 
 def test_baseline_roundtrip_em_banco_vazio(tmp_path):
@@ -184,7 +187,8 @@ def test_importing_api_does_not_create_database_schema(tmp_path):
 def test_cadeia_linear_baseline_e_consolidacao(tmp_path):
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_config(f"sqlite:///{tmp_path / 'x.sqlite'}"))
-    assert [revision.revision for revision in script.get_revisions("heads")] == ["20261015_0200"]
+    assert [revision.revision for revision in script.get_revisions("heads")] == ["20261015_0300"]
+    assert script.get_revision("20261015_0300").down_revision == "20261015_0200"
     assert script.get_revision("20261015_0200").down_revision == "20261015_0100"
     assert script.get_revision("20261015_0100").down_revision is None
 
