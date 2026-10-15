@@ -46,72 +46,40 @@ A transição segue o padrão **Expand/Contract (Duas Etapas)** para eliminar do
 
 ## 3. Etapa 1 — Rollout Aditivo e Compatível (Banco de Dados & Backend)
 
-### 3.1 Ensaio Offline com Dados Anonimizados (Rehearsal)
-Antes de executar alterações no banco transacional de produção, valide a reconciliação em cópias locais anonimizadas:
+### 3.1 Aplicação das Migrações no Banco de Produção (Alembic)
 
-1. **Validação da Migração de Equipes (Passo 3)**:
-   ```bash
-   python scripts/validar_migracao_equipes.py \
-     --antes /tmp/dump_anonimizado_0002.sqlite \
-     --depois /tmp/dump_anonimizado_0003.sqlite \
-     --relatorio /tmp/relatorio_migracao_equipes.json
-   ```
-   - [ ] Confirmar saída com código de retorno `0`.
-   - [ ] Inspecionar `relatorio_migracao_equipes.json`:
-     - `"erros": []`
-     - `"participantes_preservados": true`
-     - `"partidas_antes" == "partidas_depois"`
-     - Analisar eventuais equipes em `"pendencias_manuais": []`.
-
-2. **Validação da Migração de Confrontos (Passo 4)**:
-   ```bash
-   python scripts/validar_migracao_confrontos.py \
-     --antes /tmp/dump_anonimizado_0003.sqlite \
-     --depois /tmp/dump_anonimizado_0004.sqlite \
-     --amostra 20 \
-     --relatorio /tmp/relatorio_migracao_confrontos.json
-   ```
-   - [ ] Confirmar saída com código de retorno `0`.
-   - [ ] Inspecionar `relatorio_migracao_confrontos.json`:
-     - `"valido": true`
-     - `"discrepancias": []`
-     - Conferir a seção `"amostra"` para verificar equivalência de campos (`data`, `hora`, `placar`, `arbitro`, `local`).
-
-### 3.2 Compilação de DDL e Aplicação das Migrações no Banco de Produção
-
-1. **Inspeção Prévia do SQL Gerado para MySQL (Modo Offline)**:
+1. **Inspeção Prévia do SQL Gerado (Modo Offline)**:
    ```bash
    DATABASE_URL="mysql+pymysql://<user>:<pwd>@<host>/<db>" alembic upgrade head --sql > /tmp/migration_preview.sql
    ```
-   - [ ] Revisar `/tmp/migration_preview.sql` e verificar a criação ordenada das tabelas:
-     - `20260824_0001`: Schema inicial base.
-     - `20260824_0002`: Suporte a rascunho em competições (`ALTER TABLE competicoes MODIFY ... NULL`).
-     - `20260824_0003`: Tabela de auditoria `migracao_equipes_origem`.
-     - `20260824_0004`: Tabela `confrontos` e auditoria `migracao_partidas_origem`.
-     - `20260824_0005`: Tabelas `inscricoes_individuais`, `provas` e `resultados_prova`.
+   - [ ] Revisar `/tmp/migration_preview.sql` e verificar a cadeia de migrações:
+     - `20261015_0100`: Baseline derivado do metadata ORM (escolinhas e infraestrutura base).
+     - `20261015_0200`: Consolidação do domínio de competições de futebol (remoção do legado e criação das tabelas definitivas).
 
 2. **Aplicação das Migrações em Produção**:
+   > [!IMPORTANT]
+   > A migração `20261015_0200` descarta as tabelas de competições legadas e exige explicitamente a opção de descarte:
    ```bash
-   alembic upgrade head
+   alembic upgrade head -x descartar_competicoes_teste=sim
    ```
    - [ ] Verificar status do Alembic:
      ```bash
      alembic current
      ```
-     Deverá exibir a revisão `20260824_0005 (head)`.
+     Deverá exibir a revisão `20261015_0200 (head)`.
 
-### 3.3 Deploy e Validação do Backend (API)
+### 3.2 Deploy e Validação do Backend (API)
 
 1. **Deploy da Release da API**:
-   - No Render ou servidor de aplicação, efetuar o deploy da imagem Docker contendo o novo código da API.
+   - No Render ou servidor de aplicação, efetuar o deploy da release contendo o código atualizado.
 2. **Smoke Test de Saúde e Endpoints**:
-   - [ ] Healthcheck: `GET /health` -> `200 OK`.
-   - [ ] Documentação OpenAPI: `GET /docs` -> `200 OK` (verificar novos esquemas e tags de Competições, Confrontos e Individuais).
-   - [ ] Endpoints legados de Edições e Modalidades continuam respondendo normalmente:
-     - `GET /edicoes/` -> `200 OK`.
+   - [ ] Healthcheck: `GET /health` -> `200 OK` (`{"status": "ok", "database": "connected"}`).
+   - [ ] Documentação OpenAPI: `GET /docs` -> `200 OK` (verificar tag `Competições` com prefixo `/competicoes`).
+   - [ ] Endpoints de escolinhas continuam respondendo normalmente:
      - `GET /modalidades/` -> `200 OK`.
-3. **Validação de Integridade de Exclusão**:
-   - [ ] Confirmar que tentar deletar uma Edição com competições iniciadas retorna `400 Bad Request` com a mensagem instruindo a remoção prévia das competições.
+     - `GET /alunos/` -> `200 OK`.
+   - [ ] Rota legada de inscrição de atletas descontinuada:
+     - `POST /atletas/equipe/1` -> `410 Gone`.
 
 ---
 
