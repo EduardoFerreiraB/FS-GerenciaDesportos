@@ -80,8 +80,8 @@ export default function Sidebar() {
     },
     {
       icon: Trophy,
-      label: 'Eventos / Competições',
-      href: '/dashboard/eventos',
+      label: 'Competições',
+      href: '/dashboard/competicoes',
       roles: ['admin', 'coordenador']
     },
     {

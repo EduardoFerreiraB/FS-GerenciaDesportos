@@ -23,6 +23,11 @@ const fetcher = (url: string) => api.get(url).then(res => res.data);
 
 export default function EventosPage() {
   const router = useRouter();
+
+  React.useEffect(() => {
+    router.replace('/dashboard/competicoes');
+  }, [router]);
+
   const { toast, confirm } = useNotification();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -145,8 +150,8 @@ export default function EventosPage() {
               <div className="p-4 border-t border-slate-50 bg-slate-50/30">
                 <Link href={`/dashboard/eventos/${evento.id_evento}`}>
                   <button className="w-full py-2.5 bg-white border border-slate-200 hover:border-amber-500 text-slate-600 hover:text-amber-600 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-sm">
-                    <Trophy size={18} />
-                    Acessar Competição
+                    <Calendar size={18} className="text-amber-500" />
+                    Ver Edições do Evento
                   </button>
                 </Link>
               </div>

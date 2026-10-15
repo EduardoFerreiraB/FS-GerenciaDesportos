@@ -114,3 +114,5 @@ export const atletaService = {
     return response.data;
   }
 };
+
+export * from './competicoes';

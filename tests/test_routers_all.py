@@ -32,6 +32,17 @@ def get_auth_headers(client, db, role: str, username: str):
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
+
+def criar_competicao_equipe(db, id_edicao, id_modalidade):
+    competicao = models.Competicao(
+        id_edicao=id_edicao, id_modalidade=id_modalidade, nome="Competição de teste",
+        categoria="Livre", modo_inscricao="EQUIPE", formato="PONTOS_CORRIDOS",
+        criterio_resultado="PLACAR", data_inicio=date(2026, 1, 1), data_fim=date(2026, 12, 31),
+    )
+    db.add(competicao)
+    db.commit()
+    return competicao.id_competicao
+
 # ==================== TESTS: DATABASE & MAIN ====================
 
 def test_database_url_not_set(monkeypatch):
@@ -258,6 +269,10 @@ def test_edicoes_equipes(client, db):
     )
     assert res.status_code == 201
     id_edicao = res.json()["id_edicao"]
+    modalidade = models.Modalidade(nome="Modalidade EE")
+    db.add(modalidade)
+    db.commit()
+    id_competicao = criar_competicao_equipe(db, id_edicao, modalidade.id_modalidade)
     
     # 2. CRUD Edicoes
     assert client.get("/edicoes/", headers=coord_headers).status_code == 200
@@ -270,7 +285,7 @@ def test_edicoes_equipes(client, db):
     assert res.status_code == 200
     
     # 3. Criar Equipe
-    res = client.post("/equipes/", json={"nome": "Equipe Router", "id_edicao": id_edicao, "grupo": "A"}, headers=coord_headers)
+    res = client.post("/equipes/", json={"nome": "Equipe Router", "id_competicao": id_competicao, "grupo": "A"}, headers=coord_headers)
     assert res.status_code == 201
     id_equipe = res.json()["id_equipe"]
     
@@ -297,7 +312,7 @@ def test_edicoes_equipes(client, db):
     id_edicao_nova = res.json()["id_edicao"]
     
     res = client.post(f"/edicoes/{id_edicao_nova}/clonar-equipes?edicao_origem_id={id_edicao}", headers=coord_headers)
-    assert res.status_code == 200
+    assert res.status_code == 409
     
     # 404s
     assert client.get("/edicoes/99999", headers=coord_headers).status_code == 404
@@ -506,7 +521,8 @@ def test_alunos_atletas_and_files(client, db):
     id_evt = res.json()["id_evento"]
     res = client.post("/edicoes/", json={"id_evento": id_evt, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"}, headers=coord_headers)
     id_ed = res.json()["id_edicao"]
-    res = client.post("/equipes/", json={"nome": "Eq Atl", "id_edicao": id_ed}, headers=coord_headers)
+    id_competicao = criar_competicao_equipe(db, id_ed, id_mod)
+    res = client.post("/equipes/", json={"nome": "Eq Atl", "id_competicao": id_competicao}, headers=coord_headers)
     id_eq = res.json()["id_equipe"]
     
     res = client.post(
@@ -570,9 +586,10 @@ def test_partidas_and_public(client, db):
     id_evento = res.json()["id_evento"]
     res = client.post("/edicoes/", json={"id_evento": id_evento, "edic_ano": 2026, "tipo_competicao": "Mata-Mata", "data_inicio": "2026-01-01", "data_fim": "2026-03-01"}, headers=coord_headers)
     id_edicao = res.json()["id_edicao"]
-    res = client.post("/equipes/", json={"nome": "Eq P1", "id_edicao": id_edicao}, headers=coord_headers)
+    id_competicao = criar_competicao_equipe(db, id_edicao, id_mod)
+    res = client.post("/equipes/", json={"nome": "Eq P1", "id_competicao": id_competicao}, headers=coord_headers)
     id_eq1 = res.json()["id_equipe"]
-    res = client.post("/equipes/", json={"nome": "Eq P2", "id_edicao": id_edicao}, headers=coord_headers)
+    res = client.post("/equipes/", json={"nome": "Eq P2", "id_competicao": id_competicao}, headers=coord_headers)
     id_eq2 = res.json()["id_equipe"]
     
     # Criar final primeiro (para usar como id_proxima_partida)

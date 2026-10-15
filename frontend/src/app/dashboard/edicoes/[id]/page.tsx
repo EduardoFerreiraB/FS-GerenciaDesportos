@@ -2,13 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { 
-  Users, 
-  ArrowLeft, 
-  Plus, 
-  Eye, 
-  Trash2, 
-  Loader2, 
+import {
+  Users,
+  ArrowLeft,
+  Plus,
+  Eye,
+  Trash2,
+  Loader2,
   AlertTriangle,
   Trophy,
   Calendar,
@@ -23,12 +23,17 @@ import {
   AlertCircle,
   CheckCircle2,
   FileText,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Play,
+  ChevronRight
 } from 'lucide-react';
 import useSWR, { mutate } from 'swr';
 import api from '@/lib/api';
 import { useForm } from 'react-hook-form';
 import Link from 'next/link';
+import ModalNovaCompeticao from '@/components/competicoes/ModalNovaCompeticao';
+import { competicaoService } from '@/services/competicoes';
+import { Competicao } from '@/types/competicoes';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
@@ -37,8 +42,13 @@ export default function DetalhesEdicaoPage() {
   const params = useParams();
   const id = params.id as string;
 
+  useEffect(() => {
+    router.replace('/dashboard/competicoes');
+  }, [router]);
+
    // Estados dos Modais
-  const [activeTab, setActiveTab] = useState<'equipes' | 'partidas' | 'jogadores'>('equipes');
+  const [activeTab, setActiveTab] = useState<'competicoes' | 'equipes' | 'partidas' | 'jogadores'>('competicoes');
+  const [isCompeticaoModalOpen, setIsCompeticaoModalOpen] = useState(false);
   const [isEquipeModalOpen, setIsEquipeModalOpen] = useState(false);
   const [isPartidaModalOpen, setIsPartidaModalOpen] = useState(false);
   const [selectedMatchForScore, setSelectedMatchForScore] = useState<any | null>(null);
@@ -55,6 +65,10 @@ export default function DetalhesEdicaoPage() {
 
   // Data Fetching
   const { data: edicao, error, isLoading } = useSWR(id ? `/edicoes/${id}` : null, fetcher);
+  const { data: competicoes, mutate: mutateCompeticoes, isLoading: loadingCompeticoes } = useSWR<Competicao[]>(
+    id ? `/edicoes/${id}/competicoes` : null,
+    fetcher
+  );
   const { data: equipes, isLoading: loadingEquipes } = useSWR(id ? `/equipes/edicao/${id}` : null, fetcher);
   const { data: matches, mutate: mutateMatches, isLoading: loadingMatches } = useSWR(id ? `/partidas/edicao/${id}` : null, fetcher);
   const { data: editionStats } = useSWR(id ? `/publico/edicoes/${id}/estatisticas` : null, fetcher);
@@ -102,7 +116,7 @@ export default function DetalhesEdicaoPage() {
   // Computa a Tabela de Classificação
   const classificationTable = useMemo(() => {
     if (!equipes || !filteredMatches) return [];
-    
+
     // Inicializar mapa de estatísticas para todas as equipes
     const statsMap: Record<number, any> = {};
     equipes.forEach((eq: any) => {
@@ -189,7 +203,7 @@ export default function DetalhesEdicaoPage() {
   // Extrair lista de todos os jogadores com estatísticas acumuladas
   const todosJogadores = useMemo(() => {
     if (!equipes) return [];
-    
+
     const list: any[] = [];
     equipes.forEach((eq: any) => {
       eq.participantes?.forEach((part: any) => {
@@ -272,6 +286,28 @@ export default function DetalhesEdicaoPage() {
     }
   };
 
+  const handleIniciarCompeticao = async (idCompeticao: number) => {
+    if (confirm('Deseja iniciar esta competição? As configurações de modo e formato serão congeladas.')) {
+      try {
+        await competicaoService.iniciar(idCompeticao);
+        mutateCompeticoes();
+      } catch (err: any) {
+        alert(err.response?.data?.detail || 'Erro ao iniciar competição.');
+      }
+    }
+  };
+
+  const handleDeleteCompeticao = async (idCompeticao: number) => {
+    if (confirm('Deseja realmente excluir esta competição? Esta ação não pode ser desfeita.')) {
+      try {
+        await competicaoService.excluir(idCompeticao);
+        mutateCompeticoes();
+      } catch (err: any) {
+        alert(err.response?.data?.detail || 'Erro ao excluir competição. Verifique se existem vínculos.');
+      }
+    }
+  };
+
   if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-600" size={48}/></div>;
 
   return (
@@ -288,30 +324,37 @@ export default function DetalhesEdicaoPage() {
               {edicao?.evento?.even_nome}
             </span>
           </h1>
-          <p className="text-slate-500">
-            Formato: <strong className="text-blue-600">{edicao?.tipo_competicao}</strong> 
-            {edicao?.tipo_competicao === 'Mata-Mata' && ` (Inicia em: ${edicao?.fase_inicial})`} | Período: {new Date(edicao?.data_inicio).toLocaleDateString()} a {new Date(edicao?.data_fim).toLocaleDateString()}
+          <p className="text-slate-500 text-sm mt-1 flex items-center gap-2">
+            <Calendar size={15} className="text-blue-600" />
+            Período: {edicao?.data_inicio ? new Date(edicao.data_inicio).toLocaleDateString('pt-BR') : ''} até {edicao?.data_fim ? new Date(edicao.data_fim).toLocaleDateString('pt-BR') : ''}
           </p>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
-        <button 
+        <button
+          onClick={() => setActiveTab('competicoes')}
+          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${activeTab === 'competicoes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+        >
+          <Trophy size={18} />
+          Competições ({competicoes?.length || 0})
+        </button>
+        <button
           onClick={() => setActiveTab('equipes')}
           className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${activeTab === 'equipes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
           <Users size={18} />
           Equipes Inscritas ({equipes?.length || 0})
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('partidas')}
           className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${activeTab === 'partidas' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
           <Trophy size={18} />
           Confrontos e Partidas
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('jogadores')}
           className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${activeTab === 'jogadores' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
@@ -320,21 +363,169 @@ export default function DetalhesEdicaoPage() {
         </button>
       </div>
 
+      {/* Conteúdo Aba Competições */}
+      {activeTab === 'competicoes' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold text-slate-700 flex items-center gap-2">
+                <Trophy className="text-blue-600" size={20} />
+                Competições da Edição
+              </h2>
+              <p className="text-sm text-slate-500">
+                Gerencie as competições por modalidade, categoria e modo de disputa (equipes ou individual).
+              </p>
+            </div>
+            <button
+              onClick={() => setIsCompeticaoModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-100"
+            >
+              <Plus size={18} />
+              Nova Competição
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {competicoes?.map((comp: Competicao) => {
+              const statusConfig: Record<string, { label: string; badgeClass: string }> = {
+                RASCUNHO: { label: 'Rascunho', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
+                PLANEJADA: { label: 'Planejada', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' },
+                EM_ANDAMENTO: { label: 'Em Andamento', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                FINALIZADA: { label: 'Finalizada', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' },
+                CANCELADA: { label: 'Cancelada', badgeClass: 'bg-red-50 text-red-700 border-red-200' },
+              };
+
+              const formatoLabels: Record<string, string> = {
+                PONTOS_CORRIDOS: 'Pontos Corridos',
+                GRUPOS: 'Fase de Grupos',
+                MATA_MATA: 'Mata-Mata',
+                TABELA_UNICA: 'Tabela Única (Provas)',
+              };
+
+              const statusInfo = statusConfig[comp.status] || { label: comp.status, badgeClass: 'bg-slate-50 text-slate-700 border-slate-200' };
+
+              return (
+                <div
+                  key={comp.id_competicao}
+                  className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-all group p-6 space-y-4 flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold">
+                        <Trophy size={24} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${statusInfo.badgeClass}`}>
+                          {statusInfo.label}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteCompeticao(comp.id_competicao)}
+                          title="Excluir competição"
+                          className="p-1.5 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 rounded-lg hover:bg-red-50 cursor-pointer"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-800 line-clamp-1">
+                        {comp.nome}
+                      </h3>
+                      <p className="text-sm font-medium text-slate-500 mt-0.5">
+                        {comp.modalidade?.nome || 'Modalidade'} &bull; <span className="text-slate-700 font-semibold">{comp.categoria}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${
+                        comp.modo_inscricao === 'EQUIPE'
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                      }`}>
+                        {comp.modo_inscricao === 'EQUIPE' ? '👥 Coletivo (Equipes)' : '🏃 Individual'}
+                      </span>
+                      <span className="text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200">
+                        {comp.formato ? (formatoLabels[comp.formato] || comp.formato) : 'Sem formato'}
+                      </span>
+                    </div>
+
+                    {(comp.data_inicio || comp.data_fim) && (
+                      <div className="text-xs text-slate-400 flex items-center gap-1.5 pt-1">
+                        <Calendar size={13} />
+                        <span>
+                          {comp.data_inicio ? new Date(comp.data_inicio).toLocaleDateString() : 'A definir'}
+                          {comp.data_fim ? ` até ${new Date(comp.data_fim).toLocaleDateString()}` : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
+                    {comp.status === 'RASCUNHO' && (
+                      <button
+                        onClick={() => handleIniciarCompeticao(comp.id_competicao)}
+                        className="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play size={14} />
+                        Iniciar Competição
+                      </button>
+                    )}
+                    <Link
+                      href={`/dashboard/competicoes/${comp.id_competicao}`}
+                      className="w-full py-2.5 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 group/btn"
+                    >
+                      <span>Acessar Competição</span>
+                      <ChevronRight size={16} className="text-slate-400 group-hover/btn:translate-x-0.5 transition-transform" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+
+            {(!competicoes || competicoes.length === 0) && (
+              <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                <Trophy size={48} className="mx-auto text-slate-300 mb-4" />
+                <h3 className="text-base font-bold text-slate-700">Nenhuma competição criada nesta edição</h3>
+                <p className="text-slate-400 text-sm mt-1 max-w-md mx-auto">
+                  Crie competições para organizar modalidades coletivas (futsal, basquete) ou provas individuais (atletismo, natação).
+                </p>
+                <button
+                  onClick={() => setIsCompeticaoModalOpen(true)}
+                  className="mt-5 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-md shadow-blue-100 cursor-pointer"
+                >
+                  <Plus size={16} />
+                  Criar Primeira Competição
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Conteúdo Aba Equipes */}
       {activeTab === 'equipes' && (
         <div className="space-y-6">
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 text-sm">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="text-amber-600 shrink-0" size={20} />
+              <span>
+                <strong>Inscrição por Competição:</strong> As equipes agora são inscritas diretamente dentro de cada modalidade esportiva (Competição).
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveTab('competicoes')}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs shrink-0 transition-all shadow-sm"
+            >
+              Ir para Competições
+            </button>
+          </div>
+
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold text-slate-700 flex items-center gap-2">
               <Users className="text-blue-600" size={20} />
-              Lista de Equipes
+              Equipes da Edição ({equipes?.length || 0})
             </h2>
-            <button 
-              onClick={() => setIsEquipeModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-100"
-            >
-              <Plus size={18} />
-              Inscrever Equipe
-            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -344,14 +535,14 @@ export default function DetalhesEdicaoPage() {
                   <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                     <Trophy size={24} />
                   </div>
-                  <button 
+                  <button
                     onClick={() => handleDeleteEquipe(equipe.id_equipe)}
                     className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Trash2 size={18} />
                   </button>
                 </div>
-                
+
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                     {equipe.nome}
@@ -365,7 +556,7 @@ export default function DetalhesEdicaoPage() {
                 </div>
 
                 <div className="pt-4 border-t border-slate-50">
-                  <Link 
+                  <Link
                     href={`/dashboard/equipes/${equipe.id_equipe}`}
                     className="w-full py-2.5 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
                   >
@@ -389,14 +580,14 @@ export default function DetalhesEdicaoPage() {
       {/* Conteúdo Aba Partidas */}
       {activeTab === 'partidas' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          
+
           {/* Seletor de Modalidade e botões de ação */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <SlidersHorizontal className="text-blue-600" size={20} />
               <label className="font-bold text-slate-700 text-sm">Modalidade:</label>
-              <select 
-                value={selectedModalidadeId} 
+              <select
+                value={selectedModalidadeId}
                 onChange={(e) => setSelectedModalidadeId(e.target.value)}
                 className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
               >
@@ -417,7 +608,7 @@ export default function DetalhesEdicaoPage() {
                 {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <ListPlus size={16} />}
                 Gerar Confrontos
               </button>
-              
+
               <button
                 onClick={() => setIsPartidaModalOpen(true)}
                 className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2 rounded-xl transition-all flex items-center gap-2"
@@ -431,14 +622,14 @@ export default function DetalhesEdicaoPage() {
           {/* Sub-navegação do tipo de campeonato */}
           {filteredMatches.length > 0 && (
             <div className="flex gap-2 bg-slate-100 p-1 rounded-xl self-start w-fit">
-              <button 
+              <button
                 onClick={() => setPartidasSubTab('confrontos')}
                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${partidasSubTab === 'confrontos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 Lista de Jogos
               </button>
               {(edicao?.tipo_competicao === 'Pontos Corridos' || edicao?.tipo_competicao === 'Grupos') && (
-                <button 
+                <button
                   onClick={() => setPartidasSubTab('tabela')}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${partidasSubTab === 'tabela' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                 >
@@ -446,7 +637,7 @@ export default function DetalhesEdicaoPage() {
                 </button>
               )}
               {(edicao?.tipo_competicao === 'Mata-Mata' || edicao?.tipo_competicao === 'Grupos') && (
-                <button 
+                <button
                   onClick={() => setPartidasSubTab('arvore')}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${partidasSubTab === 'arvore' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                 >
@@ -480,9 +671,9 @@ export default function DetalhesEdicaoPage() {
                 {filteredMatches
                   .filter((m: any) => !roundFilter || m.fase === roundFilter)
                   .map((match: any) => (
-                    <MatchCard 
+                    <MatchCard
                       key={match.id_partida}
-                      match={match} 
+                      match={match}
                       onLancarPlacar={(m: any) => setSelectedMatchForScore(m)}
                       onManageSumula={(m: any) => setSelectedMatchForSumula(m)}
                       onManageStats={(m: any) => setSelectedMatchForStats(m)}
@@ -497,19 +688,19 @@ export default function DetalhesEdicaoPage() {
           {filteredMatches.length > 0 && partidasSubTab === 'tabela' && (
             edicao?.tipo_competicao === 'Grupos' ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-200">
-                <GroupClassificationTable 
+                <GroupClassificationTable
                   titulo="Grupo A"
                   rows={classificationTable.filter((r: any) => {
                     const eqObj = equipes.find((e: any) => e.id_equipe === r.id_equipe);
                     return eqObj?.grupo === 'A' || !eqObj?.grupo;
-                  })} 
+                  })}
                 />
-                <GroupClassificationTable 
+                <GroupClassificationTable
                   titulo="Grupo B"
                   rows={classificationTable.filter((r: any) => {
                     const eqObj = equipes.find((e: any) => e.id_equipe === r.id_equipe);
                     return eqObj?.grupo === 'B';
-                  })} 
+                  })}
                 />
               </div>
             ) : (
@@ -570,14 +761,14 @@ export default function DetalhesEdicaoPage() {
                               <span>ID: #{match.id_partida}</span>
                               <span className="text-blue-500 uppercase">{match.status}</span>
                             </div>
-                            
+
                             <div className="space-y-2">
                               {/* Equipe Casa */}
                               <div className={`flex justify-between items-center text-sm ${match.status === 'Finalizada' && match.placar_casa > match.placar_visitante ? 'font-bold text-slate-800' : 'text-slate-500'}`}>
                                 <span className="truncate">{match.equipe_casa?.nome || 'A definir'}</span>
                                 <span className="bg-slate-50 px-2 py-0.5 rounded font-black text-xs">{match.status !== 'Agendada' ? match.placar_casa : '-'}</span>
                               </div>
-                              
+
                               {/* Equipe Visitante */}
                               <div className={`flex justify-between items-center text-sm ${match.status === 'Finalizada' && match.placar_visitante > match.placar_casa ? 'font-bold text-slate-800' : 'text-slate-500'}`}>
                                 <span className="truncate">{match.equipe_visitante?.nome || 'A definir'}</span>
@@ -586,7 +777,7 @@ export default function DetalhesEdicaoPage() {
                             </div>
 
                             {/* Botão rápido para lançar placar */}
-                            <button 
+                            <button
                               onClick={() => setSelectedMatchForScore(match)}
                               className="mt-3 w-full py-1 text-center bg-slate-50 hover:bg-blue-50 rounded-lg text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
                             >
@@ -672,6 +863,18 @@ export default function DetalhesEdicaoPage() {
         </div>
       )}
 
+      {/* Modal Nova Competição */}
+      {isCompeticaoModalOpen && (
+        <ModalNovaCompeticao
+          idEdicao={parseInt(id)}
+          onClose={() => setIsCompeticaoModalOpen(false)}
+          onSuccess={() => {
+            setIsCompeticaoModalOpen(false);
+            mutateCompeticoes();
+          }}
+        />
+      )}
+
       {/* Modal Inscrever Equipe */}
       {isEquipeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -681,7 +884,7 @@ export default function DetalhesEdicaoPage() {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
-              handleAddEquipe({ 
+              handleAddEquipe({
                 nome: formData.get('nome'),
                 grupo: formData.get('grupo')
               });
@@ -713,7 +916,7 @@ export default function DetalhesEdicaoPage() {
 
       {/* Modal Agendar Partida (Manual & Inline) */}
       {isPartidaModalOpen && (
-        <ModalAgendarPartida 
+        <ModalAgendarPartida
           idEdicao={id}
           modalidades={edicao?.evento?.modalidades || modalidades}
           equipes={equipes}
@@ -726,7 +929,7 @@ export default function DetalhesEdicaoPage() {
 
       {/* Modal Lançar Placar */}
       {selectedMatchForScore && (
-        <ModalLancarPlacar 
+        <ModalLancarPlacar
           match={selectedMatchForScore}
           onClose={() => setSelectedMatchForScore(null)}
           onSuccess={() => { setSelectedMatchForScore(null); mutateMatches(); }}
@@ -735,7 +938,7 @@ export default function DetalhesEdicaoPage() {
 
       {/* Modal Súmula */}
       {selectedMatchForSumula && (
-        <ModalSumula 
+        <ModalSumula
           match={selectedMatchForSumula}
           onClose={() => setSelectedMatchForSumula(null)}
           onSuccess={() => { setSelectedMatchForSumula(null); mutateMatches(); }}
@@ -744,7 +947,7 @@ export default function DetalhesEdicaoPage() {
 
       {/* Modal Estatísticas de Partida */}
       {selectedMatchForStats && (
-        <ModalEstatisticas 
+        <ModalEstatisticas
           match={selectedMatchForStats}
           onClose={() => setSelectedMatchForStats(null)}
         />
@@ -777,7 +980,7 @@ function MatchCard({ match, onLancarPlacar, onManageSumula, onManageStats, mutat
 
   return (
     <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:shadow-md transition-shadow">
-      
+
       {/* Placar e Equipes */}
       <div className="flex-1 flex items-center justify-center lg:justify-start gap-6">
         <div className="text-right w-40 truncate font-bold text-slate-700">
@@ -839,25 +1042,25 @@ function MatchCard({ match, onLancarPlacar, onManageSumula, onManageStats, mutat
 
       {/* Botões de Ação */}
       <div className="flex gap-2 lg:flex-col justify-end border-t lg:border-t-0 border-slate-100 pt-4 lg:pt-0">
-        <button 
+        <button
           onClick={() => onLancarPlacar(match)}
           className="flex-1 lg:flex-none px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-all"
         >
           Lançar Resultado
         </button>
-        <button 
+        <button
           onClick={() => onManageStats(match)}
           className="flex-1 lg:flex-none px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition-all"
         >
           Estatísticas
         </button>
-        <button 
+        <button
           onClick={() => onManageSumula(match)}
           className="flex-1 lg:flex-none px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-xl transition-all"
         >
           Súmula
         </button>
-        <button 
+        <button
           onClick={handleDelete}
           className="p-2 text-slate-300 hover:text-red-500 rounded-xl transition-colors border border-transparent hover:border-slate-100"
           title="Excluir partida"
@@ -873,7 +1076,7 @@ function MatchCard({ match, onLancarPlacar, onManageSumula, onManageStats, mutat
 // Modal Agendar Partida com Inline Creation
 function ModalAgendarPartida({ idEdicao, modalidades, equipes, locais, arbitros, onClose, onSuccess }: any) {
   const { register, handleSubmit, formState: { isSubmitting } } = useForm();
-  
+
   const [isLocalInline, setIsLocalInline] = useState(false);
   const [isArbitroInline, setIsArbitroInline] = useState(false);
 
@@ -914,10 +1117,10 @@ function ModalAgendarPartida({ idEdicao, modalidades, equipes, locais, arbitros,
       <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 my-8 animate-in zoom-in-95 border border-slate-100 relative max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600"><X /></button>
         <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><PlusCircle className="text-blue-600" /> Agendar Partida</h2>
-        
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
+
             {/* Modalidade */}
             <div className="space-y-1">
               <label className="text-sm font-semibold text-slate-700">Modalidade</label>
@@ -1089,16 +1292,16 @@ function ModalLancarPlacar({ match, onClose, onSuccess }: any) {
         <p className="text-xs text-slate-500 mb-6">Partida #{match.id_partida} - {match.fase}</p>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          
+
           {/* Placar */}
           <div className="flex items-center justify-between gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
             <div className="flex-1 text-center">
               <label className="text-xs font-bold text-slate-500 block mb-1 truncate">{match.equipe_casa?.nome || 'Casa'}</label>
               <input type="number" min={0} {...register('placar_casa', { required: true })} className="w-16 text-center font-black text-xl bg-white border border-slate-200 rounded-lg py-1.5" />
             </div>
-            
+
             <span className="font-black text-slate-400 text-sm">X</span>
-            
+
             <div className="flex-1 text-center">
               <label className="text-xs font-bold text-slate-500 block mb-1 truncate">{match.equipe_visitante?.nome || 'Visitante'}</label>
               <input type="number" min={0} {...register('placar_visitante', { required: true })} className="w-16 text-center font-black text-xl bg-white border border-slate-200 rounded-lg py-1.5" />
@@ -1156,7 +1359,7 @@ function ModalSumula({ match, onClose, onSuccess }: any) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       await api.post(`/partidas/${match.id_partida}/sumula`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -1184,9 +1387,9 @@ function ModalSumula({ match, onClose, onSuccess }: any) {
                 <CheckCircle2 className="text-green-600" size={18} />
                 <span className="text-xs font-bold text-green-700">Arquivo de Súmula Existente</span>
               </div>
-              <a 
-                href={api.defaults.baseURL + match.sumula_arquivo} 
-                target="_blank" 
+              <a
+                href={api.defaults.baseURL + match.sumula_arquivo}
+                target="_blank"
                 rel="noreferrer"
                 className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
               >
@@ -1196,16 +1399,16 @@ function ModalSumula({ match, onClose, onSuccess }: any) {
           )}
 
           <div className="border-2 border-dashed border-slate-200 p-6 rounded-2xl text-center hover:bg-slate-50 transition-colors relative">
-            <input 
-              type="file" 
-              accept=".jpg,.jpeg,.png,.pdf" 
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
               onChange={handleFileChange}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
             <UploadCloud className="mx-auto text-slate-400 mb-2" size={32} />
             <p className="text-xs font-semibold text-slate-600">Arraste ou clique para selecionar arquivo</p>
             <p className="text-[10px] text-slate-400 mt-1">Imagens (JPG, PNG) ou PDF de até 5MB</p>
-            
+
             {file && (
               <p className="mt-3 text-xs font-bold text-blue-600 bg-blue-50 py-1.5 px-3 rounded-lg truncate max-w-xs mx-auto">
                 {file.name}
@@ -1215,9 +1418,9 @@ function ModalSumula({ match, onClose, onSuccess }: any) {
 
           <div className="flex gap-3 pt-2">
             <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 font-semibold text-slate-600">Cancelar</button>
-            <button 
+            <button
               onClick={handleUpload}
-              disabled={!file || isUploading} 
+              disabled={!file || isUploading}
               className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-100 disabled:opacity-50"
             >
               {isUploading ? 'Enviando...' : 'Enviar Súmula'}
@@ -1233,7 +1436,7 @@ function ModalSumula({ match, onClose, onSuccess }: any) {
 function ModalEstatisticas({ match, onClose }: any) {
   // SWR para pegar estatísticas da partida
   const { data: stats, mutate: mutateStats } = useSWR(`/partidas/${match.id_partida}/estatisticas`, fetcher);
-  
+
   // Buscar participantes das equipes participantes da partida para listagem
   const { data: teamCasa } = useSWR(match.id_equipe_casa ? `/equipes/${match.id_equipe_casa}` : null, fetcher);
   const { data: teamVisitante } = useSWR(match.id_equipe_visitante ? `/equipes/${match.id_equipe_visitante}` : null, fetcher);
@@ -1308,7 +1511,7 @@ function ModalEstatisticas({ match, onClose }: any) {
         <p className="text-xs text-slate-500 mb-6">Registre gols, cartões e assistências para os atletas desta partida.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          
+
           {/* Formulário Novo Registro */}
           <div className="space-y-4">
             <h3 className="font-bold text-slate-700 text-sm border-b pb-1.5">Lançar Ação</h3>
@@ -1342,8 +1545,8 @@ function ModalEstatisticas({ match, onClose }: any) {
                 </div>
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isSubmitting}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md shadow-blue-50 mt-4"
               >
@@ -1369,8 +1572,8 @@ function ModalEstatisticas({ match, onClose }: any) {
                         {st.cartoes_vermelhos > 0 && <span className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-black">{st.cartoes_vermelhos} CV</span>}
                       </div>
                     </div>
-                    
-                    <button 
+
+                    <button
                       onClick={() => handleDeleteStat(st.id_estatistica)}
                       className="text-slate-300 hover:text-red-500 p-1"
                     >
@@ -1391,7 +1594,7 @@ function ModalEstatisticas({ match, onClose }: any) {
         <div className="flex justify-end pt-6 mt-6 border-t border-slate-100">
           <button onClick={onClose} className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl text-xs">Fechar Painel</button>
         </div>
-  
+
       </div>
     </div>
   );

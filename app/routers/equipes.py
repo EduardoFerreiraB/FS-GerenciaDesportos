@@ -5,6 +5,7 @@ from database import get_db
 import schemas
 import models
 from services import equipes as service_equipes
+from services import competicoes as service_competicoes
 from security import check_coordenador_role, get_current_active_user
 
 router = APIRouter(
@@ -18,7 +19,25 @@ def criar_equipe(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    return service_equipes.criar_equipe(db=db, equipe=equipe)
+    if equipe.id_competicao is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Informe id_competicao; crie equipes pela competição.",
+        )
+
+    competicao = service_competicoes.listar_competicao(db, equipe.id_competicao)
+    if not competicao:
+        raise HTTPException(status_code=404, detail="Competição não encontrada.")
+    if competicao.modo_inscricao != "EQUIPE":
+        raise HTTPException(status_code=422, detail="A competição não aceita equipes.")
+    if equipe.id_edicao is not None and equipe.id_edicao != competicao.id_edicao:
+        raise HTTPException(status_code=422, detail="A edição deve corresponder à competição informada.")
+
+    return service_equipes.criar_equipe_competicao(
+        db=db,
+        competicao=competicao,
+        equipe=schemas.EquipeCompeticaoCreate(nome=equipe.nome, grupo=equipe.grupo),
+    )
 
 @router.get("/", summary="Listar todas as equipes", response_model=List[schemas.Equipe])
 def listar_equipes(
@@ -55,10 +74,29 @@ def adicionar_participante(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role)
 ):
-    sucesso = service_equipes.adicionar_participante_equipe(db=db, id_equipe=id_equipe, id_participante=id_participante)
+    try:
+        sucesso = service_equipes.adicionar_participante_equipe(db=db, id_equipe=id_equipe, id_participante=id_participante)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     if not sucesso:
         raise HTTPException(status_code=404, detail="Equipe ou Participante não encontrado.")
     return {"message": "Participante adicionado com sucesso."}
+
+@router.delete("/{id_equipe}/participantes/{id_participante}", status_code=status.HTTP_204_NO_CONTENT)
+def remover_participante(
+    id_equipe: int,
+    id_participante: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role),
+):
+    sucesso = service_equipes.remover_participante_equipe(
+        db=db,
+        id_equipe=id_equipe,
+        id_participante=id_participante,
+    )
+    if not sucesso:
+        raise HTTPException(status_code=404, detail="Vínculo de equipe ou participante não encontrado.")
+    return None
 
 @router.delete("/{id_equipe}", status_code=status.HTTP_204_NO_CONTENT)
 def excluir_equipe(
