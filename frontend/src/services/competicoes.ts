@@ -1,248 +1,396 @@
+import axios from 'axios';
 import api from '@/lib/api';
-import {
-  Competicao,
-  CompeticaoCreatePayload,
-  CompeticaoUpdatePayload,
-  EquipeCompeticao,
-  Confronto,
-  InscricaoIndividual,
-  Prova,
-  ResultadoProva,
-  ClassificacaoEquipesResponse,
-  ClassificacaoIndividualResponse,
+import type {
+  AlunoImportar,
+  CompeticaoAtualizar,
+  CompeticaoComEdicaoCriar,
+  CompeticaoDetalhe,
+  CompetidorAtualizar,
+  CompetidorCriar,
+  CompetidorDetalhe,
+  EdicaoCompeticaoAtualizar,
+  EdicaoCompeticaoCriar,
+  EdicaoCompeticaoDetalhe,
+  EdicaoEventoAtualizar,
+  EdicaoEventoCriar,
+  EdicaoEventoDetalhe,
+  EquipeCriar,
+  EquipeDetalhe,
+  EquipesCopiar,
+  ErroApi,
+  EventoAtualizar,
+  EventoComEdicaoCriar,
+  EventoDetalhe,
+  IntegranteAtualizar,
+  IntegranteCriar,
+  IntegranteDetalhe,
+  PaginaCompeticoes,
+  PaginaCompetidores,
+  PaginaEventos,
+  PublicacaoAtualizar,
 } from '@/types/competicoes';
 
-export const competicaoService = {
-  // --- Competições ---
-  listarPorEdicao: async (idEdicao: number): Promise<Competicao[]> => {
-    const response = await api.get(`/edicoes/${idEdicao}/competicoes`);
-    return response.data;
-  },
+// ==========================================
+// Tratamento de Erros da API
+// ==========================================
 
-  obterPorId: async (idCompeticao: number): Promise<Competicao> => {
-    const response = await api.get(`/competicoes/${idCompeticao}`);
-    return response.data;
-  },
+export class ApiError extends Error implements ErroApi {
+  codigo: string;
+  mensagem: string;
+  campos?: string[];
 
-  criar: async (data: CompeticaoCreatePayload & { id_edicao: number }): Promise<Competicao> => {
-    const response = await api.post('/competicoes/', data);
-    return response.data;
-  },
+  constructor(erro: ErroApi) {
+    super(erro.mensagem);
+    this.name = 'ApiError';
+    this.codigo = erro.codigo;
+    this.mensagem = erro.mensagem;
+    this.campos = erro.campos;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
 
-  atualizar: async (idCompeticao: number, data: CompeticaoUpdatePayload): Promise<Competicao> => {
-    const response = await api.put(`/competicoes/${idCompeticao}`, data);
-    return response.data;
-  },
+export function isErroApi(erro: unknown): erro is ErroApi {
+  return (
+    typeof erro === 'object' &&
+    erro !== null &&
+    'codigo' in erro &&
+    'mensagem' in erro
+  );
+}
 
-  iniciar: async (idCompeticao: number): Promise<Competicao> => {
-    const response = await api.post(`/competicoes/${idCompeticao}/iniciar`);
-    return response.data;
-  },
-
-  excluir: async (idCompeticao: number): Promise<void> => {
-    await api.delete(`/competicoes/${idCompeticao}`);
-  },
-
-  // --- Equipes de Competição (Modo EQUIPE) ---
-  listarEquipes: async (idCompeticao: number): Promise<EquipeCompeticao[]> => {
-    const response = await api.get(`/competicoes/${idCompeticao}/equipes`);
-    return response.data;
-  },
-
-  criarEquipe: async (data: { nome: string; id_competicao: number; id_edicao?: number; grupo?: string }): Promise<EquipeCompeticao> => {
-    const response = await api.post('/equipes/', data);
-    return response.data;
-  },
-
-  excluirEquipe: async (idEquipe: number): Promise<void> => {
-    await api.delete(`/equipes/${idEquipe}`);
-  },
-
-  // --- Confrontos (Modo EQUIPE) ---
-  listarConfrontos: async (
-    idCompeticao: number,
-    filtros?: { fase?: string; rodada?: string; grupo?: string }
-  ): Promise<Confronto[]> => {
-    const params = new URLSearchParams();
-    if (filtros?.fase) params.append('fase', filtros.fase);
-    if (filtros?.rodada) params.append('rodada', filtros.rodada);
-    if (filtros?.grupo) params.append('grupo', filtros.grupo);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    const response = await api.get(`/competicoes/${idCompeticao}/confrontos${query}`);
-    return response.data;
-  },
-
-  gerarConfrontos: async (
-    idCompeticao: number,
-    data?: { fase_inicial?: string; data_inicio?: string; hora_padrao?: string; id_local_padrao?: number; id_arbitro_padrao?: number }
-  ): Promise<{ message: string; total_confrontos: number; confrontos: Confronto[] }> => {
-    const response = await api.post(`/competicoes/${idCompeticao}/gerar-confrontos`, data || {});
-    return response.data;
-  },
-
-  criarConfronto: async (data: {
-    id_competicao: number;
-    id_local: number;
-    id_arbitro: number;
-    data: string;
-    hora: string;
-    fase?: string;
-    rodada?: string | number;
-    grupo?: string;
-    id_equipe_mandante?: number;
-    id_equipe_visitante?: number;
-    observacoes?: string;
-  }): Promise<Confronto> => {
-    try {
-      const response = await api.post(`/competicoes/${data.id_competicao}/confrontos`, data);
-      return response.data;
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        const response = await api.post('/confrontos/', data);
-        return response.data;
-      }
-      throw err;
+function normalizarErro(error: unknown): never {
+  if (axios.isAxiosError(error) && error.response?.data) {
+    const data = error.response.data as Record<string, unknown>;
+    if (typeof data === 'object' && data !== null && 'codigo' in data && 'mensagem' in data) {
+      throw new ApiError({
+        codigo: String(data.codigo),
+        mensagem: String(data.mensagem),
+        campos: Array.isArray(data.campos) ? data.campos.map(String) : undefined,
+      });
     }
-  },
+  }
+  throw error;
+}
 
-  atualizarConfronto: async (
-    idConfronto: number,
-    data: {
-      placar_mandante?: number;
-      placar_visitante?: number;
-      status?: string;
-      data?: string;
-      hora?: string;
-      id_local?: number;
-      id_arbitro?: number;
-      sumula_arquivo?: string;
-      observacoes?: string;
-    }
-  ): Promise<Confronto> => {
-    const response = await api.put(`/confrontos/${idConfronto}`, data);
+// ==========================================
+// Parâmetros de Listagem
+// ==========================================
+
+export interface ListarFiltrosPaginados {
+  pagina?: number;
+  tamanho?: number;
+  busca?: string;
+  incluir_arquivados?: boolean;
+}
+
+// ==========================================
+// Organização: Eventos
+// ==========================================
+
+export async function listarEventos(params?: ListarFiltrosPaginados): Promise<PaginaEventos> {
+  try {
+    const response = await api.get<PaginaEventos>('/competicoes/eventos', { params });
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  excluirConfronto: async (idConfronto: number): Promise<void> => {
-    await api.delete(`/confrontos/${idConfronto}`);
-  },
-
-  // --- Inscrições Individuais (Modo INDIVIDUAL) ---
-  listarInscricoes: async (idCompeticao: number): Promise<InscricaoIndividual[]> => {
-    const response = await api.get(`/competicoes/${idCompeticao}/inscricoes`);
+export async function criarEventoComEdicao(dados: EventoComEdicaoCriar): Promise<EventoDetalhe> {
+  try {
+    const response = await api.post<EventoDetalhe>('/competicoes/eventos', dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  inscreverAtleta: async (
-    idCompeticao: number,
-    data: { id_participante: number; numero_peito?: number }
-  ): Promise<InscricaoIndividual> => {
-    const response = await api.post(`/competicoes/${idCompeticao}/inscricoes`, data);
+export async function obterEvento(idEvento: number): Promise<EventoDetalhe> {
+  try {
+    const response = await api.get<EventoDetalhe>(`/competicoes/eventos/${idEvento}`);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  removerInscricao: async (idCompeticao: number, idParticipante: number): Promise<void> => {
-    await api.delete(`/competicoes/${idCompeticao}/inscricoes/${idParticipante}`);
-  },
-
-  // --- Provas (Modo INDIVIDUAL) ---
-  listarProvas: async (idCompeticao: number): Promise<Prova[]> => {
-    const response = await api.get(`/competicoes/${idCompeticao}/provas`);
+export async function atualizarEvento(idEvento: number, dados: EventoAtualizar): Promise<EventoDetalhe> {
+  try {
+    const response = await api.patch<EventoDetalhe>(`/competicoes/eventos/${idEvento}`, dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  criarProva: async (
-    idCompeticao: number,
-    data: {
-      nome: string;
-      data?: string;
-      hora?: string;
-      id_local?: number;
-      status?: string;
-      observacoes?: string;
-    }
-  ): Promise<Prova> => {
-    const response = await api.post(`/competicoes/${idCompeticao}/provas`, data);
+export async function arquivarEvento(idEvento: number): Promise<EventoDetalhe> {
+  return atualizarEvento(idEvento, { arquivado: true });
+}
+
+export async function criarEdicaoEvento(idEvento: number, dados: EdicaoEventoCriar): Promise<EdicaoEventoDetalhe> {
+  try {
+    const response = await api.post<EdicaoEventoDetalhe>(`/competicoes/eventos/${idEvento}/edicoes`, dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  atualizarProva: async (
-    idProva: number,
-    data: {
-      nome?: string;
-      data?: string;
-      hora?: string;
-      id_local?: number;
-      status?: string;
-      observacoes?: string;
-    }
-  ): Promise<Prova> => {
-    const response = await api.put(`/provas/${idProva}`, data);
+export async function atualizarEdicaoEvento(
+  idEdicaoEvento: number,
+  dados: EdicaoEventoAtualizar
+): Promise<EdicaoEventoDetalhe> {
+  try {
+    const response = await api.patch<EdicaoEventoDetalhe>(`/competicoes/edicoes-evento/${idEdicaoEvento}`, dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  excluirProva: async (idProva: number): Promise<void> => {
-    await api.delete(`/provas/${idProva}`);
-  },
+// ==========================================
+// Organização: Competições e Edições
+// ==========================================
 
-  // --- Resultados de Provas (Modo INDIVIDUAL) ---
-  listarResultados: async (idProva: number): Promise<ResultadoProva[]> => {
-    const response = await api.get(`/provas/${idProva}/resultados`);
+export async function listarCompeticoes(params?: ListarFiltrosPaginados): Promise<PaginaCompeticoes> {
+  try {
+    const response = await api.get<PaginaCompeticoes>('/competicoes/competicoes', { params });
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  lancarResultado: async (
-    idProva: number,
-    data: {
-      id_participante: number;
-      tempo_ms: number;
-      desqualificado?: boolean;
-      motivo_desqualificacao?: string;
-      observacoes?: string;
-    }
-  ): Promise<ResultadoProva> => {
-    const response = await api.post(`/provas/${idProva}/resultados`, data);
+export async function criarCompeticaoComEdicao(dados: CompeticaoComEdicaoCriar): Promise<CompeticaoDetalhe> {
+  try {
+    const response = await api.post<CompeticaoDetalhe>('/competicoes/competicoes', dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  atualizarResultado: async (
-    idResultado: number,
-    data: {
-      tempo_ms?: number;
-      desqualificado?: boolean;
-      motivo_desqualificacao?: string;
-      observacoes?: string;
-    },
-    idProva?: number
-  ): Promise<ResultadoProva> => {
-    const url = idProva ? `/provas/${idProva}/resultados/${idResultado}` : `/provas/resultados/${idResultado}`;
-    const response = await api.put(url, data);
+export async function obterCompeticao(idCompeticao: number): Promise<CompeticaoDetalhe> {
+  try {
+    const response = await api.get<CompeticaoDetalhe>(`/competicoes/competicoes/${idCompeticao}`);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  excluirResultado: async (idResultado: number, idProva?: number): Promise<void> => {
-    const url = idProva ? `/provas/${idProva}/resultados/${idResultado}` : `/provas/resultados/${idResultado}`;
-    await api.delete(url);
-  },
-
-  // --- Classificação Centralizada ---
-  obterClassificacao: async (idCompeticao: number): Promise<any> => {
-    const response = await api.get(`/competicoes/${idCompeticao}/classificacao`);
+export async function atualizarCompeticao(
+  idCompeticao: number,
+  dados: CompeticaoAtualizar
+): Promise<CompeticaoDetalhe> {
+  try {
+    const response = await api.patch<CompeticaoDetalhe>(`/competicoes/competicoes/${idCompeticao}`, dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  obterClassificacaoEquipes: async (idCompeticao: number): Promise<ClassificacaoEquipesResponse> => {
-    const response = await api.get(`/competicoes/${idCompeticao}/classificacao-equipes`);
-    return response.data;
-  },
+export async function arquivarCompeticao(idCompeticao: number): Promise<CompeticaoDetalhe> {
+  return atualizarCompeticao(idCompeticao, { arquivado: true });
+}
 
-  obterClassificacaoIndividual: async (idCompeticao: number): Promise<ClassificacaoIndividualResponse> => {
-    const response = await api.get(`/competicoes/${idCompeticao}/classificacao-individual`);
+export async function criarEdicaoCompeticao(
+  idCompeticao: number,
+  dados: EdicaoCompeticaoCriar
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const response = await api.post<EdicaoCompeticaoDetalhe>(`/competicoes/competicoes/${idCompeticao}/edicoes`, dados);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
 
-  obterClassificacaoProva: async (idProva: number): Promise<any> => {
-    const response = await api.get(`/provas/${idProva}/classificacao`);
+export async function obterEdicao(idEdicaoCompeticao: number): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const response = await api.get<EdicaoCompeticaoDetalhe>(`/competicoes/edicoes/${idEdicaoCompeticao}`);
     return response.data;
-  },
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function atualizarEdicao(
+  idEdicaoCompeticao: number,
+  dados: EdicaoCompeticaoAtualizar
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const response = await api.put<EdicaoCompeticaoDetalhe>(`/competicoes/edicoes/${idEdicaoCompeticao}`, dados);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function publicarEdicao(
+  idEdicaoCompeticao: number,
+  publicada: boolean
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const payload: PublicacaoAtualizar = { publicada };
+    const response = await api.post<EdicaoCompeticaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/publicar`,
+      payload
+    );
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function excluirEdicao(idEdicaoCompeticao: number): Promise<void> {
+  try {
+    await api.delete(`/competicoes/edicoes/${idEdicaoCompeticao}`);
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+// ==========================================
+// Elencos: Competidores
+// ==========================================
+
+export async function listarCompetidores(params?: {
+  pagina?: number;
+  tamanho?: number;
+  busca?: string;
+}): Promise<PaginaCompetidores> {
+  try {
+    const response = await api.get<PaginaCompetidores>('/competicoes/competidores', { params });
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function criarCompetidor(dados: CompetidorCriar): Promise<CompetidorDetalhe> {
+  try {
+    const response = await api.post<CompetidorDetalhe>('/competicoes/competidores', dados);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function importarAluno(idAluno: number): Promise<CompetidorDetalhe> {
+  try {
+    const payload: AlunoImportar = { id_aluno: idAluno };
+    const response = await api.post<CompetidorDetalhe>('/competicoes/competidores/importar-aluno', payload);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function renomearCompetidor(idCompetidor: number, nome: string): Promise<CompetidorDetalhe> {
+  try {
+    const payload: CompetidorAtualizar = { nome };
+    const response = await api.patch<CompetidorDetalhe>(`/competicoes/competidores/${idCompetidor}`, payload);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+// ==========================================
+// Elencos: Equipes e Integrantes
+// ==========================================
+
+export async function listarEquipes(idEdicaoCompeticao: number): Promise<EquipeDetalhe[]> {
+  try {
+    const response = await api.get<EquipeDetalhe[]>(`/competicoes/edicoes/${idEdicaoCompeticao}/equipes`);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function criarEquipe(idEdicaoCompeticao: number, dados: EquipeCriar): Promise<EquipeDetalhe> {
+  try {
+    const response = await api.post<EquipeDetalhe>(`/competicoes/edicoes/${idEdicaoCompeticao}/equipes`, dados);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function inscreverIntegrante(idEquipe: number, dados: IntegranteCriar): Promise<IntegranteDetalhe> {
+  try {
+    const response = await api.post<IntegranteDetalhe>(`/competicoes/equipes/${idEquipe}/integrantes`, dados);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function inativarIntegrante(idIntegrante: number): Promise<IntegranteDetalhe> {
+  try {
+    const payload: IntegranteAtualizar = { situacao: 'INATIVO' };
+    const response = await api.patch<IntegranteDetalhe>(`/competicoes/integrantes/${idIntegrante}`, payload);
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+export async function copiarEquipes(idEdicaoDestino: number, idEdicaoOrigem: number): Promise<EquipeDetalhe[]> {
+  try {
+    const payload: EquipesCopiar = { id_edicao_origem: idEdicaoOrigem };
+    const response = await api.post<EquipeDetalhe[]>(
+      `/competicoes/edicoes/${idEdicaoDestino}/copiar-equipes`,
+      payload
+    );
+    return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+// ==========================================
+// Objeto de Serviço Agrupado
+// ==========================================
+
+export const competicoesService = {
+  // Eventos
+  listarEventos,
+  criarEventoComEdicao,
+  obterEvento,
+  atualizarEvento,
+  arquivarEvento,
+  criarEdicaoEvento,
+  atualizarEdicaoEvento,
+
+  // Competições e Edições
+  listarCompeticoes,
+  criarCompeticaoComEdicao,
+  obterCompeticao,
+  atualizarCompeticao,
+  arquivarCompeticao,
+  criarEdicaoCompeticao,
+  obterEdicao,
+  atualizarEdicao,
+  publicarEdicao,
+  excluirEdicao,
+
+  // Competidores
+  listarCompetidores,
+  criarCompetidor,
+  importarAluno,
+  renomearCompetidor,
+
+  // Equipes e Integrantes
+  listarEquipes,
+  criarEquipe,
+  inscreverIntegrante,
+  inativarIntegrante,
+  copiarEquipes,
 };
+
+export const competicaoService = competicoesService;
+export default competicoesService;
