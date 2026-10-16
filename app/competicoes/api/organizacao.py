@@ -23,6 +23,7 @@ from competicoes.contratos.organizacao import (
     PaginaEventos,
     PublicacaoAtualizar,
 )
+from competicoes.contratos.sumula import MotivoOperacao
 from competicoes.servicos import organizacao as servico_organizacao
 
 router = APIRouter()
@@ -287,3 +288,70 @@ def publicar_edicao(
     return servico_organizacao.publicar_edicao(
         db, id_edicao_competicao, dados.publicada, autor
     )
+
+
+@router.post(
+    "/edicoes/{id_edicao_competicao}/iniciar",
+    response_model=EdicaoCompeticaoDetalhe,
+    status_code=status.HTTP_200_OK,
+    summary="Iniciar edição de competição",
+)
+def iniciar_edicao(
+    id_edicao_competicao: int,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> EdicaoCompeticaoDetalhe:
+    return servico_organizacao.iniciar_edicao_competicao(
+        db, id_edicao_competicao, autor
+    )
+
+
+@router.post(
+    "/edicoes/{id_edicao_competicao}/finalizar",
+    response_model=EdicaoCompeticaoDetalhe,
+    status_code=status.HTTP_200_OK,
+    summary="Finalizar edição de competição",
+)
+def finalizar_edicao(
+    id_edicao_competicao: int,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> EdicaoCompeticaoDetalhe:
+    return servico_organizacao.finalizar_edicao_competicao(
+        db, id_edicao_competicao, autor
+    )
+
+
+@router.post(
+    "/edicoes/{id_edicao_competicao}/reabrir",
+    response_model=EdicaoCompeticaoDetalhe,
+    status_code=status.HTTP_200_OK,
+    summary="Reabrir edição de competição finalizada",
+)
+def reabrir_edicao(
+    id_edicao_competicao: int,
+    dados: MotivoOperacao,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> EdicaoCompeticaoDetalhe:
+    return servico_organizacao.reabrir_edicao_competicao(
+        db, id_edicao_competicao, dados.motivo, autor
+    )
+
+
+@router.post(
+    "/edicoes/{id_edicao_competicao}/cancelar",
+    response_model=EdicaoCompeticaoDetalhe,
+    status_code=status.HTTP_200_OK,
+    summary="Cancelar administrativamente edição de competição",
+)
+def cancelar_edicao(
+    id_edicao_competicao: int,
+    dados: MotivoOperacao,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> EdicaoCompeticaoDetalhe:
+    return servico_organizacao.cancelar_edicao_competicao(
+        db, id_edicao_competicao, dados.motivo, autor
+    )
+
