@@ -28,11 +28,11 @@ def _extrair_gols(partida: dict) -> tuple[int, int]:
         id_v = partida.get("id_equipe_visitante")
         gm = sum(
             1 for oc in partida["ocorrencias"]
-            if oc.get("tipo") == "GOL" and oc.get("id_equipe_beneficiada") == id_m
+            if oc.get("tipo") in ("GOL", "GOL_CONTRA") and oc.get("id_equipe_beneficiada") == id_m
         )
         gv = sum(
             1 for oc in partida["ocorrencias"]
-            if oc.get("tipo") == "GOL" and oc.get("id_equipe_beneficiada") == id_v
+            if oc.get("tipo") in ("GOL", "GOL_CONTRA") and oc.get("id_equipe_beneficiada") == id_v
         )
         return gm, gv
     return 0, 0
@@ -129,18 +129,41 @@ def _aplicar_confronto_direto(
     return [sub_map[k] for k in sorted(sub_map.keys(), reverse=True)]
 
 
+def _valor_criterio(
+    crit: str,
+    id_eq: int,
+    stats: dict[int, dict[str, Any]],
+    cartoes_por_equipe: dict[int, dict[str, int]] | None = None,
+) -> int | None:
+    if crit == "VITORIAS":
+        return int(stats[id_eq]["vitorias"])
+    if crit == "SALDO_GOLS":
+        return int(stats[id_eq]["saldo_gols"])
+    if crit == "GOLS_PRO":
+        return int(stats[id_eq]["gols_pro"])
+    if crit == "MENOS_CARTOES_VERMELHOS":
+        return -int((cartoes_por_equipe or {}).get(id_eq, {}).get("vermelhos", 0))
+    if crit == "MENOS_CARTOES_AMARELOS":
+        return -int((cartoes_por_equipe or {}).get(id_eq, {}).get("amarelos", 0))
+    return None
+
+
 def calcular_classificacao(
     equipes: list[dict | Any],
     partidas: list[dict | Any],
     configuracao_pontos: dict | None = None,
     ordem_desempates: list[str] | None = None,
+    cartoes_por_equipe: dict[int, dict[str, int]] | None = None,
+    decisoes_manuais: list[dict | Any] | None = None,
 ) -> list[LinhaClassificacao]:
     """Calcula deterministamente a tabela de classificação esportiva.
 
     - Ordenação primária: Pontos (PTS) DESC.
     - Critérios de desempate configuráveis (padrão: VITORIAS, SALDO_GOLS, GOLS_PRO, CONFRONTO_DIRETO).
+    - Suporta MENOS_CARTOES_VERMELHOS e MENOS_CARTOES_AMARELOS via cartoes_por_equipe.
     - Confronto direto utiliza mini-tabela entre as equipes empatadas.
-    - Empate persistente sinalizado explicitamente com empate_persistente=True sem desempate fictício por ID.
+    - Empate persistente pode ser resolvido por decisão manual válida (decisoes_manuais).
+    - Empate persistente não resolvido sinalizado explicitamente com empate_persistente=True sem desempate fictício por ID.
     """
     pts_cfg = {"vitoria": 3, "empate": 1, "derrota": 0}
     if configuracao_pontos:
@@ -151,7 +174,9 @@ def calcular_classificacao(
         if ordem_desempates is not None
         else ["VITORIAS", "SALDO_GOLS", "GOLS_PRO", "CONFRONTO_DIRETO"]
     )
-    criterios_normalizados = [c.upper() for c in criterios]
+    criterios_normalizados = [
+        c.value.upper() if hasattr(c, "value") else str(c).upper() for c in criterios
+    ]
 
     # Inicializar estatísticas de todas as equipes informadas
     equipes_map: dict[int, str] = {}
@@ -241,36 +266,55 @@ def calcular_classificacao(
                 novos_buckets.append(b)
                 continue
 
-            if crit == "VITORIAS":
-                sub: dict[int, list[int]] = defaultdict(list)
-                for tid in b:
-                    sub[stats[tid]["vitorias"]].append(tid)
-                for val in sorted(sub.keys(), reverse=True):
-                    novos_buckets.append(sub[val])
-
-            elif crit == "SALDO_GOLS":
-                sub_sg: dict[int, list[int]] = defaultdict(list)
-                for tid in b:
-                    sub_sg[stats[tid]["saldo_gols"]].append(tid)
-                for val in sorted(sub_sg.keys(), reverse=True):
-                    novos_buckets.append(sub_sg[val])
-
-            elif crit == "GOLS_PRO":
-                sub_gp: dict[int, list[int]] = defaultdict(list)
-                for tid in b:
-                    sub_gp[stats[tid]["gols_pro"]].append(tid)
-                for val in sorted(sub_gp.keys(), reverse=True):
-                    novos_buckets.append(sub_gp[val])
-
-            elif crit == "CONFRONTO_DIRETO":
+            if crit == "CONFRONTO_DIRETO":
                 sub_h2h = _aplicar_confronto_direto(b, partidas_dicts, pts_cfg)
                 novos_buckets.extend(sub_h2h)
-
             else:
-                # Critério desconhecido é preservado sem alterar ordenação
-                novos_buckets.append(b)
+                primeiro_val = _valor_criterio(crit, b[0], stats, cartoes_por_equipe)
+                if primeiro_val is not None:
+                    sub: dict[int, list[int]] = defaultdict(list)
+                    for tid in b:
+                        val = _valor_criterio(crit, tid, stats, cartoes_por_equipe)
+                        sub[int(val)].append(tid)
+                    for val in sorted(sub.keys(), reverse=True):
+                        novos_buckets.append(sub[val])
+                else:
+                    # Critério desconhecido é preservado sem alterar ordenação
+                    novos_buckets.append(b)
 
         buckets = novos_buckets
+
+    # Aplicar decisões manuais válidas em blocos que permaneceram empatados
+    if decisoes_manuais:
+        buckets_resolvidos: list[list[int]] = []
+        for b in buckets:
+            if len(b) > 1:
+                bloco_ordenado = sorted(int(x) for x in b)
+                decisao_aplicada = None
+                for d in decisoes_manuais:
+                    valida = d.get("valida", True) if isinstance(d, dict) else getattr(d, "valida", True)
+                    if valida is not True:
+                        continue
+                    conjunto = d.get("conjunto_equipes", []) if isinstance(d, dict) else getattr(d, "conjunto_equipes", [])
+                    ordem = d.get("ordem_escolhida", []) if isinstance(d, dict) else getattr(d, "ordem_escolhida", [])
+                    conjunto_int = [int(x) for x in (conjunto or [])]
+                    ordem_int = [int(x) for x in (ordem or [])]
+                    if (
+                        len(ordem_int) == len(bloco_ordenado)
+                        and len(set(ordem_int)) == len(bloco_ordenado)
+                        and sorted(conjunto_int) == bloco_ordenado
+                        and sorted(ordem_int) == bloco_ordenado
+                    ):
+                        decisao_aplicada = ordem_int
+                        break
+                if decisao_aplicada is not None:
+                    for eq_id in decisao_aplicada:
+                        buckets_resolvidos.append([eq_id])
+                else:
+                    buckets_resolvidos.append(b)
+            else:
+                buckets_resolvidos.append(b)
+        buckets = buckets_resolvidos
 
     # Construção das linhas com atribuição de posição e indicação de empate persistente
     linhas: list[LinhaClassificacao] = []
