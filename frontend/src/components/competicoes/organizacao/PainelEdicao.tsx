@@ -13,6 +13,9 @@ import type {
   FormatoCompeticao,
 } from '@/types/competicoes';
 import GestaoEquipes from '@/components/competicoes/elencos/GestaoEquipes';
+import VisualizadorPartidas from '@/components/competicoes/disputa/VisualizadorPartidas';
+import ChaveamentoEliminatorio from '@/components/competicoes/disputa/ChaveamentoEliminatorio';
+import TabelaClassificacao from '@/components/competicoes/classificacao/TabelaClassificacao';
 import FormularioConfiguracao from './FormularioConfiguracao';
 import {
   Calendar,
@@ -302,31 +305,30 @@ export default function PainelEdicao({
           <span>Equipes & Elencos</span>
         </button>
 
-        {/* Abas Futuras (Fatia 2 e 3) - Visíveis e desabilitadas */}
         <button
           type="button"
-          disabled
-          title="Disponível na Fatia 2"
-          className="py-3 px-4 text-sm font-semibold border-b-2 border-transparent text-slate-400 cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+          onClick={() => setAbaAtiva('jogos')}
+          className={`py-3 px-4 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition ${
+            abaAtiva === 'jogos'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
         >
           <Clock className="w-4 h-4" />
           <span>Jogos & Súmula</span>
-          <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-            Fatia 2
-          </span>
         </button>
 
         <button
           type="button"
-          disabled
-          title="Disponível na Fatia 3"
-          className="py-3 px-4 text-sm font-semibold border-b-2 border-transparent text-slate-400 cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+          onClick={() => setAbaAtiva('classificacao')}
+          className={`py-3 px-4 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition ${
+            abaAtiva === 'classificacao'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
         >
           <Trophy className="w-4 h-4" />
           <span>Classificação</span>
-          <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-            Fatia 3
-          </span>
         </button>
 
         <button
@@ -454,6 +456,30 @@ export default function PainelEdicao({
         {abaAtiva === 'equipes' && (
           <div>
             <GestaoEquipes idEdicaoCompeticao={edicao.id_edicao_competicao} />
+          </div>
+        )}
+
+        {/* Aba Jogos & Súmula */}
+        {abaAtiva === 'jogos' && (
+          <div className="space-y-6">
+            <VisualizadorPartidas
+              idEdicaoCompeticao={edicao.id_edicao_competicao}
+              estado={edicao.estado}
+              formato={edicao.formato}
+            />
+            {edicao.formato !== 'PONTOS_CORRIDOS' && (
+              <ChaveamentoEliminatorio idEdicaoCompeticao={edicao.id_edicao_competicao} />
+            )}
+          </div>
+        )}
+
+        {/* Aba Classificação */}
+        {abaAtiva === 'classificacao' && (
+          <div>
+            <TabelaClassificacao
+              idEdicaoCompeticao={edicao.id_edicao_competicao}
+              formato={edicao.formato}
+            />
           </div>
         )}
       </div>

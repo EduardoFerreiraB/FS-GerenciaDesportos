@@ -257,6 +257,133 @@ export interface EquipeDetalhe extends EquipeCriar {
 }
 
 // ==========================================
+// Fatia 2: Estrutura da Disputa, Duelos e Chaveamento
+// ==========================================
+
+export interface GrupoDisputaDetalhe {
+  id_grupo: number;
+  id_edicao_competicao: number;
+  nome: string;
+  numero_ordem: number;
+  equipes: EquipeDetalhe[];
+}
+
+export type OrigemVaga = "MANUAL" | "GRUPO" | "DUELO_VENCEDOR" | "DUELO_PERDEDOR";
+
+export interface VagaDueloDetalhe {
+  id_vaga: number;
+  id_duelo: number;
+  posicao: number;
+  origem_tipo: OrigemVaga;
+  origem_id?: number | null;
+  id_equipe?: number | null;
+  nome_equipe?: string | null;
+}
+
+export interface DueloEliminatorioDetalhe {
+  id_duelo: number;
+  id_edicao_competicao: number;
+  fase: string;
+  ordem_na_fase: number;
+  ida_e_volta: boolean;
+  status: string;
+  id_equipe_vencedora?: number | null;
+  vagas: VagaDueloDetalhe[];
+}
+
+export interface EstruturaDisputaDetalhe {
+  id_edicao_competicao: number;
+  grupos: GrupoDisputaDetalhe[];
+  duelos: DueloEliminatorioDetalhe[];
+  total_partidas: number;
+}
+
+// ==========================================
+// Fatia 2: Partidas, Agendamento e Placar Simples
+// ==========================================
+
+export type StatusPartida = "AGENDADA" | "EM_ANDAMENTO" | "FINALIZADA" | "CANCELADA";
+
+export interface PartidaAgendar {
+  data_hora?: string | null;
+  data?: string | null;
+  hora?: string | null;
+  local?: string | null;
+  campo?: string | null;
+  id_local?: number | null;
+}
+
+export interface ResultadoSimples {
+  gols_mandante: number;
+  gols_visitante: number;
+  penaltis_mandante?: number | null;
+  penaltis_visitante?: number | null;
+  wo?: boolean;
+  equipe_wo_id?: number | null;
+}
+
+export interface PlacarPartida {
+  gols_mandante: number;
+  gols_visitante: number;
+  penaltis_mandante?: number | null;
+  penaltis_visitante?: number | null;
+}
+
+export interface PartidaDetalhe {
+  id_partida: number;
+  id_edicao_competicao: number;
+  id_grupo?: number | null;
+  id_duelo?: number | null;
+  id_equipe_mandante?: number | null;
+  id_equipe_visitante?: number | null;
+  nome_mandante?: string | null;
+  nome_visitante?: string | null;
+  sigla_mandante?: string | null;
+  sigla_visitante?: string | null;
+  rodada?: number | null;
+  turno?: number | null;
+  numero_partida: number;
+  data_hora?: string | null;
+  local?: string | null;
+  campo?: string | null;
+  status: StatusPartida;
+  placar: PlacarPartida;
+  vencedor_id?: number | null;
+  revisao: number;
+}
+
+// ==========================================
+// Fatia 2: Classificação Pontuada
+// ==========================================
+
+export interface LinhaClassificacao {
+  posicao: number;
+  id_equipe: number;
+  nome_equipe: string;
+  jogos: number;
+  vitorias: number;
+  empates: number;
+  derrotas: number;
+  gols_pro: number;
+  gols_contra: number;
+  saldo_gols: number;
+  pontos: number;
+}
+
+export interface GrupoClassificacaoDetalhe {
+  id_grupo: number;
+  nome: string;
+  linhas: LinhaClassificacao[];
+  possui_empate_persistente: boolean;
+}
+
+export interface TabelaClassificacaoDetalhe {
+  linhas?: LinhaClassificacao[] | null;
+  grupos?: GrupoClassificacaoDetalhe[] | null;
+  possui_empate_persistente: boolean;
+}
+
+// ==========================================
 // Aliases Canônicos de Domínio
 // ==========================================
 
@@ -267,3 +394,6 @@ export type EdicaoCompeticao = EdicaoCompeticaoDetalhe;
 export type Competidor = CompetidorDetalhe;
 export type Equipe = EquipeDetalhe;
 export type IntegranteEquipe = IntegranteDetalhe;
+export type Partida = PartidaDetalhe;
+export type Duelo = DueloEliminatorioDetalhe;
+export type GrupoDisputa = GrupoDisputaDetalhe;
