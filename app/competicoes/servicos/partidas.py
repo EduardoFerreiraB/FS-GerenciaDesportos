@@ -16,13 +16,19 @@ from competicoes.contratos.partidas import (
     PlacarPartida,
     ResultadoSimples,
 )
-from competicoes.erros import ConflitoEstado, NaoEncontrado
+from competicoes.erros import ConfiguracaoInvalida, ConflitoEstado, NaoEncontrado
 from competicoes.infra import incrementar_revisao, registrar_auditoria, transacao
+from competicoes.modelos.disciplina import SuspensaoCompeticao
 from competicoes.modelos.disputa import DueloEliminatorio, VagaDuelo
 from competicoes.modelos.operacao import RequisicaoPartida
 from competicoes.modelos.organizacao import EdicaoCompeticao
 from competicoes.modelos.partidas import OcorrenciaPartida, Partida
 from competicoes.servicos.motores.avanco import propagar_avanco_grafo, resolver_duelo
+from competicoes.servicos.motores.disciplina import (
+    calcular_sancoes_e_cartoes,
+    reconciliar_suspensoes_existentes,
+)
+from competicoes.servicos.motores.sumula import validar_ajuste_resultado_simples
 
 # Garante compatibilidade de atributo status <-> estado
 if not hasattr(Partida, "status"):
@@ -30,6 +36,144 @@ if not hasattr(Partida, "status"):
         lambda self: self.estado,
         lambda self, val: setattr(self, "estado", val),
     )
+
+
+def _reconciliar_sancoes_edicao(
+    db: Session,
+    id_edicao_competicao: int,
+    responsavel: Usuario | None = None,
+) -> None:
+    """Reconcilia suspensões automáticas da edição a partir das ocorrências de partidas finalizadas."""
+    edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
+    if edicao is None:
+        return
+
+    cfg = edicao.configuracao if isinstance(edicao.configuracao, dict) else {}
+    config_disciplina = cfg.get("disciplina", cfg) if isinstance(cfg, dict) else {}
+
+    vagas_grupo_resolvidas = db.execute(
+        select(VagaDuelo.id_vaga)
+        .join(DueloEliminatorio, DueloEliminatorio.id_duelo == VagaDuelo.id_duelo)
+        .where(
+            DueloEliminatorio.id_edicao_competicao == id_edicao_competicao,
+            VagaDuelo.origem == "POSICAO_GRUPO",
+            VagaDuelo.id_equipe_resolvida.is_not(None),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    grupos_encerrados = vagas_grupo_resolvidas is not None
+
+    partidas = (
+        db.execute(
+            select(Partida).where(Partida.id_edicao_competicao == id_edicao_competicao)
+        )
+        .scalars()
+        .all()
+    )
+    ids_partidas = [p.id_partida for p in partidas]
+    ocorrencias = (
+        db.execute(
+            select(OcorrenciaPartida).where(OcorrenciaPartida.id_partida.in_(ids_partidas))
+        )
+        .scalars()
+        .all()
+        if ids_partidas
+        else []
+    )
+
+    partidas_dicts = [
+        {
+            "id_partida": p.id_partida,
+            "id_equipe_mandante": p.id_equipe_mandante,
+            "id_equipe_visitante": p.id_equipe_visitante,
+            "estado": p.estado,
+            "id_grupo": p.id_grupo,
+            "rodada": p.rodada,
+            "ordem_jogo": p.ordem_jogo,
+        }
+        for p in partidas
+    ]
+    ocorrencias_dicts = [
+        {
+            "id_ocorrencia": oc.id_ocorrencia,
+            "id_partida": oc.id_partida,
+            "tipo": oc.tipo,
+            "id_equipe_beneficiada": oc.id_equipe_beneficiada,
+            "id_integrante": oc.id_integrante,
+            "minuto": oc.minuto,
+        }
+        for oc in ocorrencias
+    ]
+
+    calculo = calcular_sancoes_e_cartoes(
+        id_edicao_competicao=id_edicao_competicao,
+        ocorrencias=ocorrencias_dicts,
+        partidas=partidas_dicts,
+        config_disciplina=config_disciplina,
+        grupos_encerrados=grupos_encerrados,
+    )
+    sancoes_esperadas = calculo["sancoes_esperadas"]
+
+    suspensoes_banco = (
+        db.execute(
+            select(SuspensaoCompeticao)
+            .options(selectinload(SuspensaoCompeticao.cumprimentos))
+            .where(SuspensaoCompeticao.id_edicao_competicao == id_edicao_competicao)
+        )
+        .scalars()
+        .all()
+    )
+
+    acoes = reconciliar_suspensoes_existentes(sancoes_esperadas, suspensoes_banco)
+    por_chave = {
+        s.chave_origem: s for s in suspensoes_banco if s.chave_origem is not None
+    }
+    esperadas_por_chave = {
+        str(s["chave_origem"]): s
+        for s in sancoes_esperadas
+        if s.get("chave_origem") is not None
+    }
+
+    for susp in acoes["para_cancelar"]:
+        susp.situacao = "CANCELADA"
+
+    for susp in acoes["para_revisao"]:
+        susp.situacao = "EM_REVISAO"
+
+    for chave, s_esp in esperadas_por_chave.items():
+        if chave in por_chave and por_chave[chave].situacao == "EM_REVISAO":
+            susp_rev = por_chave[chave]
+            cumpridos = len(susp_rev.cumprimentos or [])
+            susp_rev.situacao = "CUMPRIDA" if cumpridos >= susp_rev.jogos else "ATIVA"
+
+    for s_nova in acoes["para_criar"]:
+        chave = s_nova.get("chave_origem")
+        if chave and chave in por_chave:
+            existente = por_chave[chave]
+            existente.situacao = "ATIVA"
+            existente.id_partida_origem = s_nova.get("id_partida_origem")
+            existente.id_ocorrencia_origem = s_nova.get("id_ocorrencia_origem")
+            existente.jogos = s_nova.get("jogos", 1)
+            existente.motivo = s_nova.get("motivo", existente.motivo)
+        else:
+            db.add(
+                SuspensaoCompeticao(
+                    id_edicao_competicao=s_nova["id_edicao_competicao"],
+                    id_integrante=s_nova["id_integrante"],
+                    id_partida_origem=s_nova.get("id_partida_origem"),
+                    id_ocorrencia_origem=s_nova.get("id_ocorrencia_origem"),
+                    origem=s_nova["origem"],
+                    chave_origem=s_nova.get("chave_origem"),
+                    jogos=s_nova.get("jogos", 1),
+                    motivo=s_nova["motivo"],
+                    situacao="ATIVA",
+                    id_usuario_responsavel=(
+                        responsavel.id_usuario if responsavel is not None else None
+                    ),
+                )
+            )
+
+    db.flush()
 
 
 def bloquear_partida(db: Session, id_partida: int) -> Partida:
@@ -70,11 +214,11 @@ def _carregar_partida_completa(db: Session, id_partida: int) -> Partida:
 
 
 def _calcular_placar(db: Session, partida: Partida) -> PlacarPartida:
-    """Calcula o placar contando ocorrências de GOL (RULING R28)."""
+    """Calcula o placar contando ocorrências de GOL e GOL_CONTRA (RULING R28 e R30)."""
     ocorrencias = db.execute(
         select(OcorrenciaPartida).where(
             OcorrenciaPartida.id_partida == partida.id_partida,
-            OcorrenciaPartida.tipo == "GOL",
+            OcorrenciaPartida.tipo.in_(("GOL", "GOL_CONTRA")),
         )
     ).scalars().all()
 
@@ -259,7 +403,7 @@ def _processar_avanco_duelo(db: Session, partida: Partida) -> None:
         ocorrs_p = db.execute(
             select(OcorrenciaPartida).where(
                 OcorrenciaPartida.id_partida == p.id_partida,
-                OcorrenciaPartida.tipo == "GOL",
+                OcorrenciaPartida.tipo.in_(("GOL", "GOL_CONTRA")),
             )
         ).scalars().all()
 
@@ -442,34 +586,12 @@ def registrar_resultado_simples(
     with transacao(db):
         partida = bloquear_partida(db, id_partida)
 
-        # Ocorrências existentes antes da exclusão
-        ocorrs_antigas = db.execute(
+        # Todas as ocorrências existentes da partida
+        ocorrs_atuais = db.execute(
             select(OcorrenciaPartida).where(
                 OcorrenciaPartida.id_partida == id_partida,
-                OcorrenciaPartida.tipo == "GOL",
             )
         ).scalars().all()
-
-        antes = {
-            "estado": partida.estado,
-            "penaltis_mandante": partida.penaltis_mandante,
-            "penaltis_visitante": partida.penaltis_visitante,
-            "gols_mandante": sum(
-                1
-                for oc in ocorrs_antigas
-                if oc.id_equipe_beneficiada == partida.id_equipe_mandante
-            ),
-            "gols_visitante": sum(
-                1
-                for oc in ocorrs_antigas
-                if oc.id_equipe_beneficiada == partida.id_equipe_visitante
-            ),
-        }
-
-        # Remove ocorrências anteriores (caso de re-registro / retificação)
-        db.execute(
-            delete(OcorrenciaPartida).where(OcorrenciaPartida.id_partida == id_partida)
-        )
 
         gols_m = dados.gols_mandante
         gols_v = dados.gols_visitante
@@ -479,8 +601,44 @@ def registrar_resultado_simples(
             elif dados.equipe_wo_id == partida.id_equipe_visitante:
                 gols_m = 3
 
+        ajuste = validar_ajuste_resultado_simples(
+            ocorrencias_partida=ocorrs_atuais,
+            id_mandante=partida.id_equipe_mandante,
+            id_visitante=partida.id_equipe_visitante,
+            novos_gols_mandante=gols_m,
+            novos_gols_visitante=gols_v,
+        )
+
+        gols_antigos = [
+            oc for oc in ocorrs_atuais if oc.tipo in ("GOL", "GOL_CONTRA")
+        ]
+        antes = {
+            "estado": partida.estado,
+            "penaltis_mandante": partida.penaltis_mandante,
+            "penaltis_visitante": partida.penaltis_visitante,
+            "gols_mandante": sum(
+                1
+                for oc in gols_antigos
+                if oc.id_equipe_beneficiada == partida.id_equipe_mandante
+            ),
+            "gols_visitante": sum(
+                1
+                for oc in gols_antigos
+                if oc.id_equipe_beneficiada == partida.id_equipe_visitante
+            ),
+        }
+
+        # Remove apenas gols sem autoria anteriores, preservando gols com autoria, GOL_CONTRA e cartões
+        ids_remover = ajuste["ids_gols_sem_autoria_remover"]
+        if ids_remover:
+            db.execute(
+                delete(OcorrenciaPartida).where(
+                    OcorrenciaPartida.id_ocorrencia.in_(ids_remover)
+                )
+            )
+
         obs = "W.O." if dados.wo else None
-        for _ in range(gols_m):
+        for _ in range(ajuste["gols_sem_autoria_mandante"]):
             db.add(
                 OcorrenciaPartida(
                     id_partida=id_partida,
@@ -491,7 +649,7 @@ def registrar_resultado_simples(
                     id_usuario_autor=responsavel.id_usuario,
                 )
             )
-        for _ in range(gols_v):
+        for _ in range(ajuste["gols_sem_autoria_visitante"]):
             db.add(
                 OcorrenciaPartida(
                     id_partida=id_partida,
@@ -513,6 +671,9 @@ def registrar_resultado_simples(
         # Avanço no mata-mata se duelo eliminatório
         if partida.id_duelo is not None:
             _processar_avanco_duelo(db, partida)
+
+        # Reconcilia sanções disciplinares da edição
+        _reconciliar_sancoes_edicao(db, partida.id_edicao_competicao, responsavel)
 
         depois = {
             "estado": partida.estado,
