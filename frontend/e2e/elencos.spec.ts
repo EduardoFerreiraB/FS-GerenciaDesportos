@@ -20,13 +20,27 @@ test.describe('Gestão de Elencos e Equipes', () => {
     token = data.access_token;
   });
 
+  async function obterIdModalidade(request: any) {
+    const res = await request.get('http://127.0.0.1:8000/modalidades/', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok()) {
+      const modalidades = await res.json();
+      if (Array.isArray(modalidades) && modalidades.length > 0) {
+        return modalidades[0].id_modalidade;
+      }
+    }
+    return 1;
+  }
+
   async function criarEdicaoTeste(request: any, nome: string, identificacao: string = '2026') {
     const timestamp = Date.now();
+    const idModalidade = await obterIdModalidade(request);
     const res = await request.post('http://127.0.0.1:8000/competicoes/competicoes', {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         nome: `${nome} ${timestamp}`,
-        id_modalidade: 1,
+        id_modalidade: idModalidade,
         edicao: {
           identificacao,
           data_inicio: '2026-05-01',
@@ -53,7 +67,7 @@ test.describe('Gestão de Elencos e Equipes', () => {
   }
 
   async function obterOuCriarAlunoTeste(request: any, nome: string) {
-    const res = await request.get('http://127.0.0.1:8000/alunos', {
+    const res = await request.get('http://127.0.0.1:8000/alunos/', {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok()) {
@@ -67,14 +81,13 @@ test.describe('Gestão de Elencos e Equipes', () => {
       }
     }
 
-    // Se não houver, garante criação no banco SQLite
+    // Se não houver, garante criação no banco ativo
     execSync(
       `.venv/bin/python -c "
 import sys; sys.path.insert(0, 'app')
 from datetime import date
-from sqlalchemy import create_engine; from sqlalchemy.orm import sessionmaker; import models
-engine = create_engine('sqlite:///./frontend/e2e.db')
-with sessionmaker(bind=engine)() as db:
+from database import SessionLocal; import models
+with SessionLocal() as db:
     part = models.Participante(tipo='aluno'); db.add(part); db.flush()
     aluno = models.Aluno(
         id_participante=part.id_participante,
@@ -91,7 +104,7 @@ with sessionmaker(bind=engine)() as db:
       { cwd: '..' }
     );
 
-    const res2 = await request.get('http://127.0.0.1:8000/alunos', {
+    const res2 = await request.get('http://127.0.0.1:8000/alunos/', {
       headers: { Authorization: `Bearer ${token}` },
     });
     const alunos2 = await res2.json();
@@ -254,11 +267,12 @@ with sessionmaker(bind=engine)() as db:
 
     // Cria edição anterior 2025
     const timestamp = Date.now();
+    const idModalidade = await obterIdModalidade(request);
     const compRes = await request.post('http://127.0.0.1:8000/competicoes/competicoes', {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         nome: `Torneio de Continuidade ${timestamp}`,
-        id_modalidade: 1,
+        id_modalidade: idModalidade,
         edicao: {
           identificacao: '2025',
           data_inicio: '2025-05-01',

@@ -28,6 +28,11 @@ import type {
   PaginaCompetidores,
   PaginaEventos,
   PublicacaoAtualizar,
+  EstruturaDisputaDetalhe,
+  PartidaAgendar,
+  ResultadoSimples,
+  PartidaDetalhe,
+  TabelaClassificacaoDetalhe,
 } from '@/types/competicoes';
 
 // ==========================================
@@ -353,6 +358,138 @@ export async function copiarEquipes(idEdicaoDestino: number, idEdicaoOrigem: num
 }
 
 // ==========================================
+// Fatia 2: Disputa e Chaveamento
+// ==========================================
+
+export async function gerarTabela(
+  idEdicaoCompeticao: number,
+  payload: Record<string, unknown> = {}
+): Promise<EstruturaDisputaDetalhe> {
+  try {
+    const res = await api.post<EstruturaDisputaDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/gerar-tabela`,
+      payload
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function desfazerTabela(
+  idEdicaoCompeticao: number
+): Promise<void> {
+  try {
+    await api.delete(`/competicoes/edicoes/${idEdicaoCompeticao}/tabela`);
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function obterDisputa(
+  idEdicaoCompeticao: number
+): Promise<EstruturaDisputaDetalhe> {
+  try {
+    const res = await api.get<EstruturaDisputaDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/disputa`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function encerrarFaseGrupos(
+  idEdicaoCompeticao: number
+): Promise<EstruturaDisputaDetalhe> {
+  try {
+    const res = await api.post<EstruturaDisputaDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/encerrar-grupos`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
+// Fatia 2: Partidas, Agendamento e Placar Simples
+// ==========================================
+
+export async function listarPartidas(
+  idEdicaoCompeticao: number,
+  filtros?: { id_grupo?: number; fase?: string; rodada?: number }
+): Promise<PartidaDetalhe[]> {
+  try {
+    const res = await api.get<PartidaDetalhe[]>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/partidas`,
+      { params: filtros }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function agendarPartida(
+  idPartida: number,
+  dados: PartidaAgendar
+): Promise<PartidaDetalhe> {
+  try {
+    const res = await api.patch<PartidaDetalhe>(
+      `/competicoes/partidas/${idPartida}/agendamento`,
+      dados
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function registrarResultadoSimples(
+  idPartida: number,
+  dados: ResultadoSimples,
+  idempotencyKey?: string
+): Promise<PartidaDetalhe> {
+  try {
+    const chave =
+      idempotencyKey ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `res-${Date.now()}-${Math.random()}`);
+    const res = await api.post<PartidaDetalhe>(
+      `/competicoes/partidas/${idPartida}/resultado-simples`,
+      dados,
+      {
+        headers: {
+          'Idempotency-Key': chave,
+        },
+      }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
+// Fatia 2: Classificação
+// ==========================================
+
+export async function obterClassificacao(
+  idEdicaoCompeticao: number
+): Promise<TabelaClassificacaoDetalhe> {
+  try {
+    const res = await api.get<TabelaClassificacaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/classificacao`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
 // Objeto de Serviço Agrupado
 // ==========================================
 
@@ -390,6 +527,16 @@ export const competicoesService = {
   inscreverIntegrante,
   inativarIntegrante,
   copiarEquipes,
+
+  // Fatia 2: Disputa, Partidas e Classificação
+  gerarTabela,
+  desfazerTabela,
+  obterDisputa,
+  encerrarFaseGrupos,
+  listarPartidas,
+  agendarPartida,
+  registrarResultadoSimples,
+  obterClassificacao,
 };
 
 export const competicaoService = competicoesService;
