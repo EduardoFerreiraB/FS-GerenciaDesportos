@@ -8,6 +8,13 @@ por padrao, entao a camada de servico precisa repetir cada uma (lista em
 ``CHECKS_PARA_SERVICO``).
 """
 
+from competicoes.modelos.disciplina import (
+    CumprimentoSuspensao,
+    DecisaoClassificacao,
+    ORIGENS_SUSPENSAO,
+    SITUACOES_SUSPENSAO,
+    SuspensaoCompeticao,
+)
 from competicoes.modelos.disputa import (
     DueloEliminatorio,
     ESTADOS_DUELO,
@@ -43,6 +50,7 @@ CHECKS_PARA_SERVICO = {
     "ck_edicoes_competicao_periodo": ("edicoes_competicao", "data_inicio <= data_fim"),
     "ck_edicoes_competicao_revisao": ("edicoes_competicao", "revisao >= 1"),
     "ck_partidas_equipes_distintas": ("partidas", "id_equipe_mandante <> id_equipe_visitante"),
+    "ck_suspensoes_jogos_positivo": ("suspensoes_competicao", "jogos >= 1"),
 }
 
 __all__ = [
@@ -50,6 +58,8 @@ __all__ = [
     "CHECKS_PARA_SERVICO",
     "Competicao",
     "Competidor",
+    "CumprimentoSuspensao",
+    "DecisaoClassificacao",
     "DueloEliminatorio",
     "ESTADOS_DUELO",
     "ESTADOS_EDICAO",
@@ -62,11 +72,14 @@ __all__ = [
     "GrupoCompeticao",
     "IntegranteEquipe",
     "OcorrenciaPartida",
+    "ORIGENS_SUSPENSAO",
     "ORIGENS_VAGA",
     "Partida",
     "RequisicaoPartida",
     "SITUACOES_EQUIPE",
     "SITUACOES_INTEGRANTE",
+    "SITUACOES_SUSPENSAO",
+    "SuspensaoCompeticao",
     "TIPOS_OCORRENCIA",
     "VagaDuelo",
 ]

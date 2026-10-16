@@ -20,7 +20,13 @@ from sqlalchemy.orm import relationship
 from database import Base
 
 ESTADOS_PARTIDA = ("AGENDADA", "EM_ANDAMENTO", "FINALIZADA", "CANCELADA")
-TIPOS_OCORRENCIA = ("GOL",)
+TIPOS_OCORRENCIA = (
+    "GOL",
+    "GOL_CONTRA",
+    "CARTAO_AMARELO",
+    "CARTAO_VERMELHO_DIRETO",
+    "EXPULSAO_SEGUNDO_AMARELO",
+)
 
 
 class Partida(Base):

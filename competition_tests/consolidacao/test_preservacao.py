@@ -23,10 +23,11 @@ def _revisao_atual(engine):
 
 def test_revisao_encadeada_no_baseline():
     from alembic.script import ScriptDirectory
-    from .conftest import REVISAO_FATIA2
+    from .conftest import REVISAO_FATIA2, REVISAO_FATIA3
 
     script = ScriptDirectory.from_config(config_alembic("sqlite://", descartar=False))
-    assert [r.revision for r in script.get_revisions("heads")] == [REVISAO_FATIA2]
+    assert [r.revision for r in script.get_revisions("heads")] == [REVISAO_FATIA3]
+    assert script.get_revision(REVISAO_FATIA3).down_revision == REVISAO_FATIA2
     assert script.get_revision(REVISAO_FATIA2).down_revision == REVISAO_CONSOLIDACAO
     assert script.get_revision(REVISAO_CONSOLIDACAO).down_revision == REVISAO_ANTERIOR
 
@@ -78,8 +79,8 @@ def test_upgrade_preserva_dados_de_escolinhas(sqlite_com_dados_sinteticos):
         assert depois[tabela] == antes[tabela], tabela
     tabelas = sqlite_com_dados_sinteticos.tabelas()
     assert "equipes_participantes" not in tabelas and "confrontos" not in tabelas
-    from .conftest import REVISAO_FATIA2
-    assert _revisao_atual(engine) == REVISAO_FATIA2
+    from .conftest import REVISAO_FATIA3
+    assert _revisao_atual(engine) == REVISAO_FATIA3
 
 
 def test_upgrade_de_snapshot_e_de_banco_vazio_chegam_ao_mesmo_schema(
