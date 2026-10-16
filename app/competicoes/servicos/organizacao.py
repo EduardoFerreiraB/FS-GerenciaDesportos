@@ -36,7 +36,21 @@ from competicoes.infra import (
     registrar_auditoria,
     transacao,
 )
-from competicoes.modelos import Competicao, EdicaoCompeticao, EdicaoEvento, Evento
+from competicoes.modelos import (
+    AuditoriaCompeticao,
+    Competicao,
+    DecisaoClassificacao,
+    DueloEliminatorio,
+    EdicaoCompeticao,
+    EdicaoEvento,
+    Equipe,
+    Evento,
+    GrupoCompeticao,
+    IntegranteEquipe,
+    Partida,
+    SuspensaoCompeticao,
+)
+from competicoes.servicos.classificacao import obter_classificacao_edicao
 
 
 def _slugify(texto: str) -> str:
@@ -729,6 +743,23 @@ def obter_edicao_competicao(
         return _para_edicao_competicao_detalhe(edicao)
 
 
+def _edicao_possui_tabela_gerada(db: Session, id_edicao_competicao: int) -> bool:
+    return (
+        db.query(Partida.id_partida)
+        .filter(Partida.id_edicao_competicao == id_edicao_competicao)
+        .first()
+        is not None
+        or db.query(GrupoCompeticao.id_grupo)
+        .filter(GrupoCompeticao.id_edicao_competicao == id_edicao_competicao)
+        .first()
+        is not None
+        or db.query(DueloEliminatorio.id_duelo)
+        .filter(DueloEliminatorio.id_edicao_competicao == id_edicao_competicao)
+        .first()
+        is not None
+    )
+
+
 def atualizar_edicao_competicao(
     db: Session,
     id_edicao_competicao: int,
@@ -738,6 +769,12 @@ def atualizar_edicao_competicao(
     with transacao(db):
         edicao = bloquear_edicao(db, id_edicao_competicao)
         conferir_revisao(edicao, dados.revisao)
+
+        if edicao.estado in ("FINALIZADA", "CANCELADA"):
+            raise ConflitoEstado(
+                "Não é possível alterar uma edição finalizada ou cancelada.",
+                campos=["estado"],
+            )
 
         if dados.data_inicio > dados.data_fim:
             raise ConfiguracaoInvalida(
@@ -782,6 +819,20 @@ def atualizar_edicao_competicao(
             else dados.configuracao,
         )
         config_dict = config_validada.model_dump(mode="json")
+
+        if _edicao_possui_tabela_gerada(db, id_edicao_competicao):
+            try:
+                config_atual_dict = validar_configuracao(
+                    edicao.formato, _normalizar_configuracao_edicao(edicao)
+                ).model_dump(mode="json")
+            except ConfiguracaoInvalida:
+                config_atual_dict = edicao.configuracao or {}
+
+            if dados.formato != edicao.formato or config_dict != config_atual_dict:
+                raise ConflitoEstado(
+                    "Não é possível alterar o formato ou configuração estrutural com tabela de jogos já gerada. Desfaça a tabela antes.",
+                    campos=["configuracao"],
+                )
 
         antes = {
             "identificacao": edicao.identificacao,
@@ -842,6 +893,11 @@ def publicar_edicao(
 ) -> EdicaoCompeticaoDetalhe:
     with transacao(db):
         edicao = bloquear_edicao(db, id_edicao_competicao)
+        if edicao.estado == "CANCELADA":
+            raise ConflitoEstado(
+                "Não é possível alterar publicação de uma edição cancelada.",
+                campos=["estado"],
+            )
         antes = {"publicada": edicao.publicada}
         edicao.publicada = publicada
         db.flush()
@@ -870,6 +926,31 @@ def excluir_edicao_competicao(
                 "Apenas edicoes em rascunho podem ser excluidas.",
                 campos=["estado"],
             )
+        tem_historico_esportivo = (
+            _edicao_possui_tabela_gerada(db, id_edicao_competicao)
+            or db.query(SuspensaoCompeticao.id_suspensao)
+            .filter(SuspensaoCompeticao.id_edicao_competicao == id_edicao_competicao)
+            .first()
+            is not None
+            or db.query(DecisaoClassificacao.id_decisao)
+            .filter(DecisaoClassificacao.id_edicao_competicao == id_edicao_competicao)
+            .first()
+            is not None
+            or db.query(AuditoriaCompeticao.id_auditoria)
+            .filter(
+                AuditoriaCompeticao.id_edicao_competicao == id_edicao_competicao,
+                AuditoriaCompeticao.acao.notin_(
+                    ["CRIAR", "ATUALIZAR", "PUBLICAR", "DESPUBLICAR"]
+                ),
+            )
+            .first()
+            is not None
+        )
+        if tem_historico_esportivo:
+            raise ConflitoEstado(
+                "Não é permitido excluir edição que já possui tabela, partidas ou histórico esportivo gerado.",
+                campos=["id_edicao_competicao"],
+            )
         antes = {
             "id_edicao_competicao": edicao.id_edicao_competicao,
             "identificacao": edicao.identificacao,
@@ -886,3 +967,217 @@ def excluir_edicao_competicao(
             responsavel=responsavel,
         )
         db.delete(edicao)
+
+
+def iniciar_edicao_competicao(
+    db: Session,
+    id_edicao_competicao: int,
+    responsavel: Usuario,
+) -> EdicaoCompeticaoDetalhe:
+    """Inicia a edição de competição, mudando RASCUNHO -> EM_ANDAMENTO (ou idempotente se já EM_ANDAMENTO)."""
+    with transacao(db):
+        edicao = bloquear_edicao(db, id_edicao_competicao)
+        tem_tabela = _edicao_possui_tabela_gerada(db, id_edicao_competicao)
+
+        if edicao.estado == "EM_ANDAMENTO" and tem_tabela:
+            return _para_edicao_competicao_detalhe(edicao)
+
+        if edicao.estado != "RASCUNHO":
+            raise ConflitoEstado(
+                "Apenas edições em rascunho podem ser iniciadas.",
+                campos=["estado"],
+            )
+
+        if not tem_tabela:
+            raise ConflitoEstado(
+                "Gere a tabela de jogos antes de iniciar a edição.",
+                campos=["partidas"],
+            )
+
+        equipes = (
+            db.query(Equipe)
+            .filter(
+                Equipe.id_edicao_competicao == id_edicao_competicao,
+                Equipe.situacao == "ATIVA",
+            )
+            .all()
+        )
+        if len(equipes) < 2:
+            raise ConflitoEstado(
+                "A edição deve possuir ao menos 2 equipes ativas para ser iniciada.",
+                campos=["equipes"],
+            )
+        for eq in equipes:
+            qtd_ativos = (
+                db.query(IntegranteEquipe)
+                .filter(
+                    IntegranteEquipe.id_equipe == eq.id_equipe,
+                    IntegranteEquipe.situacao == "ATIVO",
+                )
+                .count()
+            )
+            if qtd_ativos < 1:
+                raise ConflitoEstado(
+                    f"A equipe '{eq.nome}' não possui nenhum integrante ativo inscrito.",
+                    campos=["equipes"],
+                )
+
+        edicao.estado = "EM_ANDAMENTO"
+        incrementar_revisao(edicao)
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=id_edicao_competicao,
+            acao="INICIAR",
+            antes={"estado": "RASCUNHO"},
+            depois={"estado": "EM_ANDAMENTO"},
+            id_edicao_competicao=id_edicao_competicao,
+            responsavel=responsavel,
+        )
+        return _para_edicao_competicao_detalhe(edicao)
+
+
+def finalizar_edicao_competicao(
+    db: Session,
+    id_edicao_competicao: int,
+    responsavel: Usuario,
+) -> EdicaoCompeticaoDetalhe:
+    """Finaliza a edição após todas as partidas obrigatórias estarem concluídas e título definido."""
+    with transacao(db):
+        edicao = bloquear_edicao(db, id_edicao_competicao)
+
+        if edicao.estado != "EM_ANDAMENTO":
+            raise ConflitoEstado(
+                "Apenas edições em andamento podem ser finalizadas.",
+                campos=["estado"],
+            )
+
+        partidas = (
+            db.query(Partida)
+            .filter(Partida.id_edicao_competicao == id_edicao_competicao)
+            .all()
+        )
+        if not partidas:
+            raise ConflitoEstado(
+                "A edição não possui partidas cadastradas para ser finalizada.",
+                campos=["partidas"],
+            )
+
+        if any(p.estado != "FINALIZADA" for p in partidas):
+            raise ConflitoEstado(
+                "Todas as partidas obrigatórias devem estar finalizadas para encerrar a edição. Partidas canceladas ou pendentes impedem a finalização.",
+                campos=["partidas"],
+            )
+
+        if edicao.formato in ("MATA_MATA", "GRUPOS_MATA_MATA"):
+            duelos = (
+                db.query(DueloEliminatorio)
+                .filter(
+                    DueloEliminatorio.id_edicao_competicao == id_edicao_competicao
+                )
+                .all()
+            )
+            if not duelos or any(d.estado != "RESOLVIDO" for d in duelos):
+                raise ConflitoEstado(
+                    "Todos os confrontos eliminatórios devem estar resolvidos para finalizar a edição.",
+                    campos=["duelos"],
+                )
+
+        if edicao.formato == "PONTOS_CORRIDOS":
+            tabela = obter_classificacao_edicao(db, id_edicao_competicao)
+            linhas_titulo = (tabela.linhas or [])[:2]
+            if any(l.empate_persistente for l in linhas_titulo):
+                raise ConflitoEstado(
+                    "Existe empate persistente não resolvido na disputa pelo título. Registre uma decisão de desempate antes de finalizar.",
+                    campos=["classificacao"],
+                )
+
+        edicao.estado = "FINALIZADA"
+        incrementar_revisao(edicao)
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=id_edicao_competicao,
+            acao="FINALIZAR",
+            antes={"estado": "EM_ANDAMENTO"},
+            depois={"estado": "FINALIZADA"},
+            id_edicao_competicao=id_edicao_competicao,
+            responsavel=responsavel,
+        )
+        return _para_edicao_competicao_detalhe(edicao)
+
+
+def reabrir_edicao_competicao(
+    db: Session,
+    id_edicao_competicao: int,
+    motivo: str,
+    responsavel: Usuario,
+) -> EdicaoCompeticaoDetalhe:
+    """Reabre uma edição FINALIZADA voltando para EM_ANDAMENTO (bloqueado para CANCELADA)."""
+    if not motivo or len(motivo.strip()) < 3:
+        raise ConfiguracaoInvalida(
+            "É obrigatório informar um motivo válido para reabrir a edição.",
+            campos=["motivo"],
+        )
+
+    with transacao(db):
+        edicao = bloquear_edicao(db, id_edicao_competicao)
+        if edicao.estado != "FINALIZADA":
+            raise ConflitoEstado(
+                "Apenas edições finalizadas podem ser reabertas.",
+                campos=["estado"],
+            )
+
+        edicao.estado = "EM_ANDAMENTO"
+        incrementar_revisao(edicao)
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=id_edicao_competicao,
+            acao="REABRIR",
+            antes={"estado": "FINALIZADA"},
+            depois={"estado": "EM_ANDAMENTO"},
+            id_edicao_competicao=id_edicao_competicao,
+            responsavel=responsavel,
+            motivo=motivo.strip(),
+        )
+        return _para_edicao_competicao_detalhe(edicao)
+
+
+def cancelar_edicao_competicao(
+    db: Session,
+    id_edicao_competicao: int,
+    motivo: str,
+    responsavel: Usuario,
+) -> EdicaoCompeticaoDetalhe:
+    """Cancela administrativamente a edição preservando todos os registros esportivos."""
+    if not motivo or len(motivo.strip()) < 3:
+        raise ConfiguracaoInvalida(
+            "É obrigatório informar um motivo válido para cancelar a edição.",
+            campos=["motivo"],
+        )
+
+    with transacao(db):
+        edicao = bloquear_edicao(db, id_edicao_competicao)
+        if edicao.estado == "CANCELADA":
+            raise ConflitoEstado(
+                "A edição já está cancelada.",
+                campos=["estado"],
+            )
+
+        estado_anterior = edicao.estado
+        edicao.estado = "CANCELADA"
+        incrementar_revisao(edicao)
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=id_edicao_competicao,
+            acao="CANCELAR",
+            antes={"estado": estado_anterior},
+            depois={"estado": "CANCELADA"},
+            id_edicao_competicao=id_edicao_competicao,
+            responsavel=responsavel,
+            motivo=motivo.strip(),
+        )
+        return _para_edicao_competicao_detalhe(edicao)
+

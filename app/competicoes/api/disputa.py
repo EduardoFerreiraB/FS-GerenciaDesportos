@@ -11,6 +11,7 @@ from competicoes.contratos.disputa import (
     TabelaGerar,
 )
 from competicoes.servicos import disputa as servico_disputa
+from competicoes.contratos.sumula import MotivoOperacao
 
 router = APIRouter()
 
@@ -75,3 +76,20 @@ def encerrar_grupos(
     usuario: models.Usuario = Depends(check_coordenador_role),
 ) -> EstruturaDisputaDetalhe:
     return servico_disputa.encerrar_fase_grupos(db, id_edicao_competicao, usuario)
+
+
+@router.post(
+    "/edicoes/{id_edicao_competicao}/reabrir-fase-grupos",
+    response_model=EstruturaDisputaDetalhe,
+    status_code=status.HTTP_200_OK,
+    summary="Reabrir fase de grupos (exige motivo; bloqueia se o mata-mata já começou)",
+)
+def reabrir_fase_grupos(
+    id_edicao_competicao: int,
+    dados: MotivoOperacao,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(check_coordenador_role),
+) -> EstruturaDisputaDetalhe:
+    return servico_disputa.reabrir_fase_grupos(
+        db, id_edicao_competicao, dados.motivo, usuario
+    )

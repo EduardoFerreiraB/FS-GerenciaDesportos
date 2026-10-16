@@ -36,6 +36,7 @@ from competicoes.modelos import (
     Partida,
     VagaDuelo,
 )
+from competicoes.servicos.classificacao import obter_classificacao_edicao
 from competicoes.servicos.motores.chaveamento import (
     distribuir_equipes_grupos,
     gerar_arvore_mata_mata,
@@ -44,6 +45,7 @@ from competicoes.servicos.motores.chaveamento import (
     gerar_tabela_grupos,
 )
 from competicoes.servicos.motores.classificacao import calcular_classificacao as calcular_tabela
+from competicoes.servicos.motores.sumula import analisar_impacto_reabertura
 
 
 def gerar_tabela_edicao(
@@ -606,64 +608,19 @@ def encerrar_fase_grupos(
 
     config = validar_configuracao(edicao.formato, edicao.configuracao)
     classificados_por_grupo = config.classificados_por_grupo
-    pts_cfg = {
-        "vitoria": config.pontuacao.vitoria,
-        "empate": config.pontuacao.empate,
-        "derrota": config.pontuacao.derrota,
-    }
-    criterios_desempate = [c.value for c in config.desempates]
 
-    grupos = db.execute(
-        select(GrupoCompeticao)
-        .where(GrupoCompeticao.id_edicao_competicao == id_edicao)
-        .order_by(GrupoCompeticao.ordem)
-    ).scalars().all()
-
+    tabela_edicao = obter_classificacao_edicao(db, id_edicao)
     classificados_por_grupo_map: dict[int, list[int]] = {}
 
-    for g in grupos:
-        equipes_grupo = db.execute(
-            select(Equipe)
-            .where(Equipe.id_grupo == g.id_grupo)
-            .order_by(Equipe.id_equipe)
-        ).scalars().all()
-
-        partidas_deste = [p for p in partidas_grupos if p.id_grupo == g.id_grupo]
-        partidas_dados = []
-        for p in partidas_deste:
-            gm = sum(
-                1 for oc in p.ocorrencias
-                if oc.tipo == "GOL" and oc.id_equipe_beneficiada == p.id_equipe_mandante
-            )
-            gv = sum(
-                1 for oc in p.ocorrencias
-                if oc.tipo == "GOL" and oc.id_equipe_beneficiada == p.id_equipe_visitante
-            )
-            partidas_dados.append({
-                "id_partida": p.id_partida,
-                "id_equipe_mandante": p.id_equipe_mandante,
-                "id_equipe_visitante": p.id_equipe_visitante,
-                "estado": p.estado,
-                "gols_mandante": gm,
-                "gols_visitante": gv,
-            })
-
-        tabela = calcular_tabela(
-            equipes=[{"id_equipe": eq.id_equipe, "nome_equipe": eq.nome} for eq in equipes_grupo],
-            partidas=partidas_dados,
-            configuracao_pontos=pts_cfg,
-            ordem_desempates=criterios_desempate,
-        )
-
-        # Checa empate persistente na zona de classificação
-        linhas_classificadas = tabela[:classificados_por_grupo]
+    for gd in tabela_edicao.grupos or []:
+        linhas_classificadas = gd.linhas[:classificados_por_grupo]
         if any(linha.empate_persistente for linha in linhas_classificadas):
             raise ConflitoEstado(
-                f"Empate persistente não resolvido no grupo '{g.nome}'. Não é possível avançar sem critérios de desempate conclusivos.",
+                f"Empate persistente não resolvido no grupo '{gd.nome}'. Não é possível avançar sem critérios de desempate conclusivos.",
                 campos=["classificacao"],
             )
 
-        classificados_por_grupo_map[g.id_grupo] = [
+        classificados_por_grupo_map[gd.id_grupo] = [
             linha.id_equipe for linha in linhas_classificadas
         ]
 
@@ -752,3 +709,101 @@ def encerrar_fase_grupos(
         )
 
     return obter_estrutura_disputa(db, id_edicao)
+
+
+def reabrir_fase_grupos(
+    db: Session,
+    id_edicao: int,
+    motivo: str,
+    responsavel: models.Usuario,
+) -> EstruturaDisputaDetalhe:
+    """Reabre a fase de grupos limpando vagas e partidas agendadas do mata-mata."""
+    if not motivo or len(motivo.strip()) < 3:
+        raise ConfiguracaoInvalida(
+            "É obrigatório informar um motivo válido para reabrir a fase de grupos.",
+            campos=["motivo"],
+        )
+
+    edicao = bloquear_edicao(db, id_edicao)
+
+    if edicao.formato != "GRUPOS_MATA_MATA":
+        raise ConflitoEstado(
+            "Apenas edições no formato GRUPOS_MATA_MATA possuem fase de grupos para reabertura.",
+            campos=["formato"],
+        )
+
+    if edicao.estado != "EM_ANDAMENTO":
+        raise ConflitoEstado(
+            "A edição deve estar EM_ANDAMENTO para reabrir a fase de grupos.",
+            campos=["estado"],
+        )
+
+    duelos = (
+        db.execute(
+            select(DueloEliminatorio).where(
+                DueloEliminatorio.id_edicao_competicao == id_edicao
+            )
+        )
+        .scalars()
+        .all()
+    )
+    vagas = (
+        db.execute(
+            select(VagaDuelo).where(
+                VagaDuelo.id_duelo.in_([d.id_duelo for d in duelos])
+            )
+        )
+        .scalars()
+        .all()
+        if duelos
+        else []
+    )
+    partidas = (
+        db.execute(
+            select(Partida).where(Partida.id_edicao_competicao == id_edicao)
+        )
+        .scalars()
+        .all()
+    )
+
+    impacto = analisar_impacto_reabertura(
+        duelos=duelos,
+        vagas=vagas,
+        partidas=partidas,
+        reabrir_grupos=True,
+    )
+    if impacto["bloqueado"]:
+        raise ConflitoEstado(
+            impacto["motivo"]
+            or "Não é possível reabrir a fase de grupos pois confrontos eliminatórios já foram iniciados.",
+            campos=["partidas"],
+        )
+
+    with transacao(db):
+        for p in partidas:
+            if p.id_duelo is not None and p.estado == "AGENDADA":
+                db.delete(p)
+        db.flush()
+
+        for v in vagas:
+            v.id_equipe_resolvida = None
+        for d in duelos:
+            d.estado = "PENDENTE"
+            d.id_equipe_vencedora = None
+        db.flush()
+
+        incrementar_revisao(edicao)
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=id_edicao,
+            acao="REABRIR_FASE_GRUPOS",
+            antes=None,
+            depois=None,
+            id_edicao_competicao=id_edicao,
+            responsavel=responsavel,
+            motivo=motivo.strip(),
+        )
+
+    return obter_estrutura_disputa(db, id_edicao)
+
