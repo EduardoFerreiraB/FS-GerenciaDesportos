@@ -18,6 +18,7 @@ import {
   Edit3,
   CalendarCheck,
   X,
+  FileText,
 } from 'lucide-react';
 import {
   listarPartidas,
@@ -35,6 +36,8 @@ import type {
 } from '@/types/competicoes';
 import ModalAgendarPartida from './ModalAgendarPartida';
 import ModalResultadoSimples from './ModalResultadoSimples';
+import ModalSumulaDetalhada from './ModalSumulaDetalhada';
+import ModalReabrirPartida, { type ModoReabertura } from './ModalReabrirPartida';
 
 interface PartidaEstendida extends PartidaDetalhe {
   data?: string | null;
@@ -95,6 +98,16 @@ export default function VisualizadorPartidas({
   // Modais de Ação em Partida
   const [partidaAgendando, setPartidaAgendando] = useState<PartidaEstendida | null>(null);
   const [partidaPlacar, setPartidaPlacar] = useState<PartidaEstendida | null>(null);
+  const [partidaSumula, setPartidaSumula] = useState<PartidaDetalhe | null>(null);
+  const [modalReabertura, setModalReabertura] = useState<{
+    isOpen: boolean;
+    modo: ModoReabertura;
+    partida?: PartidaDetalhe | null;
+  }>({
+    isOpen: false,
+    modo: 'REABRIR_PARTIDA',
+    partida: null,
+  });
 
   // Filtros
   const [filtroRodada, setFiltroRodada] = useState<string>('TODAS');
@@ -391,6 +404,25 @@ export default function VisualizadorPartidas({
             >
               <Trophy size={16} />
               <span>Encerrar Fase de Grupos</span>
+            </button>
+          )}
+
+          {/* Botão Reabrir Fase de Grupos (quando GRUPOS_MATA_MATA e EM_ANDAMENTO) */}
+          {isGruposMataMata && isEmAndamento && (
+            <button
+              type="button"
+              data-testid="btn-reabrir-grupos"
+              onClick={() =>
+                setModalReabertura({
+                  isOpen: true,
+                  modo: 'REABRIR_GRUPOS',
+                  partida: null,
+                })
+              }
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold rounded-lg text-sm transition"
+            >
+              <RotateCcw size={16} />
+              <span>Reabrir Fase de Grupos</span>
             </button>
           )}
 
@@ -735,7 +767,7 @@ export default function VisualizadorPartidas({
                   </div>
 
                   {/* Ações da Partida */}
-                  <div className="flex items-center gap-2 justify-end">
+                  <div className="flex flex-wrap items-center gap-2 justify-end">
                     <button
                       type="button"
                       onClick={() => setPartidaAgendando(partida)}
@@ -743,6 +775,17 @@ export default function VisualizadorPartidas({
                     >
                       <CalendarCheck size={14} className="text-blue-600" />
                       <span>Agendar</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid={`btn-sumula-${partida.id_partida}`}
+                      onClick={() => setPartidaSumula(partida)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-semibold text-slate-700 transition shadow-2xs hover:border-slate-300"
+                      title="Abrir súmula detalhada do jogo"
+                    >
+                      <FileText size={14} className="text-indigo-600" />
+                      <span>Súmula</span>
                     </button>
 
                     <button
@@ -755,6 +798,25 @@ export default function VisualizadorPartidas({
                       <Trophy size={14} />
                       <span>{isFinalizada ? 'Editar Placar' : 'Lançar Placar'}</span>
                     </button>
+
+                    {isFinalizada && (
+                      <button
+                        type="button"
+                        data-testid={`btn-reabrir-${partida.id_partida}`}
+                        onClick={() =>
+                          setModalReabertura({
+                            isOpen: true,
+                            modo: 'REABRIR_PARTIDA',
+                            partida,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 font-semibold text-amber-800 transition shadow-2xs"
+                        title="Reabrir jogo com justificativa"
+                      >
+                        <RotateCcw size={14} />
+                        <span>Reabrir Jogo</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -777,6 +839,31 @@ export default function VisualizadorPartidas({
         isOpen={Boolean(partidaPlacar)}
         onClose={() => setPartidaPlacar(null)}
         onSucesso={handlePlacarRegistrado}
+      />
+
+      {/* Modal de Súmula Detalhada */}
+      {partidaSumula && (
+        <ModalSumulaDetalhada
+          partida={partidaSumula}
+          idEdicaoCompeticao={idEdicaoCompeticao}
+          onClose={() => setPartidaSumula(null)}
+          onSucesso={async () => {
+            await carregarDados();
+          }}
+        />
+      )}
+
+      {/* Modal de Reabertura Justificada */}
+      <ModalReabrirPartida
+        isOpen={modalReabertura.isOpen}
+        modo={modalReabertura.modo}
+        partida={modalReabertura.partida}
+        idEdicaoCompeticao={idEdicaoCompeticao}
+        onClose={() => setModalReabertura((prev) => ({ ...prev, isOpen: false }))}
+        onSucesso={async () => {
+          setSucesso('Operação de reabertura realizada com sucesso!');
+          await carregarDados();
+        }}
       />
 
       {/* Diálogo de Confirmação: Desfazer Tabela */}
