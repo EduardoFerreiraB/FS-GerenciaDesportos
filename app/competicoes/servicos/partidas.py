@@ -18,16 +18,12 @@ from competicoes.contratos.partidas import (
 )
 from competicoes.erros import ConfiguracaoInvalida, ConflitoEstado, NaoEncontrado
 from competicoes.infra import incrementar_revisao, registrar_auditoria, transacao
-from competicoes.modelos.disciplina import SuspensaoCompeticao
 from competicoes.modelos.disputa import DueloEliminatorio, VagaDuelo
 from competicoes.modelos.operacao import RequisicaoPartida
 from competicoes.modelos.organizacao import EdicaoCompeticao
 from competicoes.modelos.partidas import OcorrenciaPartida, Partida
 from competicoes.servicos.motores.avanco import propagar_avanco_grafo, resolver_duelo
-from competicoes.servicos.motores.disciplina import (
-    calcular_sancoes_e_cartoes,
-    reconciliar_suspensoes_existentes,
-)
+from competicoes.servicos.disciplina import _executar_reconciliacao_interna
 from competicoes.servicos.motores.sumula import validar_ajuste_resultado_simples
 
 # Garante compatibilidade de atributo status <-> estado
@@ -43,137 +39,15 @@ def _reconciliar_sancoes_edicao(
     id_edicao_competicao: int,
     responsavel: Usuario | None = None,
 ) -> None:
-    """Reconcilia suspensões automáticas da edição a partir das ocorrências de partidas finalizadas."""
+    """Reconcilia suspensões automáticas da edição dentro da transação em curso.
+
+    Delega à implementação única do serviço disciplinar, que respeita revisões
+    já resolvidas pelo coordenador.
+    """
     edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
     if edicao is None:
         return
-
-    cfg = edicao.configuracao if isinstance(edicao.configuracao, dict) else {}
-    config_disciplina = cfg.get("disciplina", cfg) if isinstance(cfg, dict) else {}
-
-    vagas_grupo_resolvidas = db.execute(
-        select(VagaDuelo.id_vaga)
-        .join(DueloEliminatorio, DueloEliminatorio.id_duelo == VagaDuelo.id_duelo)
-        .where(
-            DueloEliminatorio.id_edicao_competicao == id_edicao_competicao,
-            VagaDuelo.origem == "POSICAO_GRUPO",
-            VagaDuelo.id_equipe_resolvida.is_not(None),
-        )
-        .limit(1)
-    ).scalar_one_or_none()
-    grupos_encerrados = vagas_grupo_resolvidas is not None
-
-    partidas = (
-        db.execute(
-            select(Partida).where(Partida.id_edicao_competicao == id_edicao_competicao)
-        )
-        .scalars()
-        .all()
-    )
-    ids_partidas = [p.id_partida for p in partidas]
-    ocorrencias = (
-        db.execute(
-            select(OcorrenciaPartida).where(OcorrenciaPartida.id_partida.in_(ids_partidas))
-        )
-        .scalars()
-        .all()
-        if ids_partidas
-        else []
-    )
-
-    partidas_dicts = [
-        {
-            "id_partida": p.id_partida,
-            "id_equipe_mandante": p.id_equipe_mandante,
-            "id_equipe_visitante": p.id_equipe_visitante,
-            "estado": p.estado,
-            "id_grupo": p.id_grupo,
-            "rodada": p.rodada,
-            "ordem_jogo": p.ordem_jogo,
-        }
-        for p in partidas
-    ]
-    ocorrencias_dicts = [
-        {
-            "id_ocorrencia": oc.id_ocorrencia,
-            "id_partida": oc.id_partida,
-            "tipo": oc.tipo,
-            "id_equipe_beneficiada": oc.id_equipe_beneficiada,
-            "id_integrante": oc.id_integrante,
-            "minuto": oc.minuto,
-        }
-        for oc in ocorrencias
-    ]
-
-    calculo = calcular_sancoes_e_cartoes(
-        id_edicao_competicao=id_edicao_competicao,
-        ocorrencias=ocorrencias_dicts,
-        partidas=partidas_dicts,
-        config_disciplina=config_disciplina,
-        grupos_encerrados=grupos_encerrados,
-    )
-    sancoes_esperadas = calculo["sancoes_esperadas"]
-
-    suspensoes_banco = (
-        db.execute(
-            select(SuspensaoCompeticao)
-            .options(selectinload(SuspensaoCompeticao.cumprimentos))
-            .where(SuspensaoCompeticao.id_edicao_competicao == id_edicao_competicao)
-        )
-        .scalars()
-        .all()
-    )
-
-    acoes = reconciliar_suspensoes_existentes(sancoes_esperadas, suspensoes_banco)
-    por_chave = {
-        s.chave_origem: s for s in suspensoes_banco if s.chave_origem is not None
-    }
-    esperadas_por_chave = {
-        str(s["chave_origem"]): s
-        for s in sancoes_esperadas
-        if s.get("chave_origem") is not None
-    }
-
-    for susp in acoes["para_cancelar"]:
-        susp.situacao = "CANCELADA"
-
-    for susp in acoes["para_revisao"]:
-        susp.situacao = "EM_REVISAO"
-
-    for chave, s_esp in esperadas_por_chave.items():
-        if chave in por_chave and por_chave[chave].situacao == "EM_REVISAO":
-            susp_rev = por_chave[chave]
-            cumpridos = len(susp_rev.cumprimentos or [])
-            susp_rev.situacao = "CUMPRIDA" if cumpridos >= susp_rev.jogos else "ATIVA"
-
-    for s_nova in acoes["para_criar"]:
-        chave = s_nova.get("chave_origem")
-        if chave and chave in por_chave:
-            existente = por_chave[chave]
-            existente.situacao = "ATIVA"
-            existente.id_partida_origem = s_nova.get("id_partida_origem")
-            existente.id_ocorrencia_origem = s_nova.get("id_ocorrencia_origem")
-            existente.jogos = s_nova.get("jogos", 1)
-            existente.motivo = s_nova.get("motivo", existente.motivo)
-        else:
-            db.add(
-                SuspensaoCompeticao(
-                    id_edicao_competicao=s_nova["id_edicao_competicao"],
-                    id_integrante=s_nova["id_integrante"],
-                    id_partida_origem=s_nova.get("id_partida_origem"),
-                    id_ocorrencia_origem=s_nova.get("id_ocorrencia_origem"),
-                    origem=s_nova["origem"],
-                    chave_origem=s_nova.get("chave_origem"),
-                    jogos=s_nova.get("jogos", 1),
-                    motivo=s_nova["motivo"],
-                    situacao="ATIVA",
-                    id_usuario_responsavel=(
-                        responsavel.id_usuario if responsavel is not None else None
-                    ),
-                )
-            )
-
-    db.flush()
+    _executar_reconciliacao_interna(db, edicao, responsavel=responsavel)
 
 
 def bloquear_partida(db: Session, id_partida: int) -> Partida:
@@ -238,6 +112,78 @@ def _calcular_placar(db: Session, partida: Partida) -> PlacarPartida:
         penaltis_mandante=partida.penaltis_mandante,
         penaltis_visitante=partida.penaltis_visitante,
     )
+
+
+def _validar_penaltis(
+    db: Session,
+    partida: Partida,
+    placar: PlacarPartida,
+    pm: int | None,
+    pv: int | None,
+) -> None:
+    """Pênaltis só no jogo decisivo empatado, e obrigatórios nesse caso."""
+    campos = ["penaltis_mandante", "penaltis_visitante"]
+    if (pm is None) != (pv is None):
+        raise ConfiguracaoInvalida("Informe os pênaltis de ambas as equipes.", campos=campos)
+
+    if pm is not None and pv is not None:
+        if partida.id_duelo is None:
+            raise ConfiguracaoInvalida(
+                "Pênaltis só são permitidos em confrontos eliminatórios.", campos=campos
+            )
+        if pm == pv:
+            raise ConfiguracaoInvalida(
+                "A disputa de pênaltis não pode terminar empatada.", campos=campos
+            )
+
+    if partida.id_duelo is None:
+        return
+    duelo = db.get(DueloEliminatorio, partida.id_duelo)
+    if duelo is None:
+        return
+
+    if not duelo.ida_volta:
+        eh_jogo_decisivo = True
+        empate_decisivo = placar.gols_mandante == placar.gols_visitante
+    else:
+        eh_jogo_decisivo = partida.ordem_jogo == 2
+        empate_decisivo = False
+        if eh_jogo_decisivo:
+            p_ida = db.execute(
+                select(Partida).where(
+                    Partida.id_duelo == duelo.id_duelo,
+                    Partida.ordem_jogo == 1,
+                )
+            ).scalar_one_or_none()
+            if p_ida is not None:
+                placar_ida = _calcular_placar(db, p_ida)
+                gols_m_ida = placar_ida.gols_mandante + (
+                    placar.gols_mandante
+                    if partida.id_equipe_mandante == p_ida.id_equipe_mandante
+                    else placar.gols_visitante
+                )
+                gols_v_ida = placar_ida.gols_visitante + (
+                    placar.gols_mandante
+                    if partida.id_equipe_mandante == p_ida.id_equipe_visitante
+                    else placar.gols_visitante
+                )
+                empate_decisivo = gols_m_ida == gols_v_ida
+            else:
+                empate_decisivo = placar.gols_mandante == placar.gols_visitante
+
+    if not eh_jogo_decisivo and pm is not None:
+        raise ConfiguracaoInvalida(
+            "Pênaltis só podem ser informados no jogo decisivo do confronto.", campos=campos
+        )
+    if eh_jogo_decisivo and not empate_decisivo and pm is not None:
+        raise ConfiguracaoInvalida(
+            "Pênaltis só são permitidos quando o confronto eliminatório termina empatado.",
+            campos=campos,
+        )
+    if eh_jogo_decisivo and empate_decisivo and pm is None:
+        raise ConfiguracaoInvalida(
+            "Confronto eliminatório empatado exige definição de pênaltis.", campos=campos
+        )
 
 
 def _construir_partida_detalhe(
@@ -576,6 +522,13 @@ def registrar_resultado_simples(
             campos=["estado"],
         )
 
+    if partida.estado not in ("AGENDADA", "EM_ANDAMENTO"):
+        # Corrigir jogo finalizado passa pela reabertura, que aplica as travas do grafo.
+        raise ConflitoEstado(
+            "Partida finalizada ou cancelada não aceita resultado. Reabra a partida com justificativa.",
+            campos=["estado"],
+        )
+
     if not partida.id_equipe_mandante or not partida.id_equipe_visitante:
         raise ConflitoEstado(
             "Partida não possui mandante e visitante definidos.",
@@ -660,6 +613,12 @@ def registrar_resultado_simples(
                     id_usuario_autor=responsavel.id_usuario,
                 )
             )
+
+        db.flush()
+        _validar_penaltis(
+            db, partida, _calcular_placar(db, partida),
+            dados.penaltis_mandante, dados.penaltis_visitante,
+        )
 
         partida.penaltis_mandante = dados.penaltis_mandante
         partida.penaltis_visitante = dados.penaltis_visitante

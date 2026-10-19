@@ -48,6 +48,86 @@ from competicoes.servicos.motores.classificacao import calcular_classificacao as
 from competicoes.servicos.motores.sumula import analisar_impacto_reabertura
 
 
+def _ida_volta_do_duelo(fase: str, ida_volta: bool, final_unica: bool) -> bool:
+    """Final unica e jogo unico mesmo em chave de ida e volta."""
+    return ida_volta and not (fase == "FINAL" and final_unica)
+
+
+def _criar_partidas_duelo(
+    db: Session, id_edicao: int, duelo: DueloEliminatorio, mandante: int, visitante: int
+) -> None:
+    db.add(Partida(
+        id_edicao_competicao=id_edicao,
+        id_duelo=duelo.id_duelo,
+        ordem_jogo=1,
+        id_equipe_mandante=mandante,
+        id_equipe_visitante=visitante,
+        estado="AGENDADA",
+    ))
+    if duelo.ida_volta:
+        db.add(Partida(
+            id_edicao_competicao=id_edicao,
+            id_duelo=duelo.id_duelo,
+            ordem_jogo=2,
+            id_equipe_mandante=visitante,
+            id_equipe_visitante=mandante,
+            estado="AGENDADA",
+        ))
+
+
+def _materializar_duelos_definidos(db: Session, id_edicao: int) -> None:
+    """Duelos com as duas vagas resolvidas passam a DEFINIDO e recebem seus jogos.
+
+    Cobre qualquer fase: com folgas, uma semifinal pode nascer com os dois
+    adversarios ja conhecidos sem que nenhuma partida tenha sido jogada.
+    """
+    duelos = db.execute(
+        select(DueloEliminatorio).where(DueloEliminatorio.id_edicao_competicao == id_edicao)
+    ).scalars().all()
+    for duelo in duelos:
+        if duelo.estado == "RESOLVIDO":
+            continue
+        vagas_d = db.execute(
+            select(VagaDuelo).where(VagaDuelo.id_duelo == duelo.id_duelo).order_by(VagaDuelo.posicao)
+        ).scalars().all()
+        if len(vagas_d) != 2 or not all(v.id_equipe_resolvida for v in vagas_d):
+            continue
+        duelo.estado = "DEFINIDO"
+        ja_tem_partida = db.execute(
+            select(Partida.id_partida).where(Partida.id_duelo == duelo.id_duelo)
+        ).first()
+        if not ja_tem_partida:
+            _criar_partidas_duelo(
+                db, id_edicao, duelo, vagas_d[0].id_equipe_resolvida, vagas_d[1].id_equipe_resolvida
+            )
+    db.flush()
+
+
+def _validar_distribuicao_grupos(
+    distribuicao: dict[str, list[int]],
+    equipes_ids: list[int],
+    quantidade_grupos: int,
+    classificados_por_grupo: int,
+) -> None:
+    if len(distribuicao) != quantidade_grupos:
+        raise ConfiguracaoInvalida(
+            f"A distribuição deve ter exatamente {quantidade_grupos} grupos.",
+            campos=["distribuicao_grupos"],
+        )
+    alocadas = [tid for tids in distribuicao.values() for tid in tids]
+    if sorted(alocadas) != sorted(equipes_ids):
+        raise ConfiguracaoInvalida(
+            "Cada equipe ativa da edição deve aparecer em exatamente um grupo.",
+            campos=["distribuicao_grupos"],
+        )
+    minimo = max(2, classificados_por_grupo)
+    if any(len(tids) < minimo for tids in distribuicao.values()):
+        raise ConfiguracaoInvalida(
+            f"Cada grupo precisa de ao menos {minimo} equipes para {classificados_por_grupo} classificados.",
+            campos=["distribuicao_grupos"],
+        )
+
+
 def gerar_tabela_edicao(
     db: Session,
     id_edicao: int,
@@ -129,6 +209,20 @@ def gerar_tabela_edicao(
                 dist = dados.distribuicao_grupos
             else:
                 dist = distribuir_equipes_grupos(equipes_ids, qtd_grupos)
+            _validar_distribuicao_grupos(
+                dist, equipes_ids, qtd_grupos, config.classificados_por_grupo
+            )
+            try:
+                duelos_planejados = gerar_cruzamentos_grupos_mata_mata(
+                    nomes_grupos=list(dist.keys()),
+                    classificados_por_grupo=config.classificados_por_grupo,
+                    ida_volta=bool(config.ida_volta_eliminatoria),
+                    terceiro_lugar=bool(config.terceiro_lugar),
+                )
+            except ValueError as erro:
+                raise ConfiguracaoInvalida(
+                    str(erro), campos=["quantidade_grupos", "classificados_por_grupo"]
+                ) from None
 
             # Criar grupos no banco
             grupos_map: dict[str, GrupoCompeticao] = {}
@@ -174,14 +268,7 @@ def gerar_tabela_edicao(
                     )
                     db.add(partida)
 
-            # Gerar estrutura da árvore de mata-mata subsequente
-            duelos_planejados = gerar_cruzamentos_grupos_mata_mata(
-                nomes_grupos=list(dist.keys()),
-                classificados_por_grupo=config.classificados_por_grupo,
-                ida_volta=bool(config.ida_volta_eliminatoria),
-                terceiro_lugar=bool(config.terceiro_lugar),
-            )
-
+            # Estrutura da árvore de mata-mata subsequente
             duelos_db_map: dict[tuple[str, int], DueloEliminatorio] = {}
             for d in duelos_planejados:
                 duelo_db = DueloEliminatorio(
@@ -189,7 +276,7 @@ def gerar_tabela_edicao(
                     fase=d.fase,
                     posicao_chave=d.posicao_chave,
                     estado="PENDENTE",
-                    ida_volta=d.ida_volta,
+                    ida_volta=_ida_volta_do_duelo(d.fase, d.ida_volta, config.final_unica),
                 )
                 db.add(duelo_db)
                 duelos_db_map[(d.fase, d.posicao_chave)] = duelo_db
@@ -236,7 +323,7 @@ def gerar_tabela_edicao(
                     fase=d.fase,
                     posicao_chave=d.posicao_chave,
                     estado="PENDENTE",
-                    ida_volta=d.ida_volta,
+                    ida_volta=_ida_volta_do_duelo(d.fase, d.ida_volta, config.final_unica),
                 )
                 db.add(duelo_db)
                 duelos_db_map[(d.fase, d.posicao_chave)] = duelo_db
@@ -292,47 +379,7 @@ def gerar_tabela_edicao(
                         vf.id_equipe_resolvida = v_time.id_equipe
                     db.flush()
 
-            # Criação de partidas para duelos da primeira fase com ambas equipes definidas
-            primeira_fase_nome = duelos_planejados[0].fase if duelos_planejados else None
-            for (fase, _pos), duelo_db in duelos_db_map.items():
-                if fase != primeira_fase_nome:
-                    continue
-                if duelo_db.estado == "RESOLVIDO":
-                    continue
-                vagas_d = db.execute(
-                    select(VagaDuelo)
-                    .where(VagaDuelo.id_duelo == duelo_db.id_duelo)
-                    .order_by(VagaDuelo.posicao)
-                ).scalars().all()
-
-                if len(vagas_d) == 2 and vagas_d[0].id_equipe_resolvida and vagas_d[1].id_equipe_resolvida:
-                    duelo_db.estado = "DEFINIDO"
-                    t1 = vagas_d[0].id_equipe_resolvida
-                    t2 = vagas_d[1].id_equipe_resolvida
-                    p1 = Partida(
-                        id_edicao_competicao=id_edicao,
-                        id_grupo=None,
-                        id_duelo=duelo_db.id_duelo,
-                        ordem_jogo=1,
-                        id_equipe_mandante=t1,
-                        id_equipe_visitante=t2,
-                        estado="AGENDADA",
-                    )
-                    db.add(p1)
-
-                    eh_final_unica = getattr(config, "final_unica", True) and fase == "FINAL"
-                    if duelo_db.ida_volta and not eh_final_unica:
-                        p2 = Partida(
-                            id_edicao_competicao=id_edicao,
-                            id_grupo=None,
-                            id_duelo=duelo_db.id_duelo,
-                            ordem_jogo=2,
-                            id_equipe_mandante=t2,
-                            id_equipe_visitante=t1,
-                            estado="AGENDADA",
-                        )
-                        db.add(p2)
-            db.flush()
+            _materializar_duelos_definidos(db, id_edicao)
 
         edicao.estado = "EM_ANDAMENTO"
         incrementar_revisao(edicao)
@@ -644,57 +691,8 @@ def encerrar_fase_grupos(
                     v.id_equipe_resolvida = classificados[v.posicao_grupo - 1]
         db.flush()
 
-        # 2. Verificar duelos com ambas as equipes resolvidas e criar partidas
-        duelos_elim = db.execute(
-            select(DueloEliminatorio).where(
-                DueloEliminatorio.id_edicao_competicao == id_edicao
-            )
-        ).scalars().all()
-
-        for duelo in duelos_elim:
-            vagas_d = db.execute(
-                select(VagaDuelo)
-                .where(VagaDuelo.id_duelo == duelo.id_duelo)
-                .order_by(VagaDuelo.posicao)
-            ).scalars().all()
-
-            if (
-                len(vagas_d) == 2
-                and vagas_d[0].id_equipe_resolvida
-                and vagas_d[1].id_equipe_resolvida
-            ):
-                duelo.estado = "DEFINIDO"
-                ja_tem_partida = db.execute(
-                    select(Partida).where(Partida.id_duelo == duelo.id_duelo)
-                ).first()
-
-                if not ja_tem_partida:
-                    t1 = vagas_d[0].id_equipe_resolvida
-                    t2 = vagas_d[1].id_equipe_resolvida
-                    p1 = Partida(
-                        id_edicao_competicao=id_edicao,
-                        id_grupo=None,
-                        id_duelo=duelo.id_duelo,
-                        ordem_jogo=1,
-                        id_equipe_mandante=t1,
-                        id_equipe_visitante=t2,
-                        estado="AGENDADA",
-                    )
-                    db.add(p1)
-
-                    eh_final_unica = getattr(config, "final_unica", True) and duelo.fase == "FINAL"
-                    if duelo.ida_volta and not eh_final_unica:
-                        p2 = Partida(
-                            id_edicao_competicao=id_edicao,
-                            id_grupo=None,
-                            id_duelo=duelo.id_duelo,
-                            ordem_jogo=2,
-                            id_equipe_mandante=t2,
-                            id_equipe_visitante=t1,
-                            estado="AGENDADA",
-                        )
-                        db.add(p2)
-        db.flush()
+        # 2. Duelos com ambas as equipes resolvidas recebem suas partidas
+        _materializar_duelos_definidos(db, id_edicao)
 
         incrementar_revisao(edicao)
         registrar_auditoria(
@@ -806,4 +804,3 @@ def reabrir_fase_grupos(
         )
 
     return obter_estrutura_disputa(db, id_edicao)
-

@@ -566,4 +566,3 @@ def listar_decisoes_classificacao(
             )
         )
     return resultado
-

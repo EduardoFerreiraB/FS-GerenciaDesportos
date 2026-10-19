@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -24,6 +24,7 @@ from competicoes.infra import (
     registrar_auditoria,
     transacao,
 )
+from competicoes.servicos.exclusao import apagar_integrantes_de_equipes
 from competicoes.modelos import (
     Competidor,
     EdicaoCompeticao,
@@ -217,9 +218,7 @@ def criar_equipe(
 ) -> EquipeDetalhe:
     """Cria equipe em edição com estado RASCUNHO."""
     with transacao(db):
-        edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
-        if edicao is None:
-            raise NaoEncontrado("Edicao de competicao nao encontrada.", campos=["id_edicao_competicao"])
+        edicao = bloquear_edicao(db, id_edicao_competicao)
         if edicao.estado != "RASCUNHO":
             raise ConflitoEstado("Apenas edicoes em rascunho aceitam novas equipes.", campos=["estado"])
 
@@ -286,9 +285,7 @@ def inscrever_integrante(
         if equipe.situacao != "ATIVA":
             raise ConflitoEstado("Apenas equipes ativas aceitam novos integrantes.", campos=["situacao"])
 
-        edicao = db.get(EdicaoCompeticao, equipe.id_edicao_competicao)
-        if edicao is None:
-            raise NaoEncontrado("Edicao de competicao nao encontrada.", campos=["id_edicao_competicao"])
+        edicao = bloquear_edicao(db, equipe.id_edicao_competicao)
         if edicao.estado != "RASCUNHO":
             raise ConflitoEstado("Apenas edicoes em rascunho aceitam novas inscricoes.", campos=["estado"])
 
@@ -338,6 +335,41 @@ def inscrever_integrante(
             responsavel=responsavel,
         )
         return detalhe
+
+
+def excluir_equipe(db: Session, id_equipe: int, responsavel: models.Usuario) -> None:
+    """Exclui a equipe e seus atletas (inscrições); os competidores permanecem.
+
+    Só em edição em rascunho: com a tabela gerada a equipe já tem jogos, e a
+    composição da tabela é estrutural (spec 7.5).
+    """
+    with transacao(db):
+        equipe = db.get(Equipe, id_equipe)
+        if equipe is None:
+            raise NaoEncontrado("Equipe nao encontrada.", campos=["id_equipe"])
+        edicao = bloquear_edicao(db, equipe.id_edicao_competicao)
+        if edicao.estado != "RASCUNHO":
+            raise ConflitoEstado(
+                "Equipes só podem ser excluídas com a edição em rascunho. Desfaça a tabela antes.",
+                campos=["estado"],
+            )
+
+        db.refresh(equipe, attribute_names=["integrantes"])
+        registrar_auditoria(
+            db,
+            entidade="equipes",
+            id_entidade=equipe.id_equipe,
+            acao="EXCLUIR",
+            antes=_equipe_para_detalhe(equipe).model_dump(mode="json"),
+            depois=None,
+            id_edicao_competicao=equipe.id_edicao_competicao,
+            responsavel=responsavel,
+        )
+        apagar_integrantes_de_equipes(db, [id_equipe])
+        db.execute(
+            delete(Equipe).where(Equipe.id_equipe == id_equipe).execution_options(synchronize_session=False)
+        )
+        db.expunge(equipe)
 
 
 def inativar_integrante(

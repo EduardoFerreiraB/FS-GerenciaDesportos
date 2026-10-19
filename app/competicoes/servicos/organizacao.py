@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models import Modalidade, Usuario
@@ -37,9 +37,7 @@ from competicoes.infra import (
     transacao,
 )
 from competicoes.modelos import (
-    AuditoriaCompeticao,
     Competicao,
-    DecisaoClassificacao,
     DueloEliminatorio,
     EdicaoCompeticao,
     EdicaoEvento,
@@ -48,9 +46,9 @@ from competicoes.modelos import (
     GrupoCompeticao,
     IntegranteEquipe,
     Partida,
-    SuspensaoCompeticao,
 )
 from competicoes.servicos.classificacao import obter_classificacao_edicao
+from competicoes.servicos.exclusao import apagar_competicao, apagar_edicao
 
 
 def _slugify(texto: str) -> str:
@@ -892,12 +890,8 @@ def publicar_edicao(
     responsavel: Usuario,
 ) -> EdicaoCompeticaoDetalhe:
     with transacao(db):
+        # Publicação é independente do estado: até edição cancelada pode sair do portal.
         edicao = bloquear_edicao(db, id_edicao_competicao)
-        if edicao.estado == "CANCELADA":
-            raise ConflitoEstado(
-                "Não é possível alterar publicação de uma edição cancelada.",
-                campos=["estado"],
-            )
         antes = {"publicada": edicao.publicada}
         edicao.publicada = publicada
         db.flush()
@@ -919,42 +913,24 @@ def publicar_edicao(
 def excluir_edicao_competicao(
     db: Session, id_edicao_competicao: int, responsavel: Usuario
 ) -> None:
+    """Exclui a edição e, em cascata, tudo o que pertence a ela.
+
+    Decisão do usuário (2026-10-19): vale em qualquer estado. Somem equipes,
+    elencos, grupos, chaveamento, partidas, súmulas, disciplina e decisões;
+    competidores e a trilha de auditoria permanecem.
+    """
     with transacao(db):
         edicao = bloquear_edicao(db, id_edicao_competicao)
-        if edicao.estado != "RASCUNHO":
-            raise ConflitoEstado(
-                "Apenas edicoes em rascunho podem ser excluidas.",
-                campos=["estado"],
-            )
-        tem_historico_esportivo = (
-            _edicao_possui_tabela_gerada(db, id_edicao_competicao)
-            or db.query(SuspensaoCompeticao.id_suspensao)
-            .filter(SuspensaoCompeticao.id_edicao_competicao == id_edicao_competicao)
-            .first()
-            is not None
-            or db.query(DecisaoClassificacao.id_decisao)
-            .filter(DecisaoClassificacao.id_edicao_competicao == id_edicao_competicao)
-            .first()
-            is not None
-            or db.query(AuditoriaCompeticao.id_auditoria)
-            .filter(
-                AuditoriaCompeticao.id_edicao_competicao == id_edicao_competicao,
-                AuditoriaCompeticao.acao.notin_(
-                    ["CRIAR", "ATUALIZAR", "PUBLICAR", "DESPUBLICAR"]
-                ),
-            )
-            .first()
-            is not None
-        )
-        if tem_historico_esportivo:
-            raise ConflitoEstado(
-                "Não é permitido excluir edição que já possui tabela, partidas ou histórico esportivo gerado.",
-                campos=["id_edicao_competicao"],
-            )
         antes = {
             "id_edicao_competicao": edicao.id_edicao_competicao,
+            "id_competicao": edicao.id_competicao,
             "identificacao": edicao.identificacao,
             "estado": edicao.estado,
+            "partidas": db.scalar(
+                select(func.count()).select_from(Partida).where(
+                    Partida.id_edicao_competicao == id_edicao_competicao
+                )
+            ),
         }
         registrar_auditoria(
             db,
@@ -966,7 +942,42 @@ def excluir_edicao_competicao(
             id_edicao_competicao=edicao.id_edicao_competicao,
             responsavel=responsavel,
         )
-        db.delete(edicao)
+        apagar_edicao(db, id_edicao_competicao)
+        db.expunge(edicao)
+
+
+def excluir_competicao(db: Session, id_competicao: int, responsavel: Usuario) -> None:
+    """Exclui a competição e, em cascata, todas as suas edições (decisão de 2026-10-19).
+
+    A auditoria registra a competição e cada edição removida; competidores permanecem.
+    """
+    with transacao(db):
+        competicao = db.get(Competicao, id_competicao)
+        if competicao is None:
+            raise NaoEncontrado("Competicao nao encontrada.", campos=["id_competicao"])
+        edicoes = [bloquear_edicao(db, e.id_edicao_competicao) for e in competicao.edicoes]
+        registrar_auditoria(
+            db,
+            entidade="competicoes",
+            id_entidade=competicao.id_competicao,
+            acao="EXCLUIR",
+            antes={
+                "nome": competicao.nome,
+                "slug": competicao.slug,
+                "edicoes": [
+                    {"id_edicao_competicao": e.id_edicao_competicao, "identificacao": e.identificacao,
+                     "estado": e.estado}
+                    for e in edicoes
+                ],
+            },
+            depois=None,
+            id_edicao_competicao=None,
+            responsavel=responsavel,
+        )
+        apagar_competicao(db, id_competicao)
+        for edicao in edicoes:
+            db.expunge(edicao)
+        db.expunge(competicao)
 
 
 def iniciar_edicao_competicao(
@@ -1180,4 +1191,3 @@ def cancelar_edicao_competicao(
             motivo=motivo.strip(),
         )
         return _para_edicao_competicao_detalhe(edicao)
-
