@@ -8,6 +8,7 @@ import {
   finalizarEdicao,
   reabrirEdicao,
   cancelarEdicao,
+  excluirEdicao,
   isErroApi,
 } from '@/services/competicoes';
 import type {
@@ -21,6 +22,7 @@ import ChaveamentoEliminatorio from '@/components/competicoes/disputa/Chaveament
 import TabelaClassificacao from '@/components/competicoes/classificacao/TabelaClassificacao';
 import PainelDisciplina from '@/components/competicoes/disciplina/PainelDisciplina';
 import FormularioConfiguracao from './FormularioConfiguracao';
+import ModalConfirmarExclusao from './ModalConfirmarExclusao';
 import {
   Calendar,
   Settings,
@@ -38,11 +40,14 @@ import {
   Flag,
   RotateCcw,
   XCircle,
+  Trash2,
 } from 'lucide-react';
 
 interface PainelEdicaoProps {
   idEdicaoCompeticao: number;
   onEdicaoAtualizada?: (edicao: EdicaoCompeticaoDetalhe) => void;
+  /** Chamado depois que a edição foi excluída; a competição continua existindo. */
+  onEdicaoExcluida?: (idEdicaoCompeticao: number) => void;
 }
 
 type AbaAtiva =
@@ -56,6 +61,7 @@ type AbaAtiva =
 export default function PainelEdicao({
   idEdicaoCompeticao,
   onEdicaoAtualizada,
+  onEdicaoExcluida,
 }: PainelEdicaoProps) {
   const [edicao, setEdicao] = useState<EdicaoCompeticaoDetalhe | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -75,6 +81,7 @@ export default function PainelEdicao({
   const [erroPublicacao, setErroPublicacao] = useState<string | null>(null);
   const [modalCicloAcao, setModalCicloAcao] = useState<'REABRIR' | 'CANCELAR' | null>(null);
   const [motivoCiclo, setMotivoCiclo] = useState('');
+  const [modalExclusaoAberto, setModalExclusaoAberto] = useState(false);
 
   const carregarEdicao = useCallback(async () => {
     try {
@@ -325,6 +332,18 @@ export default function PainelEdicao({
                 <span>Cancelar Edição</span>
               </button>
             )}
+
+            <button
+              type="button"
+              data-testid="btn-excluir-edicao"
+              onClick={() => setModalExclusaoAberto(true)}
+              disabled={alterandoPublicacao}
+              className="px-3 py-2 rounded-lg font-medium text-xs bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 transition flex items-center gap-1.5"
+              title="Apaga esta edição; a competição e as outras edições continuam"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Excluir Edição</span>
+            </button>
 
             <button
               type="button"
@@ -619,6 +638,27 @@ export default function PainelEdicao({
           </div>
         )}
       </div>
+
+      <ModalConfirmarExclusao
+        aberto={modalExclusaoAberto}
+        titulo="Excluir edição"
+        textoConfirmacao={edicao.identificacao}
+        descricao={
+          <>
+            <p>
+              A edição <strong>{edicao.identificacao}</strong> será apagada com todas as suas equipes,
+              elencos, jogos, súmulas, classificação e suspensões.
+            </p>
+            <p>A competição e as outras edições continuam existindo. Os competidores cadastrados não são apagados.</p>
+          </>
+        }
+        onFechar={() => setModalExclusaoAberto(false)}
+        onConfirmar={async () => {
+          await excluirEdicao(edicao.id_edicao_competicao);
+          setModalExclusaoAberto(false);
+          onEdicaoExcluida?.(edicao.id_edicao_competicao);
+        }}
+      />
     </div>
   );
 }

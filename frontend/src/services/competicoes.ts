@@ -212,6 +212,15 @@ export async function arquivarCompeticao(idCompeticao: number): Promise<Competic
   return atualizarCompeticao(idCompeticao, { arquivado: true });
 }
 
+/** Exclui a competição e, em cascata, todas as suas edições. */
+export async function excluirCompeticao(idCompeticao: number): Promise<void> {
+  try {
+    await api.delete(`/competicoes/competicoes/${idCompeticao}`);
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
 export async function criarEdicaoCompeticao(
   idCompeticao: number,
   dados: EdicaoCompeticaoCriar
@@ -341,6 +350,15 @@ export async function inscreverIntegrante(idEquipe: number, dados: IntegranteCri
   try {
     const response = await api.post<IntegranteDetalhe>(`/competicoes/equipes/${idEquipe}/integrantes`, dados);
     return response.data;
+  } catch (error) {
+    normalizarErro(error);
+  }
+}
+
+/** Exclui a equipe e seus atletas (inscrições); só com a edição em rascunho. */
+export async function excluirEquipe(idEquipe: number): Promise<void> {
+  try {
+    await api.delete(`/competicoes/equipes/${idEquipe}`);
   } catch (error) {
     normalizarErro(error);
   }
@@ -833,6 +851,7 @@ export const competicoesService = {
   atualizarEdicao,
   publicarEdicao,
   excluirEdicao,
+  excluirCompeticao,
 
   // Competidores
   listarCompetidores,
@@ -844,6 +863,7 @@ export const competicoesService = {
   listarEquipes,
   criarEquipe,
   inscreverIntegrante,
+  excluirEquipe,
   inativarIntegrante,
   copiarEquipes,
 

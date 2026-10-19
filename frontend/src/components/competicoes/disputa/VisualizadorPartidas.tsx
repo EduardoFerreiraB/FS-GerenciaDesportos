@@ -630,9 +630,11 @@ export default function VisualizadorPartidas({
               partida.placar?.penaltis_mandante != null &&
               partida.placar?.penaltis_visitante != null;
 
+            // Jogo finalizado só é corrigido pela reabertura justificada.
             const podeLancarPlacar =
               Boolean(partida.id_equipe_mandante && partida.id_equipe_visitante) &&
-              statusMatch !== 'CANCELADA';
+              statusMatch !== 'CANCELADA' &&
+              !isFinalizada;
 
             return (
               <div
@@ -788,16 +790,18 @@ export default function VisualizadorPartidas({
                       <span>Súmula</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setPartidaPlacar(partida)}
-                      disabled={!podeLancarPlacar}
-                      title={!podeLancarPlacar ? 'Equipes mandante e visitante devem estar definidas' : ''}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Trophy size={14} />
-                      <span>{isFinalizada ? 'Editar Placar' : 'Lançar Placar'}</span>
-                    </button>
+                    {!isFinalizada && (
+                      <button
+                        type="button"
+                        onClick={() => setPartidaPlacar(partida)}
+                        disabled={!podeLancarPlacar}
+                        title={!podeLancarPlacar ? 'Equipes mandante e visitante devem estar definidas' : ''}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Trophy size={14} />
+                        <span>Lançar Placar</span>
+                      </button>
+                    )}
 
                     {isFinalizada && (
                       <button

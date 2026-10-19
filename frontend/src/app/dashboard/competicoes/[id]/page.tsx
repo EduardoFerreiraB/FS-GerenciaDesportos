@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Trophy,
   ArrowLeft,
@@ -12,10 +12,12 @@ import {
   Loader2,
   Calendar,
   X,
+  Trash2,
 } from 'lucide-react';
 import {
   obterCompeticao,
   criarEdicaoCompeticao,
+  excluirCompeticao,
   isErroApi,
 } from '@/services/competicoes';
 import type {
@@ -25,12 +27,15 @@ import type {
   Configuracao,
 } from '@/types/competicoes';
 import PainelEdicao from '@/components/competicoes/organizacao/PainelEdicao';
+import ModalConfirmarExclusao from '@/components/competicoes/organizacao/ModalConfirmarExclusao';
 import FormularioConfiguracao, {
   criarConfiguracaoPadrao,
 } from '@/components/competicoes/organizacao/FormularioConfiguracao';
 
 export default function CompeticaoDetalhePage() {
   const params = useParams();
+  const router = useRouter();
+  const [modalExclusaoAberto, setModalExclusaoAberto] = useState(false);
   const idCompeticao = Number(params?.id);
 
   const [competicao, setCompeticao] = useState<CompeticaoDetalhe | null>(null);
@@ -69,6 +74,8 @@ export default function CompeticaoDetalhePage() {
           }
           return dados.edicoes[dados.edicoes.length - 1].id_edicao_competicao;
         });
+      } else {
+        setEdicaoSelecionadaId(null);
       }
     } catch (err: unknown) {
       if (isErroApi(err)) {
@@ -185,14 +192,25 @@ export default function CompeticaoDetalhePage() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setModalNovaEdicaoAberto(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm transition flex items-center gap-2 shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nova edição</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="btn-excluir-competicao"
+              onClick={() => setModalExclusaoAberto(true)}
+              className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl font-medium text-sm transition flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Excluir competição</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalNovaEdicaoAberto(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm transition flex items-center gap-2 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nova edição</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -244,6 +262,10 @@ export default function CompeticaoDetalhePage() {
         <PainelEdicao
           idEdicaoCompeticao={edicaoSelecionadaId}
           onEdicaoAtualizada={carregarCompeticao}
+          onEdicaoExcluida={() => {
+            setEdicaoSelecionadaId(null);
+            carregarCompeticao();
+          }}
         />
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4">
@@ -262,6 +284,32 @@ export default function CompeticaoDetalhePage() {
           </button>
         </div>
       )}
+
+      <ModalConfirmarExclusao
+        aberto={modalExclusaoAberto}
+        titulo="Excluir competição"
+        textoConfirmacao={competicao.nome}
+        descricao={
+          <>
+            <p>
+              A competição <strong>{competicao.nome}</strong> será apagada junto com{' '}
+              <strong>
+                {competicao.edicoes.length === 1 ? '1 edição' : `${competicao.edicoes.length} edições`}
+              </strong>{' '}
+              e tudo o que pertence a elas: equipes, elencos, jogos, súmulas, classificação e suspensões.
+            </p>
+            <p>
+              Para encerrar só um campeonato e manter a competição, use <strong>Cancelar Edição</strong> ou{' '}
+              <strong>Excluir Edição</strong> na edição. Os competidores cadastrados não são apagados.
+            </p>
+          </>
+        }
+        onFechar={() => setModalExclusaoAberto(false)}
+        onConfirmar={async () => {
+          await excluirCompeticao(competicao.id_competicao);
+          router.push('/dashboard/competicoes');
+        }}
+      />
 
       {/* Modal Nova Edição */}
       {modalNovaEdicaoAberto && (
