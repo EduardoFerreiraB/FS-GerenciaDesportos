@@ -12,7 +12,8 @@ import ClassificacaoPublica from '@/components/publico/ClassificacaoPublica';
 import ChaveamentoPublico from '@/components/publico/ChaveamentoPublico';
 import ArtilhariaPublica from '@/components/publico/ArtilhariaPublica';
 import EquipesPublicas from '@/components/publico/EquipesPublicas';
-import { formatarPeriodo, ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from '@/components/publico/formatos';
+import { formatarPeriodo } from '@/lib/formatos';
+import { ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from '@/lib/rotulos';
 import { servicoPublico } from '@/services/publico';
 import type { EdicaoPublicaDetalhe, FormatoPublico } from '@/types/publico';
 

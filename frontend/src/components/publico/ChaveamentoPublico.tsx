@@ -2,7 +2,8 @@
 
 import React from 'react';
 import type { ChaveamentoPublico as Chaveamento, DueloPublico } from '@/types/publico';
-import { descreverOrigem, rotuloFase } from './formatos';
+import { descreverOrigem } from '@/lib/formatos';
+import { rotuloFase } from '@/lib/rotulos';
 
 function CartaoDuelo({ duelo }: { duelo: DueloPublico }) {
   return (

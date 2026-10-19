@@ -3,7 +3,8 @@
 import React from 'react';
 import { Calendar, MapPin } from 'lucide-react';
 import type { PartidaPublica } from '@/types/publico';
-import { formatarData, formatarHora, rotuloFase } from './formatos';
+import { formatarData, formatarHora } from '@/lib/formatos';
+import { rotuloFase } from '@/lib/rotulos';
 
 const ROTULO_ESTADO: Record<PartidaPublica['estado'], string> = {
   AGENDADA: 'Agendado',
