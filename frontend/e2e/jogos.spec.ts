@@ -1,4 +1,5 @@
 import { test, expect, Page, APIRequestContext } from '@playwright/test';
+import { API_E2E } from './helpers/ambiente';
 
 test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () => {
   let token: string;
@@ -16,7 +17,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
 
     for (const cred of credenciais) {
       try {
-        const res = await request.post('http://127.0.0.1:8000/token', {
+        const res = await request.post(`${API_E2E}/token`, {
           form: cred,
         });
         if (res.ok()) {
@@ -50,7 +51,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
 
     // Busca ID de modalidade válido disponível no sistema
     let idModalidade = 1;
-    const resMod = await request.get('http://127.0.0.1:8000/modalidades/', {
+    const resMod = await request.get(`${API_E2E}/modalidades/`, {
       headers: { Authorization: `Bearer ${authTok}` },
     });
     if (resMod.ok()) {
@@ -61,7 +62,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     }
 
     // 1. Criar Competição com Edição em Rascunho
-    const resComp = await request.post('http://127.0.0.1:8000/competicoes/competicoes', {
+    const resComp = await request.post(`${API_E2E}/competicoes/competicoes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: {
         nome: `Torneio Jogos E2E ${ts}`,
@@ -93,7 +94,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     const idEdicao = comp.edicoes[0].id_edicao_competicao as number;
 
     // 2. Cadastrar Equipe 1
-    const resEq1 = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const resEq1 = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: {
         nome: `Falcões E2E ${ts}`,
@@ -104,21 +105,21 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     const eq1 = await resEq1.json();
 
     // Inscrever atleta na Equipe 1
-    const resComp1 = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const resComp1 = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Atleta Falcão ${ts}`, ativo: true },
     });
     expect(resComp1.ok()).toBeTruthy();
     const comp1 = await resComp1.json();
 
-    const resInt1 = await request.post(`http://127.0.0.1:8000/competicoes/equipes/${eq1.id_equipe}/integrantes`, {
+    const resInt1 = await request.post(`${API_E2E}/competicoes/equipes/${eq1.id_equipe}/integrantes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { id_competidor: comp1.id_competidor, nome_esportivo: 'Falcão', numero_camisa: 10 },
     });
     expect(resInt1.ok()).toBeTruthy();
 
     // 3. Cadastrar Equipe 2
-    const resEq2 = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const resEq2 = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: {
         nome: `Tubarões E2E ${ts}`,
@@ -129,14 +130,14 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     const eq2 = await resEq2.json();
 
     // Inscrever atleta na Equipe 2
-    const resComp2 = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const resComp2 = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Atleta Tubarão ${ts}`, ativo: true },
     });
     expect(resComp2.ok()).toBeTruthy();
     const comp2 = await resComp2.json();
 
-    const resInt2 = await request.post(`http://127.0.0.1:8000/competicoes/equipes/${eq2.id_equipe}/integrantes`, {
+    const resInt2 = await request.post(`${API_E2E}/competicoes/equipes/${eq2.id_equipe}/integrantes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { id_competidor: comp2.id_competidor, nome_esportivo: 'Tubarão', numero_camisa: 9 },
     });
@@ -234,8 +235,8 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     // Status deve ser FINALIZADA (badge no card)
     await expect(page.locator('span', { hasText: /^FINALIZADA$/ }).first()).toBeVisible();
 
-    // O botão deve ter mudado para "Editar Placar"
-    await expect(page.getByRole('button', { name: /editar placar/i }).first()).toBeVisible();
+    // Jogo finalizado só é corrigido por reabertura justificada
+    await expect(page.getByRole('button', { name: /reabrir jogo/i }).first()).toBeVisible();
   });
 
   test('registra resultado por W.O. atribuindo vitória regulamentar e testa filtros', async ({

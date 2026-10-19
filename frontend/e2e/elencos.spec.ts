@@ -1,13 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 import { authenticateDirectly } from './helpers/auth';
+import { API_E2E } from './helpers/ambiente';
 
 test.describe('Gestão de Elencos e Equipes', () => {
   let token: string;
 
   test.beforeAll(async ({ request }) => {
     // Obter token de coordenador para criação de dados de teste via API
-    const authRes = await request.post('http://127.0.0.1:8000/token', {
+    const authRes = await request.post(`${API_E2E}/token`, {
       form: {
         username: 'coordenador',
         password: 'coord123',
@@ -21,7 +22,7 @@ test.describe('Gestão de Elencos e Equipes', () => {
   });
 
   async function obterIdModalidade(request: any) {
-    const res = await request.get('http://127.0.0.1:8000/modalidades/', {
+    const res = await request.get(`${API_E2E}/modalidades/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok()) {
@@ -36,7 +37,7 @@ test.describe('Gestão de Elencos e Equipes', () => {
   async function criarEdicaoTeste(request: any, nome: string, identificacao: string = '2026') {
     const timestamp = Date.now();
     const idModalidade = await obterIdModalidade(request);
-    const res = await request.post('http://127.0.0.1:8000/competicoes/competicoes', {
+    const res = await request.post(`${API_E2E}/competicoes/competicoes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         nome: `${nome} ${timestamp}`,
@@ -67,7 +68,7 @@ test.describe('Gestão de Elencos e Equipes', () => {
   }
 
   async function obterOuCriarAlunoTeste(request: any, nome: string) {
-    const res = await request.get('http://127.0.0.1:8000/alunos/', {
+    const res = await request.get(`${API_E2E}/alunos/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok()) {
@@ -75,9 +76,6 @@ test.describe('Gestão de Elencos e Equipes', () => {
       const existente = alunos.find((a: any) => a.nome_completo.includes(nome));
       if (existente) {
         return existente;
-      }
-      if (alunos.length > 0) {
-        return alunos[0];
       }
     }
 
@@ -101,10 +99,11 @@ with SessionLocal() as db:
     )
     db.add(aluno); db.commit()
 "`,
-      { cwd: '..' }
+      // Sempre o banco E2E: sem DATABASE_URL o backend carregaria o .env (banco de desenvolvimento).
+      { cwd: '..', env: { ...process.env, DATABASE_URL: 'sqlite:///./frontend/e2e.db' } }
     );
 
-    const res2 = await request.get('http://127.0.0.1:8000/alunos/', {
+    const res2 = await request.get(`${API_E2E}/alunos/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const alunos2 = await res2.json();
@@ -136,7 +135,7 @@ with SessionLocal() as db:
     await expect(page.getByRole('dialog')).toBeVisible();
 
     // Aba de novo competidor terceiro
-    await page.getByRole('button', { name: /novo terceiro/i }).click();
+    await page.getByRole('button', { name: 'Novo Terceiro (Avulso)' }).click();
 
     const timestamp = Date.now();
     const nomeTerceiro = `Competidor Terceiro ${timestamp}`;
@@ -200,7 +199,7 @@ with SessionLocal() as db:
     await page.getByRole('button', { name: /importar como competidor/i }).click();
 
     // Segunda tentativa de importação do mesmo aluno via API direta para validar idempotência
-    const resSegunda = await request.post('http://127.0.0.1:8000/competicoes/competidores/importar-aluno', {
+    const resSegunda = await request.post(`${API_E2E}/competicoes/competidores/importar-aluno`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { id_aluno: aluno.id_aluno },
     });
@@ -217,27 +216,27 @@ with SessionLocal() as db:
     const timestamp = Date.now();
 
     // Cria competidor avulso via API
-    const compRes = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const compRes = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: `Jogador Disputado ${timestamp}` },
     });
     const competidor = await compRes.json();
 
     // Cria duas equipes
-    const eq1Res = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const eq1Res = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: 'Equipe Azul' },
     });
     const eq1 = await eq1Res.json();
 
-    const eq2Res = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const eq2Res = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: 'Equipe Vermelha' },
     });
     const eq2 = await eq2Res.json();
 
     // Inscreve na Equipe Azul via API
-    await request.post(`http://127.0.0.1:8000/competicoes/equipes/${eq1.id_equipe}/integrantes`, {
+    await request.post(`${API_E2E}/competicoes/equipes/${eq1.id_equipe}/integrantes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         id_competidor: competidor.id_competidor,
@@ -268,7 +267,7 @@ with SessionLocal() as db:
     // Cria edição anterior 2025
     const timestamp = Date.now();
     const idModalidade = await obterIdModalidade(request);
-    const compRes = await request.post('http://127.0.0.1:8000/competicoes/competicoes', {
+    const compRes = await request.post(`${API_E2E}/competicoes/competicoes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         nome: `Torneio de Continuidade ${timestamp}`,
@@ -297,19 +296,19 @@ with SessionLocal() as db:
     const idEdicao2025 = comp.edicoes[0].id_edicao_competicao;
 
     // Cria equipe e integrante em 2025
-    const eqRes = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao2025}/equipes`, {
+    const eqRes = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao2025}/equipes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: 'Gaviões Históricos', sigla: 'GAV' },
     });
     const eq2025 = await eqRes.json();
 
-    const atletaRes = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const atletaRes = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: `Craque Antigo ${timestamp}` },
     });
     const atleta = await atletaRes.json();
 
-    await request.post(`http://127.0.0.1:8000/competicoes/equipes/${eq2025.id_equipe}/integrantes`, {
+    await request.post(`${API_E2E}/competicoes/equipes/${eq2025.id_equipe}/integrantes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         id_competidor: atleta.id_competidor,
@@ -319,7 +318,7 @@ with SessionLocal() as db:
     });
 
     // Cria edição 2026 na mesma competição
-    const ed2026Res = await request.post(`http://127.0.0.1:8000/competicoes/competicoes/${comp.id_competicao}/edicoes`, {
+    const ed2026Res = await request.post(`${API_E2E}/competicoes/competicoes/${comp.id_competicao}/edicoes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         identificacao: '2026',
@@ -372,19 +371,19 @@ with SessionLocal() as db:
     const timestamp = Date.now();
 
     // Cria equipe e primeiro integrante com camisa 10 via API
-    const eqRes = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const eqRes = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: 'Santos FC' },
     });
     const eq = await eqRes.json();
 
-    const c1Res = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const c1Res = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: `Pelé Primeiro ${timestamp}` },
     });
     const c1 = await c1Res.json();
 
-    await request.post(`http://127.0.0.1:8000/competicoes/equipes/${eq.id_equipe}/integrantes`, {
+    await request.post(`${API_E2E}/competicoes/equipes/${eq.id_equipe}/integrantes`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         id_competidor: c1.id_competidor,
@@ -393,7 +392,7 @@ with SessionLocal() as db:
       },
     });
 
-    const c2Res = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const c2Res = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${token}` },
       data: { nome: `Neymar Segundo ${timestamp}` },
     });

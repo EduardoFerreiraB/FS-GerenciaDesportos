@@ -188,12 +188,13 @@ class TestGerarTabelaEdicao:
         assert estrutura.formato == "MATA_MATA"
         assert len(estrutura.duelos) == 7  # 4 quartas, 2 semis, 1 final
 
-        # 2 duelos com folga são RESOLVIDOS e não geram partidas na primeira fase
-        # 2 duelos normais geram 2 partidas
+        # 2 duelos com folga são RESOLVIDOS e não geram partidas na primeira fase;
+        # 2 duelos normais geram 2 partidas, e a semifinal entre os dois
+        # vencedores por folga já nasce com os adversários conhecidos.
         partidas_db = db.execute(
             select(Partida).where(Partida.id_edicao_competicao == edicao.id_edicao_competicao)
         ).scalars().all()
-        assert len(partidas_db) == 2
+        assert len(partidas_db) == 3
         for p in partidas_db:
             assert p.id_duelo is not None
 

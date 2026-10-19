@@ -601,7 +601,7 @@ def test_remocao_cartao_apos_cumprimento_coloca_suspensao_em_revisao(
 ):
     """Quando uma súmula é corrigida removendo o cartão que gerou uma suspensão:
     - Se a suspensão já possuía cumprimento, passa para EM_REVISAO e preserva o cumprimento.
-    - Se a suspensão ainda não tinha cumprimento (jogos_cumpridos == 0), é removida permitindo recriação.
+    - Se a suspensão ainda não tinha cumprimento (jogos_cumpridos == 0), é cancelada e libera a chave para recriação.
     """
     edicao = cenario_pontos_corridos["edicao"]
     eq1 = cenario_pontos_corridos["eq1"]
@@ -665,10 +665,12 @@ def test_remocao_cartao_apos_cumprimento_coloca_suspensao_em_revisao(
     suspensoes_pos = reconciliar_sancoes_edicao(
         db, edicao.id_edicao_competicao, responsavel=usuario
     )
-    # A suspensão de atleta2 (sem cumprimento) foi removida; a de atleta1 (com cumprimento) foi para EM_REVISAO!
-    assert len(suspensoes_pos) == 1
-    susp_rev = suspensoes_pos[0]
-    assert susp_rev.id_suspensao == susp_atleta1.id_suspensao
+    # A suspensão de atleta2 (sem cumprimento) foi cancelada, preservando o registro;
+    # a de atleta1 (com cumprimento) foi para EM_REVISAO.
+    por_id = {s.id_suspensao: s for s in suspensoes_pos}
+    assert por_id[susp_atleta2.id_suspensao].situacao == "CANCELADA"
+    assert por_id[susp_atleta2.id_suspensao].chave_origem is None
+    susp_rev = por_id[susp_atleta1.id_suspensao]
     assert susp_rev.situacao == "EM_REVISAO"
     assert susp_rev.jogos_cumpridos == 1
     assert len(susp_rev.cumprimentos) == 1

@@ -459,7 +459,8 @@ def test_publicar_rascunho_e_despublicar_finalizada(
     assert despub.publicada is False
 
 
-def test_excluir_edicao_em_andamento_e_conflito(db, usuario, modalidade_padrao):
+def test_excluir_edicao_em_qualquer_estado(db, usuario, modalidade_padrao):
+    """Decisão de 2026-10-19: excluir edição vale em qualquer estado, em cascata."""
     comp = factory_criar_competicao(db, modalidade=modalidade_padrao)
     ed_andamento = factory_criar_edicao_competicao(
         db, competicao=comp, estado="EM_ANDAMENTO"
@@ -469,13 +470,11 @@ def test_excluir_edicao_em_andamento_e_conflito(db, usuario, modalidade_padrao):
     )
     db.commit()
 
-    with pytest.raises(ConflitoEstado):
-        excluir_edicao_competicao(db, ed_andamento.id_edicao_competicao, usuario)
-
-    # Rascunho exclui com sucesso
-    excluir_edicao_competicao(db, ed_rascunho.id_edicao_competicao, usuario)
-    with pytest.raises(NaoEncontrado):
-        obter_edicao_competicao(db, ed_rascunho.id_edicao_competicao)
+    for edicao in (ed_andamento, ed_rascunho):
+        id_edicao = edicao.id_edicao_competicao
+        excluir_edicao_competicao(db, id_edicao, usuario)
+        with pytest.raises(NaoEncontrado):
+            obter_edicao_competicao(db, id_edicao)
 
 
 def test_operacoes_de_escrita_sao_auditadas(db, usuario, dados_evento_com_edicao):

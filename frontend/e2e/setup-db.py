@@ -9,6 +9,10 @@ DB_URL = f"sqlite:///{DB_PATH}"
 
 os.environ["DATABASE_URL"] = DB_URL
 
+# Banco descartável: recriado do zero a cada execução, para que dados de rodadas
+# anteriores (alunos homônimos, competições antigas) não interfiram nos testes.
+DB_PATH.unlink(missing_ok=True)
+
 print(f"Aplicando migrações no banco SQLite E2E: {DB_PATH} ...")
 subprocess.run(
     [sys.executable, "-m", "alembic", "-x", "descartar_competicoes_teste=sim", "upgrade", "head"],

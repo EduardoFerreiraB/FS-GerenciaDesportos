@@ -145,6 +145,8 @@ def test_create_refresh_token_and_cleanup(db):
     assert tokens[0].token == new_token
 
 def test_security_production_secret_key_check():
+    import security as modulo_security
+    estado_original = dict(vars(modulo_security))
     # Testar quando ENV é production e SECRET_KEY é chave padrão
     with patch.dict("os.environ", {"ENV": "production", "SECRET_KEY": "chave_secreta_para_desenvolvimento_local"}):
         with patch("os.getenv", side_effect=lambda key, default=None: "chave_secreta_para_desenvolvimento_local" if key == "SECRET_KEY" else "production" if key == "ENV" else default):
@@ -155,7 +157,5 @@ def test_security_production_secret_key_check():
                 importlib.reload(security)
             assert "SECRET_KEY deve ser definida e segura" in str(exc_info.value)
     
-    # Recarregar de volta para limpar o estado global do módulo security
-    import importlib
-    import security
-    importlib.reload(security)
+    # Restaura as funcoes originais, que as rotas ja referenciam via Depends
+    vars(modulo_security).update(estado_original)

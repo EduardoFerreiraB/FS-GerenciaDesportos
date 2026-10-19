@@ -1,4 +1,5 @@
 import { Page, expect } from '@playwright/test';
+import { API_E2E } from './ambiente';
 
 export interface LoginOptions {
   username?: string;
@@ -34,7 +35,7 @@ export async function authenticateDirectly(page: Page, options: LoginOptions = {
   const username = options.username ?? 'admin';
   const password = options.password ?? 'admin123';
 
-  const response = await page.request.post('http://127.0.0.1:8000/token', {
+  const response = await page.request.post(`${API_E2E}/token`, {
     form: {
       username,
       password,

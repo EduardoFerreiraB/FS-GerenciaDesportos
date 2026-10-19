@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
+// Páginas `*.e2e.tsx` são harness do Playwright: só existem quando E2E_HARNESS=1,
+// nunca no build de produção.
+const harnessE2E = process.env.E2E_HARNESS === "1";
+const extensoesE2E = harnessE2E ? ["e2e.tsx"] : [];
+
 const nextConfig: any = {
-  /* config options here */
+  pageExtensions: [...extensoesE2E, "tsx", "ts", "jsx", "js"],
+  // O servidor do E2E compila em pasta própria e pode rodar junto do `next dev` normal.
+  distDir: harnessE2E ? ".next-e2e" : ".next",
   // output: "standalone", // Comentado para deploy na Vercel
   eslint: {
     // Ignora erros de lint no build de produção para não travar o deploy por detalhes

@@ -187,7 +187,8 @@ def test_importing_api_does_not_create_database_schema(tmp_path):
 def test_cadeia_linear_baseline_e_consolidacao(tmp_path):
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_config(f"sqlite:///{tmp_path / 'x.sqlite'}"))
-    assert [revision.revision for revision in script.get_revisions("heads")] == ["20261015_0300"]
+    assert [revision.revision for revision in script.get_revisions("heads")] == ["20261015_0400"]
+    assert script.get_revision("20261015_0400").down_revision == "20261015_0300"
     assert script.get_revision("20261015_0300").down_revision == "20261015_0200"
     assert script.get_revision("20261015_0200").down_revision == "20261015_0100"
     assert script.get_revision("20261015_0100").down_revision is None
