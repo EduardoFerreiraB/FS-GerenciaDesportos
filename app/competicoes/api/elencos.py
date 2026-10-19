@@ -117,6 +117,17 @@ def inscrever_integrante(
     return servico_elencos.inscrever_integrante(db, id_equipe, dados, current_user)
 
 
+@router.delete("/equipes/{id_equipe}", status_code=status.HTTP_204_NO_CONTENT)
+def excluir_equipe(
+    id_equipe: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role),
+) -> Response:
+    """Exclui a equipe e seus atletas, com a edição em rascunho."""
+    servico_elencos.excluir_equipe(db, id_equipe, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.patch("/integrantes/{id_integrante}", response_model=IntegranteDetalhe)
 def atualizar_integrante(
     id_integrante: int,

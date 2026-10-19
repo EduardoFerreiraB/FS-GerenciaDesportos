@@ -44,6 +44,7 @@ from competicoes.servicos.partidas import (
     _construir_partida_detalhe,
     _processar_avanco_duelo,
     _reconciliar_sancoes_edicao,
+    _validar_penaltis,
     bloquear_partida,
 )
 
@@ -607,76 +608,7 @@ def finalizar_partida(
             )
         )
 
-        if (pm is None) != (pv is None):
-            raise ConfiguracaoInvalida(
-                "Informe os pênaltis de ambas as equipes.",
-                campos=["penaltis_mandante", "penaltis_visitante"],
-            )
-
-        if pm is not None and pv is not None:
-            if partida.id_duelo is None:
-                raise ConfiguracaoInvalida(
-                    "Pênaltis só são permitidos em confrontos eliminatórios.",
-                    campos=["penaltis_mandante", "penaltis_visitante"],
-                )
-            if pm == pv:
-                raise ConfiguracaoInvalida(
-                    "A disputa de pênaltis não pode terminar empatada.",
-                    campos=["penaltis_mandante", "penaltis_visitante"],
-                )
-
-        if partida.id_duelo is not None:
-            duelo = db.get(DueloEliminatorio, partida.id_duelo)
-            if duelo is not None:
-                if not duelo.ida_volta:
-                    eh_jogo_decisivo = True
-                    empate_decisivo = placar.gols_mandante == placar.gols_visitante
-                else:
-                    eh_jogo_decisivo = partida.ordem_jogo == 2
-                    if eh_jogo_decisivo:
-                        p_ida = db.execute(
-                            select(Partida).where(
-                                Partida.id_duelo == duelo.id_duelo,
-                                Partida.ordem_jogo == 1,
-                            )
-                        ).scalar_one_or_none()
-                        if p_ida is not None:
-                            placar_ida = _calcular_placar(db, p_ida)
-                            gols_m_ida = placar_ida.gols_mandante + (
-                                placar.gols_mandante
-                                if partida.id_equipe_mandante
-                                == p_ida.id_equipe_mandante
-                                else placar.gols_visitante
-                            )
-                            gols_v_ida = placar_ida.gols_visitante + (
-                                placar.gols_mandante
-                                if partida.id_equipe_mandante
-                                == p_ida.id_equipe_visitante
-                                else placar.gols_visitante
-                            )
-                            empate_decisivo = gols_m_ida == gols_v_ida
-                        else:
-                            empate_decisivo = (
-                                placar.gols_mandante == placar.gols_visitante
-                            )
-                    else:
-                        empate_decisivo = False
-
-                if not eh_jogo_decisivo and pm is not None:
-                    raise ConfiguracaoInvalida(
-                        "Pênaltis só podem ser informados no jogo decisivo do confronto.",
-                        campos=["penaltis_mandante", "penaltis_visitante"],
-                    )
-                if eh_jogo_decisivo and not empate_decisivo and pm is not None:
-                    raise ConfiguracaoInvalida(
-                        "Pênaltis só são permitidos quando o confronto eliminatório termina empatado.",
-                        campos=["penaltis_mandante", "penaltis_visitante"],
-                    )
-                if eh_jogo_decisivo and empate_decisivo and (pm is None or pv is None):
-                    raise ConfiguracaoInvalida(
-                        "Confronto eliminatório empatado exige definição de pênaltis.",
-                        campos=["penaltis_mandante", "penaltis_visitante"],
-                    )
+        _validar_penaltis(db, partida, placar, pm, pv)
 
         antes = {
             "estado": partida.estado,

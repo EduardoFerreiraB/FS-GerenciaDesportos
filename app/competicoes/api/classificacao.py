@@ -65,4 +65,3 @@ def registrar_decisao_classificacao(
     return servico_classificacao.registrar_decisao_classificacao(
         db=db, id_edicao=id_edicao_competicao, dados=dados, responsavel=autor
     )
-

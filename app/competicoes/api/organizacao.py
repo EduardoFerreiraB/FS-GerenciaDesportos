@@ -203,6 +203,20 @@ def atualizar_competicao(
     )
 
 
+@router.delete(
+    "/competicoes/{id_competicao}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Excluir competição com todas as suas edições",
+)
+def excluir_competicao(
+    id_competicao: int,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> Response:
+    servico_organizacao.excluir_competicao(db, id_competicao, autor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/competicoes/{id_competicao}/edicoes",
     response_model=EdicaoCompeticaoDetalhe,
@@ -354,4 +368,3 @@ def cancelar_edicao(
     return servico_organizacao.cancelar_edicao_competicao(
         db, id_edicao_competicao, dados.motivo, autor
     )
-

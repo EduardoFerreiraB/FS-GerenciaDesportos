@@ -299,15 +299,16 @@ def _executar_reconciliacao_interna(
         if susp.id_suspensao not in ids_em_revisao_resolvidos:
             susp.situacao = "EM_REVISAO"
 
+    # Sem lastro e sem cumprimento: cancela preservando o registro e libera a
+    # chave para que o cartão, se voltar à súmula, gere uma suspensão nova.
     for susp in rec["para_cancelar"]:
-        db.delete(susp)
+        susp.situacao = "CANCELADA"
+        susp.chave_origem = None
 
     # Se uma suspensão foi cancelada e sua chave de origem já não existe nas ocorrências,
     # limpa chave_origem para permitir futura recriação sem conflito de UniqueConstraint
     chaves_mantidas_no_banco: set[str] = set()
     for susp in suspensoes_banco:
-        if susp in rec["para_cancelar"]:
-            continue
         if susp.chave_origem is not None:
             if susp.situacao == "CANCELADA" and susp.chave_origem not in esperadas_por_chave:
                 susp.chave_origem = None
