@@ -30,7 +30,9 @@ export type CriterioDesempate =
   | "VITORIAS"
   | "SALDO_GOLS"
   | "GOLS_PRO"
-  | "CONFRONTO_DIRETO";
+  | "CONFRONTO_DIRETO"
+  | "MENOS_CARTOES_VERMELHOS"
+  | "MENOS_CARTOES_AMARELOS";
 
 export interface PontuacaoConfig {
   vitoria: number;
@@ -368,6 +370,8 @@ export interface LinhaClassificacao {
   gols_contra: number;
   saldo_gols: number;
   pontos: number;
+  aproveitamento?: number;
+  empate_persistente?: boolean;
 }
 
 export interface GrupoClassificacaoDetalhe {
@@ -384,6 +388,192 @@ export interface TabelaClassificacaoDetalhe {
 }
 
 // ==========================================
+// Fatia 3: Súmula Detalhada, Artilharia e Reabertura
+// ==========================================
+
+export type TipoOcorrencia =
+  | "GOL"
+  | "GOL_CONTRA"
+  | "CARTAO_AMARELO"
+  | "CARTAO_VERMELHO_DIRETO"
+  | "EXPULSAO_SEGUNDO_AMARELO";
+
+export type TipoOcorrenciaLancamento =
+  | "GOL"
+  | "GOL_CONTRA"
+  | "CARTAO_AMARELO"
+  | "CARTAO_VERMELHO_DIRETO";
+
+export interface OcorrenciaCriar {
+  tipo: TipoOcorrenciaLancamento;
+  id_equipe: number;
+  id_integrante?: number | null;
+  minuto?: number | null;
+  periodo?: string | null;
+  observacao?: string | null;
+  motivo?: string | null;
+}
+
+export interface OcorrenciaAutorAtualizar {
+  id_integrante?: number | null;
+  motivo?: string | null;
+}
+
+export interface OcorrenciaDetalhe {
+  id_ocorrencia: number;
+  id_partida: number;
+  tipo: TipoOcorrencia | string;
+  id_equipe_beneficiada: number;
+  id_integrante?: number | null;
+  nome_integrante?: string | null;
+  numero_camisa?: number | null;
+  minuto?: number | null;
+  periodo?: string | null;
+  observacao?: string | null;
+  id_ocorrencia_origem?: number | null;
+  criado_em?: string | null;
+}
+
+export interface AlertaSuspensoPartida {
+  id_integrante: number;
+  nome_esportivo: string;
+  id_equipe: number;
+  id_suspensao: number;
+  jogos_pendentes: number;
+  motivo: string;
+}
+
+export interface SumulaDetalhe {
+  partida: PartidaDetalhe;
+  ocorrencias: OcorrenciaDetalhe[];
+  alertas_suspensos: AlertaSuspensoPartida[];
+}
+
+export interface PartidaFinalizar {
+  penaltis_mandante?: number | null;
+  penaltis_visitante?: number | null;
+}
+
+export interface MotivoOperacao {
+  motivo: string;
+}
+
+export interface ArtilheiroDetalhe {
+  posicao: number;
+  id_integrante: number;
+  id_competidor: number;
+  nome_esportivo: string;
+  numero_camisa?: number | null;
+  id_equipe: number;
+  nome_equipe: string;
+  gols: number;
+  gols_em_andamento: number;
+}
+
+export interface TabelaArtilhariaDetalhe {
+  id_edicao_competicao: number;
+  possui_jogos_em_andamento: boolean;
+  artilheiros: ArtilheiroDetalhe[];
+}
+
+// ==========================================
+// Fatia 3: Disciplina, Suspensões, Cumprimentos e Decisões
+// ==========================================
+
+export type OrigemSuspensao =
+  | "ACUMULO_AMARELOS"
+  | "VERMELHO_DIRETO"
+  | "SEGUNDO_AMARELO"
+  | "MANUAL";
+
+export type SituacaoSuspensao =
+  | "ATIVA"
+  | "CUMPRIDA"
+  | "EM_REVISAO"
+  | "CANCELADA";
+
+export interface CumprimentoDetalhe {
+  id_cumprimento: number;
+  id_suspensao: number;
+  id_integrante: number;
+  id_partida: number;
+  criado_em?: string | null;
+}
+
+export interface SuspensaoDetalhe {
+  id_suspensao: number;
+  id_edicao_competicao: number;
+  id_integrante: number;
+  nome_esportivo?: string | null;
+  id_equipe?: number | null;
+  nome_equipe?: string | null;
+  id_partida_origem?: number | null;
+  id_ocorrencia_origem?: number | null;
+  motivo: string;
+  origem: OrigemSuspensao | string;
+  chave_origem?: string | null;
+  jogos: number;
+  jogos_cumpridos: number;
+  jogos_pendentes: number;
+  situacao: SituacaoSuspensao | string;
+  cumprimentos: CumprimentoDetalhe[];
+  criado_em?: string | null;
+}
+
+export interface SuspensaoManualCriar {
+  id_integrante: number;
+  jogos: number;
+  motivo: string;
+}
+
+export interface SuspensaoAjustar {
+  jogos?: number | null;
+  situacao?: SituacaoSuspensao | null;
+  motivo: string;
+}
+
+export interface CumprimentoCriar {
+  id_partida: number;
+}
+
+export interface ResumoCartoesIntegrante {
+  id_integrante: number;
+  nome_esportivo: string;
+  id_equipe: number;
+  nome_equipe: string;
+  amarelos_estatisticos: number;
+  amarelos_acumulo_atual: number;
+  vermelhos_diretos: number;
+  expulsoes_segundo_amarelo: number;
+  suspenso_atualmente: boolean;
+}
+
+export interface PainelDisciplinarDetalhe {
+  id_edicao_competicao: number;
+  suspensoes: SuspensaoDetalhe[];
+  resumo_cartoes: ResumoCartoesIntegrante[];
+}
+
+export interface DecisaoClassificacaoCriar {
+  id_grupo?: number | null;
+  conjunto_equipes: number[];
+  ordem_escolhida: number[];
+  motivo: string;
+}
+
+export interface DecisaoClassificacaoDetalhe {
+  id_decisao: number;
+  id_edicao_competicao: number;
+  id_grupo?: number | null;
+  conjunto_equipes: number[];
+  ordem_escolhida: number[];
+  motivo: string;
+  revisao_resultados: string;
+  valida: boolean;
+  criado_em?: string | null;
+}
+
+// ==========================================
 // Aliases Canônicos de Domínio
 // ==========================================
 
@@ -397,3 +587,4 @@ export type IntegranteEquipe = IntegranteDetalhe;
 export type Partida = PartidaDetalhe;
 export type Duelo = DueloEliminatorioDetalhe;
 export type GrupoDisputa = GrupoDisputaDetalhe;
+

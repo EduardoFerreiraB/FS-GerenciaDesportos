@@ -5,6 +5,9 @@ import {
   obterEdicao,
   atualizarEdicao,
   publicarEdicao,
+  finalizarEdicao,
+  reabrirEdicao,
+  cancelarEdicao,
   isErroApi,
 } from '@/services/competicoes';
 import type {
@@ -16,6 +19,7 @@ import GestaoEquipes from '@/components/competicoes/elencos/GestaoEquipes';
 import VisualizadorPartidas from '@/components/competicoes/disputa/VisualizadorPartidas';
 import ChaveamentoEliminatorio from '@/components/competicoes/disputa/ChaveamentoEliminatorio';
 import TabelaClassificacao from '@/components/competicoes/classificacao/TabelaClassificacao';
+import PainelDisciplina from '@/components/competicoes/disciplina/PainelDisciplina';
 import FormularioConfiguracao from './FormularioConfiguracao';
 import {
   Calendar,
@@ -23,7 +27,6 @@ import {
   Users,
   Trophy,
   ShieldAlert,
-  FileSpreadsheet,
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -32,6 +35,9 @@ import {
   RefreshCw,
   Loader2,
   Save,
+  Flag,
+  RotateCcw,
+  XCircle,
 } from 'lucide-react';
 
 interface PainelEdicaoProps {
@@ -64,9 +70,11 @@ export default function PainelEdicao({
   const [mensagemSucessoConfig, setMensagemSucessoConfig] = useState<string | null>(null);
   const [erroConfig, setErroConfig] = useState<string | null>(null);
 
-  // Estado de publicação
+  // Estado de publicação e ciclo de vida
   const [alterandoPublicacao, setAlterandoPublicacao] = useState(false);
   const [erroPublicacao, setErroPublicacao] = useState<string | null>(null);
+  const [modalCicloAcao, setModalCicloAcao] = useState<'REABRIR' | 'CANCELAR' | null>(null);
+  const [motivoCiclo, setMotivoCiclo] = useState('');
 
   const carregarEdicao = useCallback(async () => {
     try {
@@ -112,6 +120,45 @@ export default function PainelEdicao({
       } else {
         setErroPublicacao('Falha ao alterar publicação da edição.');
       }
+    } finally {
+      setAlterandoPublicacao(false);
+    }
+  };
+
+  const handleFinalizarEdicao = async () => {
+    if (!edicao) return;
+    try {
+      setAlterandoPublicacao(true);
+      setErroPublicacao(null);
+      const atualizada = await finalizarEdicao(edicao.id_edicao_competicao);
+      setEdicao(atualizada);
+      if (onEdicaoAtualizada) onEdicaoAtualizada(atualizada);
+    } catch (err: unknown) {
+      setErroPublicacao(isErroApi(err) ? err.mensagem : 'Falha ao finalizar edição.');
+    } finally {
+      setAlterandoPublicacao(false);
+    }
+  };
+
+  const handleConfirmarCiclo = async () => {
+    if (!edicao || !modalCicloAcao) return;
+    if (motivoCiclo.trim().length < 3) {
+      setErroPublicacao('Informe uma justificativa de pelo menos 3 caracteres.');
+      return;
+    }
+    try {
+      setAlterandoPublicacao(true);
+      setErroPublicacao(null);
+      const atualizada =
+        modalCicloAcao === 'REABRIR'
+          ? await reabrirEdicao(edicao.id_edicao_competicao, motivoCiclo.trim())
+          : await cancelarEdicao(edicao.id_edicao_competicao, motivoCiclo.trim());
+      setEdicao(atualizada);
+      setModalCicloAcao(null);
+      setMotivoCiclo('');
+      if (onEdicaoAtualizada) onEdicaoAtualizada(atualizada);
+    } catch (err: unknown) {
+      setErroPublicacao(isErroApi(err) ? err.mensagem : 'Falha ao alterar estado da edição.');
     } finally {
       setAlterandoPublicacao(false);
     }
@@ -233,7 +280,52 @@ export default function PainelEdicao({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {edicao.estado === 'EM_ANDAMENTO' && (
+              <button
+                type="button"
+                data-testid="btn-finalizar-edicao"
+                onClick={handleFinalizarEdicao}
+                disabled={alterandoPublicacao}
+                className="px-3 py-2 rounded-lg font-medium text-xs bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5 shadow-sm"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span>Finalizar Edição</span>
+              </button>
+            )}
+
+            {edicao.estado === 'FINALIZADA' && (
+              <button
+                type="button"
+                data-testid="btn-reabrir-edicao"
+                onClick={() => {
+                  setModalCicloAcao('REABRIR');
+                  setMotivoCiclo('');
+                }}
+                disabled={alterandoPublicacao}
+                className="px-3 py-2 rounded-lg font-medium text-xs bg-amber-600 hover:bg-amber-700 text-white transition flex items-center gap-1.5 shadow-sm"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reabrir Edição</span>
+              </button>
+            )}
+
+            {edicao.estado !== 'CANCELADA' && (
+              <button
+                type="button"
+                data-testid="btn-cancelar-edicao"
+                onClick={() => {
+                  setModalCicloAcao('CANCELAR');
+                  setMotivoCiclo('');
+                }}
+                disabled={alterandoPublicacao}
+                className="px-3 py-2 rounded-lg font-medium text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition flex items-center gap-1.5"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Cancelar Edição</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleAlternarPublicacao}
@@ -255,6 +347,39 @@ export default function PainelEdicao({
             </button>
           </div>
         </div>
+
+        {modalCicloAcao && (
+          <div className="mt-4 p-4 bg-white border border-slate-200 rounded-xl space-y-3 shadow-sm">
+            <h4 className="text-sm font-bold text-slate-800">
+              {modalCicloAcao === 'REABRIR' ? 'Reabrir Edição Finalizada' : 'Cancelar Edição'}
+            </h4>
+            <input
+              type="text"
+              data-testid="input-motivo-ciclo-edicao"
+              value={motivoCiclo}
+              onChange={(e) => setMotivoCiclo(e.target.value)}
+              placeholder="Informe a justificativa obrigatória..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModalCicloAcao(null)}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                data-testid="btn-confirmar-ciclo-edicao"
+                onClick={handleConfirmarCiclo}
+                className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        )}
 
         {erroPublicacao && (
           <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
@@ -333,15 +458,16 @@ export default function PainelEdicao({
 
         <button
           type="button"
-          disabled
-          title="Disponível na Fatia 3"
-          className="py-3 px-4 text-sm font-semibold border-b-2 border-transparent text-slate-400 cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+          data-testid="tab-disciplina"
+          onClick={() => setAbaAtiva('disciplina')}
+          className={`py-3 px-4 text-sm font-semibold border-b-2 flex items-center gap-2 whitespace-nowrap transition ${
+            abaAtiva === 'disciplina'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
         >
           <ShieldAlert className="w-4 h-4" />
           <span>Disciplina</span>
-          <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-            Fatia 3
-          </span>
         </button>
       </div>
 
@@ -479,6 +605,16 @@ export default function PainelEdicao({
             <TabelaClassificacao
               idEdicaoCompeticao={edicao.id_edicao_competicao}
               formato={edicao.formato}
+            />
+          </div>
+        )}
+
+        {/* Aba Disciplina & Artilharia */}
+        {abaAtiva === 'disciplina' && (
+          <div>
+            <PainelDisciplina
+              idEdicaoCompeticao={edicao.id_edicao_competicao}
+              estadoEdicao={edicao.estado}
             />
           </div>
         )}
