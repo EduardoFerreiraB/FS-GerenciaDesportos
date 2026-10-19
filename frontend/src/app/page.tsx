@@ -6,7 +6,8 @@ import { CalendarDays, ChevronRight, Search, Trophy } from 'lucide-react';
 import { PaginaPublica } from '@/components/publico/CabecalhoPublico';
 import EstadoCarga from '@/components/publico/EstadoCarga';
 import { usarPublico } from '@/components/publico/usarPublico';
-import { formatarPeriodo, ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from '@/components/publico/formatos';
+import { formatarPeriodo } from '@/lib/formatos';
+import { ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from '@/lib/rotulos';
 import { servicoPublico } from '@/services/publico';
 
 function contem(texto: string, termo: string): boolean {

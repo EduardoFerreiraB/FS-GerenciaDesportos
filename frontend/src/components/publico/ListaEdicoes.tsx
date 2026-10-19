@@ -2,7 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import type { EdicaoPublicaResumo } from '@/types/publico';
-import { formatarPeriodo, ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from './formatos';
+import { formatarPeriodo } from '@/lib/formatos';
+import { ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from '@/lib/rotulos';
 
 interface ListaEdicoesProps {
   edicoes: (EdicaoPublicaResumo & { competicao?: { nome: string } })[];

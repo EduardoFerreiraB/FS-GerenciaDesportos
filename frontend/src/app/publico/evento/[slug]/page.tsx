@@ -8,7 +8,7 @@ import { PaginaPublica } from '@/components/publico/CabecalhoPublico';
 import EstadoCarga from '@/components/publico/EstadoCarga';
 import ListaEdicoes from '@/components/publico/ListaEdicoes';
 import { usarPublico } from '@/components/publico/usarPublico';
-import { formatarPeriodo } from '@/components/publico/formatos';
+import { formatarPeriodo } from '@/lib/formatos';
 import { servicoPublico } from '@/services/publico';
 
 export default function EventoPublicoPage() {
