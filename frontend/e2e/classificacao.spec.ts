@@ -21,6 +21,15 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
         }),
       });
     });
+
+    // Mock padrão para decisões de desempate manual de classificação
+    await page.route('**/competicoes/edicoes/*/decisoes-classificacao', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    });
   });
 
   test('visualiza aba Classificação em pontos corridos com cabeçalhos e dados computados', async ({
