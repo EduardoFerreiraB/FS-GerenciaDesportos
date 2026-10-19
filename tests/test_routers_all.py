@@ -42,14 +42,17 @@ def test_database_url_not_set(monkeypatch):
         monkeypatch.delenv("DATABASE_URL")
     
     import database
-    with patch("dotenv.load_dotenv"):
-        with pytest.raises(ValueError) as exc:
-            importlib.reload(database)
-    assert "DATABASE_URL environment variable is not set" in str(exc.value)
-    
-    if old_url:
-        monkeypatch.setenv("DATABASE_URL", old_url)
-    importlib.reload(database)
+    # O reload cria um novo get_db; rotas e overrides de outros testes seguram o original.
+    estado_original = dict(vars(database))
+    try:
+        with patch("dotenv.load_dotenv"):
+            with pytest.raises(ValueError) as exc:
+                importlib.reload(database)
+        assert "DATABASE_URL environment variable is not set" in str(exc.value)
+    finally:
+        if old_url:
+            monkeypatch.setenv("DATABASE_URL", old_url)
+        vars(database).update(estado_original)
 
 def test_get_db():
     from database import get_db
@@ -63,12 +66,17 @@ def test_get_db():
 
 def test_main_allowed_origins_and_mkdir(monkeypatch):
     import main
+    estado_original = dict(vars(main))
     monkeypatch.setenv("ALLOWED_ORIGINS", "http://localhost:3000, http://test.com")
     monkeypatch.setattr(Path, "exists", lambda x: False)
     mock_mkdir = MagicMock()
     monkeypatch.setattr(Path, "mkdir", mock_mkdir)
-    importlib.reload(main)
-    assert mock_mkdir.called
+    try:
+        importlib.reload(main)
+        assert mock_mkdir.called
+    finally:
+        # Mantem a instancia de app que os demais testes ja importaram.
+        vars(main).update(estado_original)
 
 def test_root_and_health_endpoints(client):
     # GET /

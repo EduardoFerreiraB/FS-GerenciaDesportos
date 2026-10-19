@@ -174,7 +174,7 @@ class TestCicloVidaEdicao:
         assert atualizada.identificacao == "2026 - Série Ouro"
         assert atualizada.categoria == "Adulto"
 
-    def test_excluir_edicao_com_partidas_em_rascunho_bloqueia(self, db, usuario):
+    def test_excluir_edicao_com_partidas_apaga_em_cascata(self, db, usuario):
         edicao = criar_edicao_competicao(db, estado="RASCUNHO")
         eqs = _montar_equipes_com_elenco(db, edicao, 2)
         db.add(
@@ -186,9 +186,10 @@ class TestCicloVidaEdicao:
             )
         )
         db.commit()
+        id_edicao = edicao.id_edicao_competicao
 
-        with pytest.raises(ConflitoEstado):
-            excluir_edicao_competicao(db, edicao.id_edicao_competicao, usuario)
+        excluir_edicao_competicao(db, id_edicao, usuario)
+        assert db.query(Partida).filter(Partida.id_edicao_competicao == id_edicao).count() == 0
 
     def test_finalizar_reabrir_e_cancelar_edicao_http(
         self, client, cabecalhos_por_papel, db, usuario

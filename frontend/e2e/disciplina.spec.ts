@@ -1,4 +1,5 @@
 import { test, expect, Page, APIRequestContext } from '@playwright/test';
+import { API_E2E } from './helpers/ambiente';
 
 test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8)', () => {
   let token: string;
@@ -16,7 +17,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     for (const cred of credenciais) {
       try {
-        const res = await request.post('http://127.0.0.1:8000/token', {
+        const res = await request.post(`${API_E2E}/token`, {
           form: cred,
         });
         if (res.ok()) {
@@ -50,7 +51,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 1. Modalidade
     let idModalidade = 1;
-    const resMod = await request.get('http://127.0.0.1:8000/modalidades/', {
+    const resMod = await request.get(`${API_E2E}/modalidades/`, {
       headers: { Authorization: `Bearer ${authTok}` },
     });
     if (resMod.ok()) {
@@ -61,7 +62,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     }
 
     // 2. Competição com Edição em Pontos Corridos com Turno e Returno
-    const resComp = await request.post('http://127.0.0.1:8000/competicoes/competicoes', {
+    const resComp = await request.post(`${API_E2E}/competicoes/competicoes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: {
         nome: `Torneio Disciplina E2E ${ts}`,
@@ -93,21 +94,21 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     const idEdicao = comp.edicoes[0].id_edicao_competicao as number;
 
     // 3. Equipe 1: Falcões
-    const resEq1 = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const resEq1 = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Falcões FC ${ts}`, sigla: 'FAL' },
     });
     expect(resEq1.ok()).toBeTruthy();
     const eq1 = await resEq1.json();
 
-    const resComp1 = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const resComp1 = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Carlos Falcão ${ts}`, ativo: true },
     });
     const comp1 = await resComp1.json();
 
     const resInt1 = await request.post(
-      `http://127.0.0.1:8000/competicoes/equipes/${eq1.id_equipe}/integrantes`,
+      `${API_E2E}/competicoes/equipes/${eq1.id_equipe}/integrantes`,
       {
         headers: { Authorization: `Bearer ${authTok}` },
         data: { id_competidor: comp1.id_competidor, nome_esportivo: 'Carlos', numero_camisa: 10 },
@@ -117,7 +118,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     const int1 = await resInt1.json();
 
     // 4. Equipe 2: Tubarões
-    const resEq2 = await request.post(`http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/equipes`, {
+    const resEq2 = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Tubarões EC ${ts}`, sigla: 'TUB' },
     });
@@ -125,14 +126,14 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     const eq2 = await resEq2.json();
 
     // Integrante 2: Bruno (Artilheiro)
-    const resComp2 = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const resComp2 = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Bruno Tubarão ${ts}`, ativo: true },
     });
     const comp2 = await resComp2.json();
 
     const resInt2 = await request.post(
-      `http://127.0.0.1:8000/competicoes/equipes/${eq2.id_equipe}/integrantes`,
+      `${API_E2E}/competicoes/equipes/${eq2.id_equipe}/integrantes`,
       {
         headers: { Authorization: `Bearer ${authTok}` },
         data: { id_competidor: comp2.id_competidor, nome_esportivo: 'Bruno', numero_camisa: 9 },
@@ -142,14 +143,14 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     const int2 = await resInt2.json();
 
     // Integrante 3: Marcos (para suspensão manual)
-    const resComp3 = await request.post('http://127.0.0.1:8000/competicoes/competidores', {
+    const resComp3 = await request.post(`${API_E2E}/competicoes/competidores`, {
       headers: { Authorization: `Bearer ${authTok}` },
       data: { nome: `Marcos Tubarão ${ts}`, ativo: true },
     });
     const comp3 = await resComp3.json();
 
     const resInt3 = await request.post(
-      `http://127.0.0.1:8000/competicoes/equipes/${eq2.id_equipe}/integrantes`,
+      `${API_E2E}/competicoes/equipes/${eq2.id_equipe}/integrantes`,
       {
         headers: { Authorization: `Bearer ${authTok}` },
         data: { id_competidor: comp3.id_competidor, nome_esportivo: 'Marcos', numero_camisa: 5 },
@@ -160,7 +161,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 5. Gerar Calendário / Tabela
     const resTab = await request.post(
-      `http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/gerar-tabela`,
+      `${API_E2E}/competicoes/edicoes/${idEdicao}/gerar-tabela`,
       {
         headers: { Authorization: `Bearer ${authTok}` },
         data: null,
@@ -170,7 +171,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // Carregar partidas geradas (ordenadas por rodada)
     const resPartidas = await request.get(
-      `http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/partidas`,
+      `${API_E2E}/competicoes/edicoes/${idEdicao}/partidas`,
       {
         headers: { Authorization: `Bearer ${authTok}` },
       }
@@ -204,7 +205,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 1. Lança ocorrência de Cartão Vermelho Direto para Carlos (Falcões) na Partida 1
     const resVermelho = await request.post(
-      `http://127.0.0.1:8000/competicoes/partidas/${p1.id_partida}/ocorrencias`,
+      `${API_E2E}/competicoes/partidas/${p1.id_partida}/ocorrencias`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {
@@ -220,7 +221,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 2. Lança ocorrência de Gol para Bruno (Tubarões) na Partida 1
     const resGol = await request.post(
-      `http://127.0.0.1:8000/competicoes/partidas/${p1.id_partida}/ocorrencias`,
+      `${API_E2E}/competicoes/partidas/${p1.id_partida}/ocorrencias`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {
@@ -235,7 +236,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 3. Finaliza a Partida 1 (gera sanções automáticas e consolida artilharia)
     const resFinalizar = await request.post(
-      `http://127.0.0.1:8000/competicoes/partidas/${p1.id_partida}/finalizar`,
+      `${API_E2E}/competicoes/partidas/${p1.id_partida}/finalizar`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {},
@@ -311,7 +312,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 1. Partida 1: Vermelho Direto para Carlos e finalização
     await request.post(
-      `http://127.0.0.1:8000/competicoes/partidas/${p1.id_partida}/ocorrencias`,
+      `${API_E2E}/competicoes/partidas/${p1.id_partida}/ocorrencias`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {
@@ -323,14 +324,14 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
         },
       }
     );
-    await request.post(`http://127.0.0.1:8000/competicoes/partidas/${p1.id_partida}/finalizar`, {
+    await request.post(`${API_E2E}/competicoes/partidas/${p1.id_partida}/finalizar`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {},
     });
 
     // 2. Partida 2 (Rodada 2 posterior): Finalizada sem participação de Carlos
     const resFin2 = await request.post(
-      `http://127.0.0.1:8000/competicoes/partidas/${p2.id_partida}/finalizar`,
+      `${API_E2E}/competicoes/partidas/${p2.id_partida}/finalizar`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {},
@@ -340,7 +341,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 3. Obtém ID da suspensão gerada
     const resDisc = await request.get(
-      `http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/disciplinar`,
+      `${API_E2E}/competicoes/edicoes/${idEdicao}/disciplinar`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -436,7 +437,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 5. Ajustar a suspensão recém-criada
     const resDisc = await request.get(
-      `http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/disciplinar`,
+      `${API_E2E}/competicoes/edicoes/${idEdicao}/disciplinar`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -487,7 +488,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // Cria suspensão manual via API
     const resManual = await request.post(
-      `http://127.0.0.1:8000/competicoes/edicoes/${idEdicao}/suspensoes`,
+      `${API_E2E}/competicoes/edicoes/${idEdicao}/suspensoes`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {
@@ -502,7 +503,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // Ajusta para EM_REVISAO
     const resAjuste = await request.put(
-      `http://127.0.0.1:8000/competicoes/suspensoes/${suspensao.id_suspensao}`,
+      `${API_E2E}/competicoes/suspensoes/${suspensao.id_suspensao}`,
       {
         headers: { Authorization: `Bearer ${token}` },
         data: {

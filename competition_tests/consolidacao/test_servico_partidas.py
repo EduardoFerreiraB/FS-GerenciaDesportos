@@ -361,10 +361,12 @@ def test_registrar_resultado_edicao_rascunho_lanca_conflito(
     assert "em_andamento" in exc_info.value.mensagem.lower() or "em andamento" in exc_info.value.mensagem.lower()
 
 
-def test_re_registrar_resultado_com_nova_chave_substitui_ocorrencias(
+def test_re_registrar_resultado_exige_reabertura_e_substitui_ocorrencias(
     db: Session, partida_grupo, usuario
 ):
-    """Re-registrar resultado de uma partida deve limpar ocorrências anteriores e gravar o novo placar."""
+    """Corrigir resultado finalizado passa pela reabertura justificada; depois o novo placar substitui o anterior."""
+    from competicoes.servicos.sumula import reabrir_partida
+
     # 1. Primeiro resultado: 2x0
     registrar_resultado_simples(
         db,
@@ -374,7 +376,18 @@ def test_re_registrar_resultado_com_nova_chave_substitui_ocorrencias(
         responsavel=usuario,
     )
 
-    # 2. Correção de súmula com nova chave: 1x1
+    # 2. Nova chave sobre partida finalizada é recusada: correção exige motivo
+    with pytest.raises(ConflitoEstado):
+        registrar_resultado_simples(
+            db,
+            id_partida=partida_grupo.id_partida,
+            dados=ResultadoSimples(gols_mandante=1, gols_visitante=1),
+            idempotency_key="key-v2",
+            responsavel=usuario,
+        )
+
+    # 3. Reabertura justificada e correção: 1x1
+    reabrir_partida(db, partida_grupo.id_partida, "Erro de digitação no placar", usuario)
     detalhe_v2 = registrar_resultado_simples(
         db,
         id_partida=partida_grupo.id_partida,
