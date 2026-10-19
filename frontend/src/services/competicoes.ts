@@ -33,6 +33,18 @@ import type {
   ResultadoSimples,
   PartidaDetalhe,
   TabelaClassificacaoDetalhe,
+  SumulaDetalhe,
+  OcorrenciaCriar,
+  OcorrenciaAutorAtualizar,
+  PartidaFinalizar,
+  TabelaArtilhariaDetalhe,
+  PainelDisciplinarDetalhe,
+  SuspensaoDetalhe,
+  SuspensaoManualCriar,
+  SuspensaoAjustar,
+  CumprimentoCriar,
+  DecisaoClassificacaoCriar,
+  DecisaoClassificacaoDetalhe,
 } from '@/types/competicoes';
 
 // ==========================================
@@ -490,6 +502,313 @@ export async function obterClassificacao(
 }
 
 // ==========================================
+// Fatia 3: Ciclo de Vida da Edição e Fase de Grupos
+// ==========================================
+
+export async function iniciarEdicao(
+  idEdicaoCompeticao: number
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const res = await api.post<EdicaoCompeticaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/iniciar`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function finalizarEdicao(
+  idEdicaoCompeticao: number
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const res = await api.post<EdicaoCompeticaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/finalizar`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function reabrirEdicao(
+  idEdicaoCompeticao: number,
+  motivo: string
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const res = await api.post<EdicaoCompeticaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/reabrir`,
+      { motivo }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function cancelarEdicao(
+  idEdicaoCompeticao: number,
+  motivo: string
+): Promise<EdicaoCompeticaoDetalhe> {
+  try {
+    const res = await api.post<EdicaoCompeticaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/cancelar`,
+      { motivo }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function reabrirFaseGrupos(
+  idEdicaoCompeticao: number,
+  motivo: string
+): Promise<EstruturaDisputaDetalhe> {
+  try {
+    const res = await api.post<EstruturaDisputaDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/reabrir-fase-grupos`,
+      { motivo }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
+// Fatia 3: Súmula Detalhada, Ocorrências, Ciclo de Partida e Artilharia
+// ==========================================
+
+export async function obterSumula(idPartida: number): Promise<SumulaDetalhe> {
+  try {
+    const res = await api.get<SumulaDetalhe>(
+      `/competicoes/partidas/${idPartida}/sumula`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function iniciarPartida(idPartida: number): Promise<PartidaDetalhe> {
+  try {
+    const res = await api.post<PartidaDetalhe>(
+      `/competicoes/partidas/${idPartida}/iniciar`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function finalizarPartida(
+  idPartida: number,
+  dados?: PartidaFinalizar
+): Promise<PartidaDetalhe> {
+  try {
+    const res = await api.post<PartidaDetalhe>(
+      `/competicoes/partidas/${idPartida}/finalizar`,
+      dados || {}
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function reabrirPartida(
+  idPartida: number,
+  motivo: string
+): Promise<PartidaDetalhe> {
+  try {
+    const res = await api.post<PartidaDetalhe>(
+      `/competicoes/partidas/${idPartida}/reabrir`,
+      { motivo }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function cancelarPartida(
+  idPartida: number,
+  motivo: string
+): Promise<PartidaDetalhe> {
+  try {
+    const res = await api.post<PartidaDetalhe>(
+      `/competicoes/partidas/${idPartida}/cancelar`,
+      { motivo }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function registrarOcorrencia(
+  idPartida: number,
+  dados: OcorrenciaCriar,
+  idempotencyKey?: string
+): Promise<SumulaDetalhe> {
+  try {
+    const chave =
+      idempotencyKey ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `oc-${Date.now()}-${Math.random()}`);
+    const res = await api.post<SumulaDetalhe>(
+      `/competicoes/partidas/${idPartida}/ocorrencias`,
+      dados,
+      {
+        headers: {
+          'Idempotency-Key': chave,
+        },
+      }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function atribuirAutorOcorrencia(
+  idOcorrencia: number,
+  dados: OcorrenciaAutorAtualizar
+): Promise<SumulaDetalhe> {
+  try {
+    const res = await api.put<SumulaDetalhe>(
+      `/competicoes/ocorrencias/${idOcorrencia}/autor`,
+      dados
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function removerOcorrencia(
+  idOcorrencia: number,
+  motivo?: string
+): Promise<SumulaDetalhe> {
+  try {
+    const res = await api.delete<SumulaDetalhe>(
+      `/competicoes/ocorrencias/${idOcorrencia}`,
+      {
+        params: motivo ? { motivo } : undefined,
+      }
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function obterArtilharia(
+  idEdicaoCompeticao: number
+): Promise<TabelaArtilhariaDetalhe> {
+  try {
+    const res = await api.get<TabelaArtilhariaDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/artilharia`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
+// Fatia 3: Disciplina e Decisões de Classificação
+// ==========================================
+
+export async function obterPainelDisciplinar(
+  idEdicaoCompeticao: number
+): Promise<PainelDisciplinarDetalhe> {
+  try {
+    const res = await api.get<PainelDisciplinarDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/disciplinar`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function criarSuspensaoManual(
+  idEdicaoCompeticao: number,
+  dados: SuspensaoManualCriar
+): Promise<SuspensaoDetalhe> {
+  try {
+    const res = await api.post<SuspensaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/suspensoes`,
+      dados
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function cumprirSuspensao(
+  idSuspensao: number,
+  dados: CumprimentoCriar
+): Promise<SuspensaoDetalhe> {
+  try {
+    const res = await api.post<SuspensaoDetalhe>(
+      `/competicoes/suspensoes/${idSuspensao}/cumprimentos`,
+      dados
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function ajustarSuspensao(
+  idSuspensao: number,
+  dados: SuspensaoAjustar
+): Promise<SuspensaoDetalhe> {
+  try {
+    const res = await api.put<SuspensaoDetalhe>(
+      `/competicoes/suspensoes/${idSuspensao}`,
+      dados
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function listarDecisoesClassificacao(
+  idEdicaoCompeticao: number
+): Promise<DecisaoClassificacaoDetalhe[]> {
+  try {
+    const res = await api.get<DecisaoClassificacaoDetalhe[]>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/decisoes-classificacao`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function registrarDecisaoClassificacao(
+  idEdicaoCompeticao: number,
+  dados: DecisaoClassificacaoCriar
+): Promise<DecisaoClassificacaoDetalhe> {
+  try {
+    const res = await api.post<DecisaoClassificacaoDetalhe>(
+      `/competicoes/edicoes/${idEdicaoCompeticao}/decisoes-classificacao`,
+      dados
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
 // Objeto de Serviço Agrupado
 // ==========================================
 
@@ -537,7 +856,30 @@ export const competicoesService = {
   agendarPartida,
   registrarResultadoSimples,
   obterClassificacao,
+
+  // Fatia 3: Súmula, Disciplina, Artilharia, Decisões e Ciclo de Vida
+  iniciarEdicao,
+  finalizarEdicao,
+  reabrirEdicao,
+  cancelarEdicao,
+  reabrirFaseGrupos,
+  obterSumula,
+  iniciarPartida,
+  finalizarPartida,
+  reabrirPartida,
+  cancelarPartida,
+  registrarOcorrencia,
+  atribuirAutorOcorrencia,
+  removerOcorrencia,
+  obterArtilharia,
+  obterPainelDisciplinar,
+  criarSuspensaoManual,
+  cumprirSuspensao,
+  ajustarSuspensao,
+  listarDecisoesClassificacao,
+  registrarDecisaoClassificacao,
 };
 
 export const competicaoService = competicoesService;
 export default competicoesService;
+
