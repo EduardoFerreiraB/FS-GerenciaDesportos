@@ -1,9 +1,10 @@
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/cn';
 
-export function Table({ className, ...props }: ComponentProps<'table'>) {
+/** `embutida`: sem borda/cantos próprios, para uso dentro de um Card (evita borda dupla). */
+export function Table({ className, embutida = false, ...props }: ComponentProps<'table'> & { embutida?: boolean }) {
   return (
-    <div className="w-full overflow-x-auto rounded-xl border border-line bg-surface">
+    <div className={cn('w-full overflow-x-auto bg-surface', !embutida && 'rounded-xl border border-line')}>
       <table className={cn('w-full border-collapse text-left text-sm', className)} {...props} />
     </div>
   );

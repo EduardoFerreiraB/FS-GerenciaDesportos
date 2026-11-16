@@ -21,6 +21,8 @@
   --success-soft: #f0fdf4;
   --warning: #b45309;
   --warning-soft: #fffbeb;
+  --cartao-amarelo: #eab308;
+  --cartao-vermelho: #dc2626;
   --danger: #b91c1c;
   --danger-soft: #fef2f2;
   --primary-solid: #2563eb;
@@ -48,6 +50,8 @@
   --success-soft: rgb(74 222 128 / 0.15);
   --warning: #fbbf24;
   --warning-soft: rgb(251 191 36 / 0.15);
+  --cartao-amarelo: #facc15;
+  --cartao-vermelho: #ef4444;
   --danger: #f87171;
   --danger-soft: rgb(248 113 113 / 0.15);
   --primary-solid: #2563eb;
@@ -75,6 +79,9 @@
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  /* Cor física dos cartões (ícones de súmula), não semântica de alerta. */
+  --color-cartao-amarelo: var(--cartao-amarelo);
+  --color-cartao-vermelho: var(--cartao-vermelho);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-primary-solid: var(--primary-solid);
@@ -105,24 +112,28 @@
   :root { --ui-anim-dur: 0.01ms; }
 }
 
-body {
-  background-color: var(--canvas);
-  color: var(--fg);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
-}
+/* Em @layer base: fora de camada, estas regras venceriam os utilitários do Tailwind v4
+   (ex.: o `outline-none` dos componentes que desenham o próprio anel de foco). */
+@layer base {
+  body {
+    background-color: var(--canvas);
+    color: var(--fg);
+    font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
 
-:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
 
-::selection {
-  background: var(--primary-soft);
-  color: var(--fg);
-}
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--fg);
+  }
 
-html {
-  scrollbar-color: var(--line-strong) transparent;
+  html {
+    scrollbar-color: var(--line-strong) transparent;
+  }
 }

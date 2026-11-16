@@ -23,7 +23,7 @@ export function TabsTrigger({ icon, className, children, ...props }: TabsTrigger
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        '-mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-fg-muted outline-none transition-colors duration-150 hover:text-fg focus-visible:ring-4 focus-visible:ring-focus data-[state=active]:border-primary data-[state=active]:text-primary',
+        '-mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-fg-muted outline-none transition-colors duration-150 hover:text-fg rounded-t-md focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 data-[state=active]:border-primary data-[state=active]:text-primary',
         className,
       )}
       {...props}
