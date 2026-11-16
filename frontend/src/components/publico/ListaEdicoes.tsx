@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import type { EdicaoPublicaResumo } from '@/types/publico';
 import { formatarPeriodo } from '@/lib/formatos';
-import { ROTULO_ESTADO_EDICAO, ROTULO_FORMATO } from '@/lib/rotulos';
+import { ROTULO_FORMATO } from '@/lib/rotulos';
+import { StatusBadge } from '@/components/ui';
 
 interface ListaEdicoesProps {
   edicoes: (EdicaoPublicaResumo & { competicao?: { nome: string } })[];
@@ -11,27 +12,27 @@ interface ListaEdicoesProps {
 
 export default function ListaEdicoes({ edicoes }: ListaEdicoesProps) {
   return (
-    <ul className="space-y-3">
+    <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {edicoes.map((edicao) => (
         <li key={edicao.id_edicao_competicao}>
           <Link
             href={`/publico/edicao/${edicao.id_edicao_competicao}`}
-            className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/50 px-5 py-4 hover:border-blue-400"
+            className="flex h-full flex-col gap-3 rounded-xl border border-line bg-surface p-5 shadow-xs outline-none transition-colors duration-150 hover:border-line-strong focus-visible:ring-4 focus-visible:ring-focus"
           >
-            <div>
-              <p className="font-bold text-slate-800 dark:text-slate-100">
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-semibold text-fg">
                 {edicao.competicao ? `${edicao.competicao.nome} · ` : ''}
                 {edicao.identificacao}
                 {edicao.categoria ? ` · ${edicao.categoria}` : ''}
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {formatarPeriodo(edicao.data_inicio, edicao.data_fim)} · {ROTULO_FORMATO[edicao.formato]}
-              </p>
+              <StatusBadge tipo="edicao" valor={edicao.estado} />
             </div>
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1">
-              {ROTULO_ESTADO_EDICAO[edicao.estado]}
-              <ChevronRight size={16} />
-            </span>
+            <p className="flex items-center justify-between gap-2 text-sm text-fg-muted">
+              <span>
+                {formatarPeriodo(edicao.data_inicio, edicao.data_fim)} · {ROTULO_FORMATO[edicao.formato]}
+              </span>
+              <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-subtle" />
+            </p>
           </Link>
         </li>
       ))}
