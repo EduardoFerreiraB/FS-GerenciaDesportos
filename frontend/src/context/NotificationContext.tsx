@@ -1,8 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { CheckCircle2, AlertTriangle, Info, X, HelpCircle } from 'lucide-react';
-import { clsx } from 'clsx';
+import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
+import { Button, Dialog, DialogContent, DialogFooter } from '@/components/ui';
+import { cn } from '@/lib/cn';
 
 interface Toast {
   id: string;
@@ -38,10 +39,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
 
-    // Auto-remove after 4 seconds
-    setTimeout(() => {
-      removeToast(id);
-    }, 4000);
+    // Some em 4 s, exceto erro (fica ate fechar)
+    if (type !== 'error') {
+      setTimeout(() => {
+        removeToast(id);
+      }, 4000);
+    }
   }, [removeToast]);
 
   const confirm = useCallback((options: ConfirmOptions) => {
@@ -113,89 +116,59 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     <NotificationContext.Provider value={{ toast, confirm }}>
       {children}
 
-      {/* Floating Toasts Stack */}
-      <div className="fixed top-6 right-6 z-50 flex flex-col gap-3 max-w-md w-full pointer-events-none">
+      {/* Toasts: canto inferior direito */}
+      <div
+        className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6"
+      >
         {toasts.map((t) => {
-          const Icon = {
-            success: CheckCircle2,
-            error: AlertTriangle,
-            warning: AlertTriangle,
-            info: Info
-          }[t.type];
-
+          const Icon = { success: CheckCircle2, error: AlertTriangle, warning: AlertTriangle, info: Info }[t.type];
+          const titulo = { success: 'Sucesso', error: 'Erro', warning: 'Atenção', info: 'Informação' }[t.type];
           return (
             <div
               key={t.id}
-              className={clsx(
-                "p-4 rounded-2xl shadow-lg border flex items-start gap-3 pointer-events-auto animate-in slide-in-from-right-5 fade-in duration-300 bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700/50",
-                {
-                  "border-l-4 border-l-emerald-500": t.type === 'success',
-                  "border-l-4 border-l-red-500": t.type === 'error',
-                  "border-l-4 border-l-amber-500": t.type === 'warning',
-                  "border-l-4 border-l-blue-500": t.type === 'info',
-                }
-              )}
+              role={t.type === 'error' ? 'alert' : 'status'}
+              className="pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-surface p-4 text-fg shadow-lg"
             >
-              <div className={clsx("mt-0.5 rounded-full p-1", {
-                "text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10": t.type === 'success',
-                "text-red-500 bg-red-50 dark:bg-red-500/10": t.type === 'error',
-                "text-amber-500 bg-amber-50 dark:bg-amber-500/10": t.type === 'warning',
-                "text-blue-500 bg-blue-50 dark:bg-blue-500/10": t.type === 'info',
-              })}>
-                <Icon size={18} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-150 leading-tight">
-                  {t.type === 'success' && 'Sucesso'}
-                  {t.type === 'error' && 'Erro'}
-                  {t.type === 'warning' && 'Atenção'}
-                  {t.type === 'info' && 'Informativo'}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{t.message}</p>
+              <Icon
+                aria-hidden="true"
+                className={cn('mt-0.5 size-5 shrink-0', {
+                  'text-success': t.type === 'success',
+                  'text-danger': t.type === 'error',
+                  'text-warning': t.type === 'warning',
+                  'text-primary': t.type === 'info',
+                })}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold leading-tight">{titulo}</p>
+                <p className="mt-1 break-words text-sm text-fg-muted">{t.message}</p>
               </div>
               <button
+                type="button"
                 onClick={() => removeToast(t.id)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5"
+                aria-label="Fechar notificação"
+                className="rounded p-0.5 text-fg-subtle outline-none transition-colors hover:text-fg focus-visible:ring-4 focus-visible:ring-focus"
               >
-                <X size={16} />
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
           );
         })}
       </div>
 
-      {/* Confirmation Modal */}
-      {confirmModal?.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-md w-full p-8 animate-in zoom-in-95 border border-slate-100 dark:border-slate-700/50">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                <HelpCircle size={28} />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{confirmModal.title}</h2>
-            </div>
-            
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 leading-relaxed">
-              {confirmModal.message}
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleCancelAction}
-                className="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/30 text-sm active:scale-95 transition-all cursor-pointer"
-              >
+      <Dialog open={Boolean(confirmModal?.isOpen)} onOpenChange={(aberto) => { if (!aberto) handleCancelAction(); }}>
+        {confirmModal && (
+          <DialogContent size="sm" title={confirmModal.title} description={confirmModal.message}>
+            <DialogFooter>
+              <Button variant="secondary" onClick={handleCancelAction}>
                 {confirmModal.cancelText || 'Cancelar'}
-              </button>
-              <button
-                onClick={handleConfirmAction}
-                className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg shadow-red-100 dark:shadow-none active:scale-95 transition-all cursor-pointer text-sm"
-              >
+              </Button>
+              <Button variant="danger" onClick={handleConfirmAction}>
                 {confirmModal.confirmText || 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
     </NotificationContext.Provider>
   );
 }

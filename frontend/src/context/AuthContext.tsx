@@ -94,10 +94,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, isLoading }}>
       {/* Se estiver carregando E estivermos numa rota protegida, bloqueia tudo e mostra spinner global */}
       {isLoading && pathname.includes('/dashboard') ? (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="min-h-screen flex items-center justify-center bg-canvas" role="status" aria-live="polite">
           <div className="flex flex-col items-center gap-4">
-            <Loader2 size={48} className="animate-spin text-primary" />
-            <p className="text-slate-500 font-medium">Autenticando...</p>
+            <Loader2 size={48} className="animate-spin text-primary" aria-hidden="true" />
+            <p className="text-fg-muted font-medium">Autenticando...</p>
           </div>
         </div>
       ) : (

@@ -1,22 +1,30 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
-import { LogIn, User, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { Alert, Button, Field, Input } from '@/components/ui';
+
+interface FormLogin {
+  username: string;
+  password: string;
+}
 
 export default function LoginPage() {
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  const onSubmit = async (data: any) => {
+  const { register, handleSubmit, formState: { errors } } = useForm<FormLogin>();
+
+  const onSubmit = async (data: FormLogin) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const formData = new FormData();
       formData.append('username', data.username);
@@ -26,7 +34,6 @@ export default function LoginPage() {
       const token = response.data.access_token;
       const refreshToken = response.data.refresh_token;
       await login(token, refreshToken);
-      
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Usuário ou senha incorretos');
       setIsLoading(false);
@@ -34,70 +41,70 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-8 border border-slate-100">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-primary mb-4">
-            <LogIn size={32} />
-          </div>
-          <h1 className="text-3xl font-bold text-primary">Gerencia Esporte</h1>
-          <p className="text-slate-500 mt-2">Acesse sua conta para gerenciar a escolinha</p>
+    <div className="flex min-h-screen bg-canvas text-fg">
+      <aside className="hidden flex-1 flex-col justify-between bg-primary-solid p-12 text-on-primary lg:flex">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-on-primary/15 text-base font-bold">GE</div>
+          <span className="text-lg font-semibold tracking-tight">Gerencia Esporte</span>
         </div>
+        <div className="max-w-md">
+          <p className="text-3xl font-semibold leading-tight tracking-tight">Gestão de escolinhas e competições esportivas</p>
+        </div>
+        <p className="text-sm opacity-80">© 2026 Gerencia Esporte</p>
+      </aside>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg flex items-center gap-2 text-sm animate-in fade-in slide-in-from-top-1">
-              <AlertCircle size={18} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 ml-1">Usuário</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                <User size={20} />
-              </span>
-              <input
-                {...register('username', { required: 'Informe o usuário' })}
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                placeholder="Seu nome de usuário"
-              />
-            </div>
-            {errors.username && <p className="text-xs text-red-500 ml-1">{errors.username.message as string}</p>}
+      <main className="flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary-solid text-base font-bold text-on-primary">GE</div>
+            <span className="text-lg font-semibold tracking-tight">Gerencia Esporte</span>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 ml-1">Senha</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                <Lock size={20} />
-              </span>
-              <input
-                {...register('password', { required: 'Informe a senha' })}
-                type="password"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-                placeholder="••••••••"
-              />
-            </div>
-            {errors.password && <p className="text-xs text-red-500 ml-1">{errors.password.message as string}</p>}
+          <div className="rounded-xl border border-line bg-surface p-6 shadow-xs sm:p-8">
+            <h1 className="text-2xl font-semibold tracking-tight">Entrar</h1>
+            <p className="mt-1 text-sm text-fg-muted">Acesse sua conta para continuar.</p>
+
+            <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4" noValidate>
+              {error && <Alert tone="danger">{error}</Alert>}
+
+              <Field label="Usuário" htmlFor="username" error={errors.username && 'Informe o usuário'}>
+                <Input id="username" autoComplete="username" placeholder="Seu usuário" {...register('username', { required: true })} />
+              </Field>
+
+              <Field label="Senha" htmlFor="password" error={errors.password && 'Informe a senha'}>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={mostrarSenha ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    className="pr-10"
+                    {...register('password', { required: true })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenha((v) => !v)}
+                    aria-label={mostrarSenha ? 'Ocultar caracteres' : 'Mostrar caracteres'}
+                    className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-fg-muted outline-none transition-colors hover:text-fg focus-visible:ring-4 focus-visible:ring-focus"
+                  >
+                    {mostrarSenha ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+                  </button>
+                </div>
+              </Field>
+
+              <Button type="submit" size="lg" className="w-full" loading={isLoading}>
+                Acessar Sistema
+              </Button>
+            </form>
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-blue-200 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Entrando...' : 'Acessar Sistema'}
-          </button>
-        </form>
-
-        <div className="text-center pt-2">
-          <p className="text-xs text-slate-400">
-            © 2026 Gerencia Esporte - Sistema de Gestão Esportiva
+          <p className="mt-6 text-center text-sm">
+            <Link href="/" className="text-primary hover:underline">
+              Ver competições públicas
+            </Link>
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
