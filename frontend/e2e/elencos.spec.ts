@@ -127,10 +127,11 @@ with SessionLocal() as db:
     // A equipe deve ser listada
     await expect(page.getByText('Falcões Dourados')).toBeVisible();
 
-    // Expande a equipe para visualizar elenco
+    // Abre o elenco da equipe (gaveta lateral)
     await page.getByText('Falcões Dourados').click();
+    await expect(page.getByRole('dialog', { name: 'Falcões Dourados' })).toBeVisible();
 
-    // 1. Cadastra competidor terceiro avulso
+    // 1. Cadastra competidor terceiro avulso (a gaveta de inscrição substitui a do elenco)
     await page.getByRole('button', { name: /adicionar integrante/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
 
@@ -147,7 +148,7 @@ with SessionLocal() as db:
     await page.getByLabel(/posição/i).fill('Meio-Campo');
     await page.getByRole('button', { name: 'Salvar' }).click();
 
-    // Confere que o terceiro está no elenco
+    // Ao salvar, volta para o elenco atualizado: confere que o terceiro está lá
     await expect(page.getByText(nomeTerceiro)).toBeVisible();
     await expect(page.getByText(/#10/)).toBeVisible();
 
@@ -359,7 +360,7 @@ with SessionLocal() as db:
     // A equipe copiada deve aparecer na lista
     await expect(page.getByText('Gaviões Históricos')).toBeVisible();
 
-    // Expande a equipe e confere o atleta copiado
+    // Abre o elenco da equipe e confere o atleta copiado
     await page.getByText('Gaviões Históricos').click();
     await expect(page.getByText(atleta.nome)).toBeVisible();
   });
@@ -416,5 +417,33 @@ with SessionLocal() as db:
     // Salva com camisa repetida (deve ter sucesso)
     await page.getByRole('button', { name: 'Salvar' }).click();
     await expect(page.getByText(c2.nome)).toBeVisible();
+  });
+
+  test('exclui equipe pelo menu "⋯" com confirmação (edição em rascunho)', async ({ page, request }) => {
+    await authenticateDirectly(page, { username: 'coordenador', password: 'coord123' });
+
+    const idEdicao = await criarEdicaoTeste(request, 'Copa Exclusão Equipe');
+    const eqRes = await request.post(`${API_E2E}/competicoes/edicoes/${idEdicao}/equipes`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { nome: 'Equipe Descartável', sigla: 'DES' },
+    });
+    expect(eqRes.ok()).toBeTruthy();
+    const eq = await eqRes.json();
+
+    await page.goto(`/test-elencos?idEdicao=${idEdicao}`);
+    await expect(page.getByText('Equipe Descartável')).toBeVisible();
+
+    await page.getByTestId(`btn-acoes-equipe-${eq.id_equipe}`).click();
+    await page.getByRole('menuitem', { name: /excluir equipe/i }).click();
+
+    const confirmacao = page.getByRole('dialog', { name: /excluir equipe/i });
+    await expect(confirmacao).toBeVisible();
+    await expect(page.getByTestId('btn-confirmar-exclusao')).toBeDisabled();
+    await page.getByTestId('input-confirmacao-exclusao').fill('Equipe Descartável');
+    await page.getByTestId('btn-confirmar-exclusao').click();
+
+    await expect(confirmacao).toHaveCount(0);
+    await expect(page.getByText('Equipe Descartável')).toHaveCount(0);
+    await expect(page.getByText(/nenhuma equipe cadastrada/i)).toBeVisible();
   });
 });

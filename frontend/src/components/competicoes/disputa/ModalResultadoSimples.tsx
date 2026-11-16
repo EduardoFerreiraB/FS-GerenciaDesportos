@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, AlertCircle, Loader2, CheckCircle2, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, Input } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { registrarResultadoSimples, isErroApi } from '@/services/competicoes';
 import type { PartidaDetalhe, ResultadoSimples } from '@/types/competicoes';
 
@@ -53,7 +54,7 @@ export default function ModalResultadoSimples({
     setErro(null);
   }, [isOpen, p]);
 
-  if (!isOpen || !p) return null;
+  if (!p) return null;
 
   const nomeMandante = p.nome_mandante || 'Mandante';
   const nomeVisitante = p.nome_visitante || 'Visitante';
@@ -129,114 +130,73 @@ export default function ModalResultadoSimples({
     }
   };
 
+  const radioClasses =
+    'flex min-h-10 cursor-pointer items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg transition-colors duration-150 hover:bg-surface-muted has-[:checked]:border-warning has-[:checked]:bg-warning-soft';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-resultado-titulo"
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 relative animate-in zoom-in-95 max-h-[90vh] overflow-y-auto"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={salvando}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
-          aria-label="Fechar"
-        >
-          <X size={20} />
-        </button>
+    <Dialog open={isOpen} onOpenChange={(aberto) => (!aberto && !salvando ? onClose() : undefined)}>
+      <DialogContent title="Lançar Placar Simples" description={`Jogo #${numeroJogo} · registro oficial de resultado`} size="md">
+        <form id="form-resultado-simples" onSubmit={handleSalvar} className="space-y-5">
+          {erro && <Alert tone="danger">{erro}</Alert>}
 
-        {/* Cabeçalho */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-            <Trophy size={24} />
-          </div>
-          <div>
-            <h3 id="modal-resultado-titulo" className="text-lg font-bold text-slate-800">
-              Lançar Placar Simples
-            </h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Jogo #{numeroJogo} • Registro Oficial de Resultado
-            </p>
-          </div>
-        </div>
-
-        {erro && (
-          <div className="p-3.5 mb-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-start gap-2.5">
-            <AlertCircle size={18} className="shrink-0 text-red-600 mt-0.5" />
-            <div className="font-medium leading-relaxed">{erro}</div>
-          </div>
-        )}
-
-        <form onSubmit={handleSalvar} className="space-y-5">
-          {/* Placar Mandante x Visitante */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div className="grid grid-cols-5 items-center gap-2">
-              {/* Mandante */}
-              <div className="col-span-2 text-center">
-                <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider truncate mb-1" title={nomeMandante}>
-                  {p.sigla_mandante ? `${p.sigla_mandante} - ` : ''}{nomeMandante}
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99"
-                  disabled={ehWo || salvando}
-                  value={ehWo ? '' : golsMandante}
-                  onChange={(e) => setGolsMandante(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  aria-label={`Gols ${nomeMandante}`}
-                  className="w-20 mx-auto text-center text-3xl font-extrabold text-slate-800 bg-white border border-slate-300 rounded-xl py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-slate-100 disabled:text-slate-400"
-                />
-              </div>
-
-              {/* Separador */}
-              <div className="col-span-1 text-center">
-                <span className="text-lg font-black text-slate-400">X</span>
-              </div>
-
-              {/* Visitante */}
-              <div className="col-span-2 text-center">
-                <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider truncate mb-1" title={nomeVisitante}>
-                  {p.sigla_visitante ? `${p.sigla_visitante} - ` : ''}{nomeVisitante}
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="99"
-                  disabled={ehWo || salvando}
-                  value={ehWo ? '' : golsVisitante}
-                  onChange={(e) => setGolsVisitante(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  aria-label={`Gols ${nomeVisitante}`}
-                  className="w-20 mx-auto text-center text-3xl font-extrabold text-slate-800 bg-white border border-slate-300 rounded-xl py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition disabled:bg-slate-100 disabled:text-slate-400"
-                />
-              </div>
+          {/* Placar mandante × visitante */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-3 rounded-xl border border-line bg-surface-muted p-4">
+            <div className="flex min-w-0 flex-col items-center gap-2">
+              <span className="max-w-full truncate text-xs font-medium text-fg-muted" title={nomeMandante}>
+                {p.sigla_mandante ? `${p.sigla_mandante} · ` : ''}
+                {nomeMandante}
+              </span>
+              <Input
+                type="number"
+                min="0"
+                max="99"
+                disabled={ehWo || salvando}
+                value={ehWo ? '' : golsMandante}
+                onChange={(e) => setGolsMandante(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                aria-label={`Gols ${nomeMandante}`}
+                className="h-14 w-20 text-center text-3xl font-semibold tabular-nums"
+              />
+            </div>
+            <span aria-hidden="true" className="pb-3 text-xl text-fg-subtle">
+              ×
+            </span>
+            <div className="flex min-w-0 flex-col items-center gap-2">
+              <span className="max-w-full truncate text-xs font-medium text-fg-muted" title={nomeVisitante}>
+                {p.sigla_visitante ? `${p.sigla_visitante} · ` : ''}
+                {nomeVisitante}
+              </span>
+              <Input
+                type="number"
+                min="0"
+                max="99"
+                disabled={ehWo || salvando}
+                value={ehWo ? '' : golsVisitante}
+                onChange={(e) => setGolsVisitante(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                aria-label={`Gols ${nomeVisitante}`}
+                className="h-14 w-20 text-center text-3xl font-semibold tabular-nums"
+              />
             </div>
           </div>
 
-          {/* Opção de Disputa por Pênaltis */}
+          {/* Disputa por pênaltis */}
           {!ehWo && (
-            <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
+            <div className="space-y-3 rounded-xl border border-line p-4">
+              <label className="flex cursor-pointer select-none items-center gap-2.5 text-sm font-medium text-fg">
+                <Checkbox
                   checked={temPenaltis}
                   onChange={(e) => setTemPenaltis(e.target.checked)}
                   disabled={salvando}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                 />
-                <span className="text-xs font-semibold text-slate-700">
-                  Decisão por Pênaltis (desempate eliminatório)
-                </span>
+                Decisão por pênaltis (desempate eliminatório)
               </label>
 
               {temPenaltis && (
-                <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-4 animate-in fade-in duration-150">
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1 truncate" title={nomeMandante}>
+                <div className="grid grid-cols-2 gap-4 border-t border-line pt-3">
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <span className="truncate text-xs font-medium text-fg-muted" title={nomeMandante}>
                       Pênaltis {nomeMandante}
-                    </label>
-                    <input
+                    </span>
+                    <Input
                       type="number"
                       min="0"
                       max="50"
@@ -245,14 +205,14 @@ export default function ModalResultadoSimples({
                       placeholder="0"
                       aria-label={`Pênaltis ${nomeMandante}`}
                       disabled={salvando}
-                      className="w-full px-3 py-1.5 text-sm font-semibold text-slate-800 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className="tabular-nums"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1 truncate" title={nomeVisitante}>
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <span className="truncate text-xs font-medium text-fg-muted" title={nomeVisitante}>
                       Pênaltis {nomeVisitante}
-                    </label>
-                    <input
+                    </span>
+                    <Input
                       type="number"
                       min="0"
                       max="50"
@@ -261,7 +221,7 @@ export default function ModalResultadoSimples({
                       placeholder="0"
                       aria-label={`Pênaltis ${nomeVisitante}`}
                       disabled={salvando}
-                      className="w-full px-3 py-1.5 text-sm font-semibold text-slate-800 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className="tabular-nums"
                     />
                   </div>
                 </div>
@@ -269,11 +229,10 @@ export default function ModalResultadoSimples({
             </div>
           )}
 
-          {/* Opção de W.O. */}
-          <div className="p-3.5 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
+          {/* W.O. */}
+          <div className={cn('space-y-3 rounded-xl border p-4', ehWo ? 'border-warning/40 bg-warning-soft' : 'border-line')}>
+            <label className="flex cursor-pointer select-none items-center gap-2.5 text-sm font-medium text-fg">
+              <Checkbox
                 checked={ehWo}
                 onChange={(e) => {
                   const check = e.target.checked;
@@ -286,83 +245,56 @@ export default function ModalResultadoSimples({
                   }
                 }}
                 disabled={salvando}
-                className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
               />
-              <span className="text-xs font-semibold text-amber-900">
-                Declarar Resultado por W.O.
-              </span>
+              Declarar Resultado por W.O.
             </label>
 
             {ehWo && (
-              <div className="pt-2 border-t border-amber-200/60 space-y-2 animate-in fade-in duration-150">
-                <p className="text-[11px] text-amber-800">
-                  Selecione a equipe ausente/infratora (derrotada por W.O.). A outra equipe receberá vitória regulamentar de 3x0.
-                </p>
-
-                <div className="space-y-1.5">
-                  {p.id_equipe_mandante && (
-                    <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200 cursor-pointer text-xs font-medium text-slate-700">
-                      <input
-                        type="radio"
-                        name="equipe_wo"
-                        value={p.id_equipe_mandante}
-                        checked={equipeDerrotadaWo === p.id_equipe_mandante}
-                        onChange={() => setEquipeDerrotadaWo(p.id_equipe_mandante!)}
-                        className="text-amber-600 focus:ring-amber-500"
-                      />
-                      <span>{nomeMandante} (Derrotada por W.O.)</span>
-                    </label>
-                  )}
-
-                  {p.id_equipe_visitante && (
-                    <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200 cursor-pointer text-xs font-medium text-slate-700">
-                      <input
-                        type="radio"
-                        name="equipe_wo"
-                        value={p.id_equipe_visitante}
-                        checked={equipeDerrotadaWo === p.id_equipe_visitante}
-                        onChange={() => setEquipeDerrotadaWo(p.id_equipe_visitante!)}
-                        className="text-amber-600 focus:ring-amber-500"
-                      />
-                      <span>{nomeVisitante} (Derrotada por W.O.)</span>
-                    </label>
-                  )}
-                </div>
-              </div>
+              <fieldset className="space-y-2 border-t border-line pt-3">
+                <legend className="mb-2 text-xs text-fg-muted">
+                  Selecione a equipe ausente/infratora (derrotada por W.O.). A outra equipe recebe vitória
+                  regulamentar de 3 × 0.
+                </legend>
+                {p.id_equipe_mandante && (
+                  <label className={radioClasses}>
+                    <input
+                      type="radio"
+                      name="equipe_wo"
+                      value={p.id_equipe_mandante}
+                      checked={equipeDerrotadaWo === p.id_equipe_mandante}
+                      onChange={() => setEquipeDerrotadaWo(p.id_equipe_mandante!)}
+                      className="size-4 accent-primary"
+                    />
+                    <span className="truncate">{nomeMandante} (derrotada por W.O.)</span>
+                  </label>
+                )}
+                {p.id_equipe_visitante && (
+                  <label className={radioClasses}>
+                    <input
+                      type="radio"
+                      name="equipe_wo"
+                      value={p.id_equipe_visitante}
+                      checked={equipeDerrotadaWo === p.id_equipe_visitante}
+                      onChange={() => setEquipeDerrotadaWo(p.id_equipe_visitante!)}
+                      className="size-4 accent-primary"
+                    />
+                    <span className="truncate">{nomeVisitante} (derrotada por W.O.)</span>
+                  </label>
+                )}
+              </fieldset>
             )}
           </div>
-
-          {/* Rodapé de Ações */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={salvando}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="submit"
-              disabled={salvando}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition disabled:opacity-50 min-w-[150px]"
-            >
-              {salvando ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Registrando...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} />
-                  <span>Confirmar Placar</span>
-                </>
-              )}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="form-resultado-simples" loading={salvando}>
+            Confirmar Placar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

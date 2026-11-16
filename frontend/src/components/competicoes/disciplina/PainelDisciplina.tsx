@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, type ReactNode } from 'react';
 import {
   obterPainelDisciplinar,
   obterArtilharia,
@@ -15,25 +15,45 @@ import type {
   PartidaDetalhe,
   EquipeDetalhe,
   SuspensaoDetalhe,
-  OrigemSuspensao,
-  SituacaoSuspensao,
 } from '@/types/competicoes';
 import {
-  ShieldAlert,
-  AlertTriangle,
-  CheckCircle2,
-  Trophy,
-  RefreshCw,
-  Plus,
-  Loader2,
-  Info,
-  Calendar,
-  AlertCircle,
-  HelpCircle,
   Award,
-  ChevronRight,
-  User,
+  CircleCheck,
+  ClipboardCheck,
+  MoreHorizontal,
+  Plus,
+  RectangleVertical,
+  RefreshCw,
+  ShieldAlert,
+  SlidersHorizontal,
+  TriangleAlert,
+  Trophy,
 } from 'lucide-react';
+import {
+  Alert,
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  EmptyState,
+  IconButton,
+  Skeleton,
+  StatusBadge,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui';
+import { cn } from '@/lib/cn';
+import { ROTULO_ORIGEM_SUSPENSAO, rotuloDoEstado } from '@/lib/rotulos';
 import ModalCumprirSuspensao from './ModalCumprirSuspensao';
 import ModalAjustarSuspensao from './ModalAjustarSuspensao';
 
@@ -44,9 +64,55 @@ interface PainelDisciplinaProps {
 
 type SubAbaDisciplina = 'suspensoes' | 'cartoes' | 'artilharia';
 
+function Contador({ valor }: { valor: number }) {
+  if (valor <= 0) return null;
+  return (
+    <Badge tone="neutral" className="px-1.5 py-0 tabular-nums">
+      {valor}
+    </Badge>
+  );
+}
+
+function CabecalhoSecao({
+  titulo,
+  descricao,
+  extra,
+}: {
+  titulo: string;
+  descricao: string;
+  extra?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <div className="min-w-0">
+        <h3 className="text-base font-semibold text-fg">{titulo}</h3>
+        <p className="mt-0.5 text-sm text-fg-muted">{descricao}</p>
+      </div>
+      {extra}
+    </div>
+  );
+}
+
+function EtiquetaSituacao({ s }: { s: SuspensaoDetalhe }) {
+  if (s.situacao === 'EM_REVISAO') {
+    return (
+      <Badge tone="warning" data-testid={`badge-em-revisao-${s.id_suspensao}`}>
+        <TriangleAlert aria-hidden="true" className="size-3.5" />
+        {rotuloDoEstado('suspensao', s.situacao)}
+      </Badge>
+    );
+  }
+  return (
+    <StatusBadge
+      tipo="suspensao"
+      valor={s.situacao}
+      data-testid={`badge-situacao-${s.id_suspensao}`}
+    />
+  );
+}
+
 export default function PainelDisciplina({
   idEdicaoCompeticao,
-  estadoEdicao,
 }: PainelDisciplinaProps) {
   const [subAba, setSubAba] = useState<SubAbaDisciplina>('suspensoes');
 
@@ -118,594 +184,368 @@ export default function PainelDisciplina({
     setModalAjustarAberto(true);
   };
 
-  const formatarOrigem = (origem: OrigemSuspensao | string) => {
-    switch (origem) {
-      case 'ACUMULO_AMARELOS':
-        return 'Acúmulo de Amarelos';
-      case 'SEGUNDO_AMARELO':
-        return '2º Amarelo (Vermelho)';
-      case 'VERMELHO_DIRETO':
-        return 'Vermelho Direto';
-      case 'MANUAL':
-        return 'Punição Administrativa';
-      default:
-        return origem;
-    }
-  };
+  const suspensoes = painel?.suspensoes ?? [];
+  const resumoCartoes = painel?.resumo_cartoes ?? [];
+  const artilheiros = artilharia?.artilheiros ?? [];
 
-  const renderBadgeSituacao = (s: SuspensaoDetalhe) => {
-    switch (s.situacao) {
-      case 'ATIVA':
-        return (
-          <span
-            data-testid={`badge-situacao-${s.id_suspensao}`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Ativa
-          </span>
-        );
-      case 'CUMPRIDA':
-        return (
-          <span
-            data-testid={`badge-situacao-${s.id_suspensao}`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-slate-500" />
-            Cumprida
-          </span>
-        );
-      case 'EM_REVISAO':
-        return (
-          <span
-            data-testid={`badge-em-revisao-${s.id_suspensao}`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-sm"
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            Em Revisão
-          </span>
-        );
-      case 'CANCELADA':
-        return (
-          <span
-            data-testid={`badge-situacao-${s.id_suspensao}`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200"
-          >
-            Cancelada
-          </span>
-        );
-      default:
-        return (
-          <span
-            data-testid={`badge-situacao-${s.id_suspensao}`}
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600"
-          >
-            {s.situacao}
-          </span>
-        );
-    }
-  };
+  const temSuspensoesEmRevisao = suspensoes.some((s) => s.situacao === 'EM_REVISAO');
+  const totalSuspensoesAtivas = suspensoes.filter((s) => s.situacao === 'ATIVA').length;
 
-  const temSuspensoesEmRevisao =
-    painel?.suspensoes?.some((s) => s.situacao === 'EM_REVISAO') ?? false;
-
-  const totalSuspensoesAtivas =
-    painel?.suspensoes?.filter((s) => s.situacao === 'ATIVA').length ?? 0;
+  // Sem dados ainda (primeira carga ou falha): mostra esqueleto ou só o erro.
+  const semDados = painel === null;
 
   return (
-    <div className="space-y-6" data-testid="painel-disciplina">
-      {/* Barra Superior de Navegação das Sub-Abas e Ações */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            data-testid="subtab-suspensoes"
-            onClick={() => setSubAba('suspensoes')}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl flex items-center gap-2 transition ${
-              subAba === 'suspensoes'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4" />
-            <span>Suspensões & Cumprimentos</span>
-            {painel && painel.suspensoes.length > 0 && (
-              <span
-                className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                  subAba === 'suspensoes'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {painel.suspensoes.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            data-testid="subtab-cartoes"
-            onClick={() => setSubAba('cartoes')}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl flex items-center gap-2 transition ${
-              subAba === 'cartoes'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <AlertCircle className="w-4 h-4" />
-            <span>Controle de Cartões</span>
-            {painel && painel.resumo_cartoes.length > 0 && (
-              <span
-                className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                  subAba === 'cartoes'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {painel.resumo_cartoes.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            data-testid="subtab-artilharia"
-            onClick={() => setSubAba('artilharia')}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl flex items-center gap-2 transition ${
-              subAba === 'artilharia'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <Trophy className="w-4 h-4" />
-            <span>Artilharia</span>
-            {artilharia && artilharia.artilheiros.length > 0 && (
-              <span
-                className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                  subAba === 'artilharia'
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-slate-200 text-slate-700'
-                }`}
-              >
-                {artilharia.artilheiros.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          {subAba === 'suspensoes' && (
-            <button
-              type="button"
-              data-testid="btn-nova-suspensao"
-              onClick={abrirNovaSuspensaoManual}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition shadow-sm"
+    <div className="space-y-4" data-testid="painel-disciplina">
+      <Tabs value={subAba} onValueChange={(v) => setSubAba(v as SubAbaDisciplina)}>
+        {/* Sub-abas e ações */}
+        <div className="flex flex-col-reverse gap-3 border-b border-line sm:flex-row sm:items-end sm:justify-between">
+          <TabsList aria-label="Disciplina" className="min-w-0 border-b-0">
+            <TabsTrigger
+              value="suspensoes"
+              data-testid="subtab-suspensoes"
+              icon={<ShieldAlert className="size-4" />}
             >
-              <Plus className="w-4 h-4" />
-              <span>Nova Suspensão Manual</span>
-            </button>
-          )}
+              Suspensões
+              <Contador valor={suspensoes.length} />
+            </TabsTrigger>
+            <TabsTrigger
+              value="cartoes"
+              data-testid="subtab-cartoes"
+              icon={<RectangleVertical className="size-4" />}
+            >
+              Cartões
+              <Contador valor={resumoCartoes.length} />
+            </TabsTrigger>
+            <TabsTrigger
+              value="artilharia"
+              data-testid="subtab-artilharia"
+              icon={<Trophy className="size-4" />}
+            >
+              Artilharia
+              <Contador valor={artilheiros.length} />
+            </TabsTrigger>
+          </TabsList>
 
-          <button
-            type="button"
-            data-testid="btn-recarregar-disciplina"
-            onClick={carregarDados}
-            disabled={carregando}
-            aria-label="Atualizar dados"
-            className="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${carregando ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Alerta de Erro Geral */}
-      {erro && (
-        <div
-          data-testid="erro-disciplina"
-          className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center justify-between"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600" />
-            <span>{erro}</span>
+          <div className="flex items-center gap-2 self-end pb-2 sm:self-auto">
+            {subAba === 'suspensoes' && (
+              <Button
+                data-testid="btn-nova-suspensao"
+                leftIcon={<Plus className="size-4" />}
+                onClick={abrirNovaSuspensaoManual}
+              >
+                Nova suspensão manual
+              </Button>
+            )}
+            <IconButton
+              variant="secondary"
+              data-testid="btn-recarregar-disciplina"
+              onClick={carregarDados}
+              disabled={carregando}
+              aria-label="Atualizar dados"
+            >
+              <RefreshCw aria-hidden="true" className={cn(carregando && 'motion-safe:animate-spin')} />
+            </IconButton>
           </div>
-          <button
-            type="button"
-            onClick={carregarDados}
-            className="text-xs font-bold underline hover:text-red-900"
+        </div>
+
+        {/* Erro geral */}
+        {erro && (
+          <Alert
+            tone="danger"
+            data-testid="erro-disciplina"
+            className="mt-4"
+            title="Não foi possível carregar a disciplina"
+            action={
+              <Button variant="secondary" size="sm" onClick={carregarDados}>
+                Tentar novamente
+              </Button>
+            }
           >
-            Tentar novamente
-          </button>
-        </div>
-      )}
+            {erro}
+          </Alert>
+        )}
 
-      {/* Estado de Carregamento Inicial */}
-      {carregando && !painel && (
-        <div
-          data-testid="carregando-disciplina"
-          className="py-16 flex flex-col items-center justify-center gap-3 text-slate-500"
-        >
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <p className="text-sm">Carregando dados de disciplina e artilharia...</p>
-        </div>
-      )}
+        {/* Carregamento inicial */}
+        {carregando && semDados && (
+          <div data-testid="carregando-disciplina" className="space-y-3 pt-4" aria-busy="true">
+            <span className="sr-only">Carregando dados de disciplina e artilharia…</span>
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-4 w-80 max-w-full" />
+            <Skeleton className="h-48 w-full rounded-xl" />
+          </div>
+        )}
 
-      {/* Conteúdo da Sub-Aba 1: Suspensões e Cumprimentos */}
-      {subAba === 'suspensoes' && (
-        <div className="space-y-5 animate-in fade-in duration-200">
-          {/* Alerta de destaque se houver suspensões em revisão */}
-          {temSuspensoesEmRevisao && (
-            <div
-              data-testid="alerta-em-revisao"
-              className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3 shadow-sm"
-            >
-              <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-bold text-amber-900">
-                  Suspensões Requerendo Revisão Administrativa
-                </h4>
-                <p className="mt-1 text-xs text-amber-800 leading-relaxed">
-                  Existem suspensões marcadas como <strong>EM REVISÃO</strong>. Isso ocorre
-                  quando um cartão de origem foi removido ou alterado após cumprimentos já
-                  terem sido registrados na súmula. Utilize o botão{' '}
-                  <strong>&quot;Ajustar / Revisar&quot;</strong> para confirmar a punição,
-                  cancelar a suspensão ou alterar a quantidade de jogos com a devida justificativa.
-                </p>
-              </div>
-            </div>
-          )}
+        {!semDados && (
+          <>
+            {/* Sub-aba 1: Suspensões e cumprimentos */}
+            <TabsContent value="suspensoes" className="space-y-4">
+              {temSuspensoesEmRevisao && (
+                <Alert
+                  tone="warning"
+                  data-testid="alerta-em-revisao"
+                  title="Suspensões em revisão administrativa"
+                >
+                  Isso ocorre quando um cartão de origem foi removido ou alterado depois de cumprimentos já
+                  registrados na súmula. Use <strong className="font-semibold text-fg">Revisar</strong> no menu
+                  de ações da suspensão para confirmar a punição, cancelá-la ou alterar a quantidade de jogos,
+                  com a devida justificativa.
+                </Alert>
+              )}
 
-          {/* Lista de Suspensões */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">
-                  Suspensões Disciplinares da Edição
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Histórico de punições automáticas (por cartões) e manuais (administrativas).
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                <span>Ativas: <strong>{totalSuspensoesAtivas}</strong></span>
-                <span>•</span>
-                <span>Total: <strong>{painel?.suspensoes.length ?? 0}</strong></span>
-              </div>
-            </div>
+              <CabecalhoSecao
+                titulo="Suspensões da edição"
+                descricao="Punições automáticas (por cartões) e manuais (administrativas)."
+                extra={
+                  <p className="text-sm text-fg-muted">
+                    Ativas: <strong className="font-semibold tabular-nums text-fg">{totalSuspensoesAtivas}</strong>
+                    <span aria-hidden="true"> · </span>
+                    Total: <strong className="font-semibold tabular-nums text-fg">{suspensoes.length}</strong>
+                  </p>
+                }
+              />
 
-            {(!painel?.suspensoes || painel.suspensoes.length === 0) ? (
-              <div
-                data-testid="sem-suspensoes"
-                className="py-12 px-6 text-center text-slate-500"
-              >
-                <ShieldAlert className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium">
-                  Nenhuma suspensão registrada nesta edição.
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Suspensões por acúmulo de cartões ou expulsões aparecerão aqui automaticamente
-                  após o encerramento das súmulas.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-4">Atleta</th>
-                      <th className="py-3 px-4">Equipe</th>
-                      <th className="py-3 px-4">Origem</th>
-                      <th className="py-3 px-4">Motivo</th>
-                      <th className="py-3 px-4 text-center">Cumprimento</th>
-                      <th className="py-3 px-4 text-center">Situação</th>
-                      <th className="py-3 px-4 text-right">Ações</th>
+              {suspensoes.length === 0 ? (
+                <EmptyState
+                  data-testid="sem-suspensoes"
+                  icon={<ShieldAlert />}
+                  title="Nenhuma suspensão registrada"
+                  description="Suspensões por acúmulo de cartões ou expulsões aparecem aqui automaticamente após o encerramento das súmulas."
+                />
+              ) : (
+                <Table>
+                  <THead>
+                    <tr>
+                      <TH>Atleta</TH>
+                      <TH>Equipe</TH>
+                      <TH>Origem</TH>
+                      <TH>Motivo</TH>
+                      <TH className="text-center">Cumprimento</TH>
+                      <TH>Situação</TH>
+                      <TH className="text-right">
+                        <span className="sr-only">Ações</span>
+                      </TH>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {painel.suspensoes.map((s) => {
+                  </THead>
+                  <TBody>
+                    {suspensoes.map((s) => {
                       const ehEmRevisao = s.situacao === 'EM_REVISAO';
+                      const nome = s.nome_esportivo || `Integrante #${s.id_integrante}`;
                       return (
-                        <tr
+                        <TR
                           key={s.id_suspensao}
                           data-testid={`linha-suspensao-${s.id_suspensao}`}
-                          className={`hover:bg-slate-50/70 transition ${
-                            ehEmRevisao ? 'bg-amber-50/40' : ''
-                          }`}
+                          className={cn(ehEmRevisao && 'bg-warning-soft')}
                         >
-                          <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-slate-400" />
-                              <span>
-                                {s.nome_esportivo || `Integrante #${s.id_integrante}`}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
-                            {s.nome_equipe || '-'}
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="inline-block px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-md">
-                              {formatarOrigem(s.origem)}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate" title={s.motivo}>
+                          <TD className="whitespace-nowrap font-medium">{nome}</TD>
+                          <TD className="whitespace-nowrap text-fg-muted">{s.nome_equipe || '—'}</TD>
+                          <TD className="whitespace-nowrap">
+                            <Badge tone="neutral">{ROTULO_ORIGEM_SUSPENSAO[s.origem] ?? 'Outra'}</Badge>
+                          </TD>
+                          <TD className="max-w-xs truncate text-fg-muted" title={s.motivo}>
                             {s.motivo}
-                          </td>
-                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                            <span className="font-bold text-slate-800">
-                              {s.jogos_cumpridos}
+                          </TD>
+                          <TD className="whitespace-nowrap text-center tabular-nums">
+                            <span>
+                              <span className="font-semibold text-fg">{s.jogos_cumpridos}</span>
+                              <span className="text-fg-muted"> / {s.jogos} jogos</span>
                             </span>
-                            <span className="text-slate-400"> / {s.jogos} jogos</span>
-                          </td>
-                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                            {renderBadgeSituacao(s)}
-                          </td>
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-2">
-                              {s.situacao === 'ATIVA' && (
-                                <button
-                                  type="button"
-                                  data-testid={`btn-cumprir-${s.id_suspensao}`}
-                                  onClick={() => abrirCumprir(s)}
-                                  className="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
-                                  title="Registrar cumprimento de partida"
+                          </TD>
+                          <TD className="whitespace-nowrap">
+                            <EtiquetaSituacao s={s} />
+                          </TD>
+                          <TD className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <IconButton
+                                  aria-label={`Mais ações da suspensão de ${nome}`}
+                                  variant="ghost"
+                                  size="sm"
+                                  data-testid={`btn-acoes-suspensao-${s.id_suspensao}`}
                                 >
-                                  Cumprir
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                data-testid={`btn-ajustar-${s.id_suspensao}`}
-                                onClick={() => abrirAjustar(s)}
-                                className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
-                                  ehEmRevisao
-                                    ? 'bg-amber-600 text-white border-amber-600 hover:bg-amber-700 font-bold'
-                                    : 'text-slate-700 bg-white hover:bg-slate-100 border-slate-200'
-                                }`}
-                                title="Ajustar quantidade de jogos ou situação da suspensão"
-                              >
-                                {ehEmRevisao ? 'Revisar' : 'Ajustar'}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                                  <MoreHorizontal aria-hidden="true" />
+                                </IconButton>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {s.situacao === 'ATIVA' && (
+                                  <DropdownMenuItem
+                                    data-testid={`btn-cumprir-${s.id_suspensao}`}
+                                    onSelect={() => abrirCumprir(s)}
+                                  >
+                                    <CircleCheck aria-hidden="true" className="size-4" />
+                                    Cumprir
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  data-testid={`btn-ajustar-${s.id_suspensao}`}
+                                  onSelect={() => abrirAjustar(s)}
+                                >
+                                  {ehEmRevisao ? (
+                                    <ClipboardCheck aria-hidden="true" className="size-4" />
+                                  ) : (
+                                    <SlidersHorizontal aria-hidden="true" className="size-4" />
+                                  )}
+                                  {ehEmRevisao ? 'Revisar' : 'Ajustar'}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TD>
+                        </TR>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                  </TBody>
+                </Table>
+              )}
+            </TabsContent>
 
-      {/* Conteúdo da Sub-Aba 2: Controle de Cartões */}
-      {subAba === 'cartoes' && (
-        <div className="space-y-5 animate-in fade-in duration-200">
-          {/* Nota Informativa Destacada Conforme Spec 7.4 */}
-          <div
-            data-testid="nota-segundo-amarelo"
-            className="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3 shadow-sm"
-          >
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-xs md:text-sm text-blue-900 leading-relaxed font-medium">
-              Os cartões amarelos que resultaram em expulsão por 2º amarelo na mesma partida não somam no saldo para acúmulo de amarelos.
-            </div>
-          </div>
+            {/* Sub-aba 2: Controle de cartões */}
+            <TabsContent value="cartoes" className="space-y-4">
+              {/* Nota informativa (spec 7.4) */}
+              <Alert tone="info" data-testid="nota-segundo-amarelo">
+                Os cartões amarelos que resultaram em expulsão por 2º amarelo na mesma partida não somam no saldo para acúmulo de amarelos.
+              </Alert>
 
-          {/* Tabela de Resumo de Cartões */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50/70 border-b border-slate-200">
-              <h3 className="text-sm font-bold text-slate-800">
-                Resumo de Cartões da Edição
-              </h3>
-              <p className="text-xs text-slate-500">
-                Saldo acumulado para suspensão automática e contagem estatística oficial.
-              </p>
-            </div>
+              <CabecalhoSecao
+                titulo="Resumo de cartões da edição"
+                descricao="Saldo acumulado para suspensão automática e contagem estatística oficial."
+              />
 
-            {(!painel?.resumo_cartoes || painel.resumo_cartoes.length === 0) ? (
-              <div
-                data-testid="sem-cartoes"
-                className="py-12 px-6 text-center text-slate-500"
-              >
-                <CheckCircle2 className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium">
-                  Nenhum cartão registrado nesta edição até o momento.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-4">Atleta</th>
-                      <th className="py-3 px-4">Equipe</th>
-                      <th className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1">
-                          <span className="w-2.5 h-3.5 bg-amber-400 rounded-sm inline-block" />
-                          Amarelos Totais
+              {resumoCartoes.length === 0 ? (
+                <EmptyState
+                  data-testid="sem-cartoes"
+                  icon={<CircleCheck />}
+                  title="Nenhum cartão registrado"
+                  description="Os cartões lançados nas súmulas desta edição aparecem aqui."
+                />
+              ) : (
+                <Table>
+                  <THead>
+                    <tr>
+                      <TH>Atleta</TH>
+                      <TH>Equipe</TH>
+                      <TH className="text-center">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span aria-hidden="true" className="inline-block h-3.5 w-2.5 rounded-sm bg-warning" />
+                          Amarelos
                         </span>
-                      </th>
-                      <th className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 font-bold text-amber-800">
-                          Saldo p/ Acúmulo
+                      </TH>
+                      <TH className="text-center">Saldo p/ acúmulo</TH>
+                      <TH className="text-center">2º amarelo</TH>
+                      <TH className="text-center">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span aria-hidden="true" className="inline-block h-3.5 w-2.5 rounded-sm bg-danger" />
+                          Vermelhos diretos
                         </span>
-                      </th>
-                      <th className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 text-slate-700">
-                          2º Amarelo
-                        </span>
-                      </th>
-                      <th className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1">
-                          <span className="w-2.5 h-3.5 bg-red-600 rounded-sm inline-block" />
-                          Vermelhos Diretos
-                        </span>
-                      </th>
-                      <th className="py-3 px-4 text-center">Status</th>
+                      </TH>
+                      <TH>Situação</TH>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {painel.resumo_cartoes.map((r) => (
-                      <tr
-                        key={r.id_integrante}
-                        data-testid={`linha-cartoes-${r.id_integrante}`}
-                        className="hover:bg-slate-50/70 transition"
-                      >
-                        <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                          {r.nome_esportivo}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
-                          {r.nome_equipe}
-                        </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap text-slate-700">
-                          {r.amarelos_estatisticos}
-                        </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap font-bold text-amber-700 bg-amber-50/30">
+                  </THead>
+                  <TBody>
+                    {resumoCartoes.map((r) => (
+                      <TR key={r.id_integrante} data-testid={`linha-cartoes-${r.id_integrante}`}>
+                        <TD className="whitespace-nowrap font-medium">{r.nome_esportivo}</TD>
+                        <TD className="whitespace-nowrap text-fg-muted">{r.nome_equipe}</TD>
+                        <TD className="text-center tabular-nums">{r.amarelos_estatisticos}</TD>
+                        <TD className="text-center font-semibold tabular-nums text-warning">
                           {r.amarelos_acumulo_atual}
-                        </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap text-slate-700">
-                          {r.expulsoes_segundo_amarelo}
-                        </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap text-red-600 font-semibold">
+                        </TD>
+                        <TD className="text-center tabular-nums">{r.expulsoes_segundo_amarelo}</TD>
+                        <TD className="text-center font-semibold tabular-nums text-danger">
                           {r.vermelhos_diretos}
-                        </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        </TD>
+                        <TD className="whitespace-nowrap">
                           {r.suspenso_atualmente ? (
-                            <span
-                              data-testid="badge-suspenso"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200"
-                            >
+                            <Badge tone="danger" dot data-testid="badge-suspenso">
                               Suspenso
-                            </span>
+                            </Badge>
                           ) : (
-                            <span
-                              data-testid="badge-regular"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            >
+                            <Badge tone="success" dot data-testid="badge-regular">
                               Regular
-                            </span>
+                            </Badge>
                           )}
-                        </td>
-                      </tr>
+                        </TD>
+                      </TR>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                  </TBody>
+                </Table>
+              )}
+            </TabsContent>
 
-      {/* Conteúdo da Sub-Aba 3: Artilharia da Edição */}
-      {subAba === 'artilharia' && (
-        <div className="space-y-5 animate-in fade-in duration-200">
-          {artilharia?.possui_jogos_em_andamento && (
-            <div
-              data-testid="aviso-jogos-em-andamento"
-              className="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3 shadow-sm"
-            >
-              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs md:text-sm text-blue-900 leading-relaxed font-medium">
-                Existem partidas em andamento nesta edição. Gols marcados em partidas não finalizadas estão indicados separadamente.
-              </div>
-            </div>
-          )}
+            {/* Sub-aba 3: Artilharia da edição */}
+            <TabsContent value="artilharia" className="space-y-4">
+              {artilharia?.possui_jogos_em_andamento && (
+                <Alert tone="info" data-testid="aviso-jogos-em-andamento">
+                  Existem partidas em andamento nesta edição. Gols marcados em partidas não finalizadas estão indicados separadamente.
+                </Alert>
+              )}
 
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">
-                  Ranking Oficial de Artilharia
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Total de gols marcados pelos atletas na edição.
-                </p>
-              </div>
-              <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                <Trophy className="w-5 h-5" />
-              </div>
-            </div>
+              <CabecalhoSecao
+                titulo="Ranking oficial de artilharia"
+                descricao="Total de gols marcados pelos atletas na edição."
+              />
 
-            {(!artilharia?.artilheiros || artilharia.artilheiros.length === 0) ? (
-              <div
-                data-testid="sem-artilheiros"
-                className="py-12 px-6 text-center text-slate-500"
-              >
-                <Award className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                <p className="text-sm font-medium">
-                  Nenhum gol registrado nesta edição até o momento.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-4 text-center w-16">Pos</th>
-                      <th className="py-3 px-4">Atleta</th>
-                      <th className="py-3 px-4 text-center w-20">Nº</th>
-                      <th className="py-3 px-4">Equipe</th>
-                      <th className="py-3 px-4 text-center w-28">Gols</th>
+              {artilheiros.length === 0 ? (
+                <EmptyState
+                  data-testid="sem-artilheiros"
+                  icon={<Award />}
+                  title="Nenhum gol registrado"
+                  description="Os gols lançados nas súmulas desta edição aparecem aqui."
+                />
+              ) : (
+                <Table>
+                  <THead>
+                    <tr>
+                      <TH className="w-16 text-center">Pos.</TH>
+                      <TH>Atleta</TH>
+                      <TH className="w-20 text-center">Nº</TH>
+                      <TH>Equipe</TH>
+                      <TH className="w-28 text-center">Gols</TH>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {artilharia.artilheiros.map((a, index) => {
+                  </THead>
+                  <TBody>
+                    {artilheiros.map((a, index) => {
                       const posicao = index + 1;
-                      const ehPodio = posicao <= 3;
                       return (
-                        <tr
-                          key={a.id_integrante}
-                          data-testid={`linha-artilheiro-${a.id_integrante}`}
-                          className={`hover:bg-slate-50/70 transition ${
-                            posicao === 1 ? 'bg-amber-50/30' : ''
-                          }`}
-                        >
-                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <TR key={a.id_integrante} data-testid={`linha-artilheiro-${a.id_integrante}`}>
+                          <TD className="text-center">
                             <span
-                              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                                posicao === 1
-                                  ? 'bg-amber-400 text-slate-900'
-                                  : posicao === 2
-                                  ? 'bg-slate-300 text-slate-800'
-                                  : posicao === 3
-                                  ? 'bg-amber-700 text-white'
-                                  : 'text-slate-500'
-                              }`}
+                              className={cn(
+                                'inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums',
+                                posicao === 1 && 'bg-warning-soft text-warning',
+                                (posicao === 2 || posicao === 3) && 'bg-surface-muted text-fg',
+                                posicao > 3 && 'text-fg-muted',
+                              )}
                             >
                               {posicao}
                             </span>
-                          </td>
-                          <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
+                          </TD>
+                          <TD className={cn('whitespace-nowrap', posicao <= 3 ? 'font-semibold' : 'font-medium')}>
                             {a.nome_esportivo}
-                          </td>
-                          <td className="py-3.5 px-4 text-center text-slate-500 whitespace-nowrap">
-                            {a.numero_camisa != null ? a.numero_camisa : '-'}
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
-                            {a.nome_equipe}
-                          </td>
-                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                            <span className="font-bold text-base text-slate-900">
-                              {a.gols}
-                            </span>
+                          </TD>
+                          <TD className="text-center tabular-nums text-fg-muted">
+                            {a.numero_camisa != null ? a.numero_camisa : '—'}
+                          </TD>
+                          <TD className="whitespace-nowrap text-fg-muted">{a.nome_equipe}</TD>
+                          <TD className="whitespace-nowrap text-center">
+                            <span className="text-base font-semibold tabular-nums text-fg">{a.gols}</span>
                             {a.gols_em_andamento > 0 && (
-                              <span className="ml-1 text-xs text-blue-600 font-semibold" title="Gols em partidas em andamento">
+                              <span
+                                className="ml-1 text-xs font-medium tabular-nums text-primary"
+                                title="Gols em partidas em andamento"
+                              >
                                 (+{a.gols_em_andamento})
                               </span>
                             )}
-                          </td>
-                        </tr>
+                          </TD>
+                        </TR>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                  </TBody>
+                </Table>
+              )}
+            </TabsContent>
+          </>
+        )}
+      </Tabs>
 
       {/* Modais */}
       <ModalCumprirSuspensao

@@ -2,6 +2,21 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate Manual', () => {
   test.beforeEach(async ({ page }) => {
+    // Fallback de menor prioridade (registrado primeiro): a aba padrão "Visão geral" busca
+    // equipes, partidas, classificação, artilharia e painel disciplinar. Sem mock, essas
+    // chamadas iriam ao backend real com o token falso, recebendo 401 e deslogando a sessão.
+    // 404 deixa cada indicador como "—" (falha parcial prevista); mocks dos testes têm prioridade.
+    await page.route(
+      /\/competicoes\/edicoes\/\d+\/(equipes|partidas|classificacao|artilharia|disciplinar)(\?.*)?$/,
+      (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{"detail":"sem mock"}' }),
+    );
+
+    // A página da competição busca as modalidades em GET /modalidades (o backend redireciona
+    // para /modalidades/); com o token falso isso daria 401. Mocks dos testes têm prioridade.
+    await page.route(/\/modalidades\/?(\?.*)?$/, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
     // Autentica token para acessar o dashboard
     await page.addInitScript(() => {
       localStorage.setItem('token', 'fake-jwt-token-for-e2e');
@@ -366,11 +381,11 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
       });
     });
 
-    // Acessa o painel da edição e a aba Jogos & Súmula
+    // Acessa o painel da edição e a aba Jogos
     await page.goto(`/dashboard/competicoes/${idComp}`);
-    await expect(page.getByText('Copa Metropolitana 2026')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Copa Metropolitana 2026' })).toBeVisible();
 
-    await page.getByRole('button', { name: /jogos & súmula/i }).click();
+    await page.getByTestId('tab-jogos').click();
     await expect(page.getByText('Jogo #1')).toBeVisible();
 
     // 1. Abrir Modal de Súmula Detalhada
@@ -397,7 +412,8 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     // Verifica que o placar do mandante foi para 1
     await expect(page.getByTestId('placar-mandante')).toHaveText('1');
     await expect(page.getByTestId('placar-visitante')).toHaveText('0');
-    await expect(page.locator('span.font-bold', { hasText: 'Yuri Alberto' })).toBeVisible();
+    const linhaTempo = page.getByTestId('linha-tempo-sumula');
+    await expect(linhaTempo.getByText('Yuri Alberto')).toBeVisible();
 
     // 3. Lançar GOL_CONTRA (pelo atleta mandante 101, beneficiando o visitante 20)
     await page.getByTestId('select-tipo-ocorrencia').selectOption('GOL_CONTRA');
@@ -409,7 +425,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     // Verifica que o placar do visitante subiu para 1 (1 x 1)
     await expect(page.getByTestId('placar-mandante')).toHaveText('1');
     await expect(page.getByTestId('placar-visitante')).toHaveText('1');
-    await expect(page.getByText('Gol Contra', { exact: true })).toBeVisible();
+    await expect(linhaTempo.getByText('Gol contra', { exact: true })).toBeVisible();
 
     // 4. Lançar 1º CARTÃO AMARELO para Yuri Alberto
     await page.getByTestId('select-tipo-ocorrencia').selectOption('CARTAO_AMARELO');
@@ -418,7 +434,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     await page.getByTestId('input-minuto-ocorrencia').fill('35');
     await page.getByTestId('btn-registrar-ocorrencia').click();
 
-    await expect(page.getByText('Cartão Amarelo', { exact: true })).toBeVisible();
+    await expect(linhaTempo.getByText('Cartão amarelo', { exact: true })).toBeVisible();
 
     // 5. Lançar 2º CARTÃO AMARELO para o mesmo jogador
     await page.getByTestId('select-tipo-ocorrencia').selectOption('CARTAO_AMARELO');
@@ -428,15 +444,15 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     await page.getByTestId('btn-registrar-ocorrencia').click();
 
     // Verifica que disparou automaticamente EXPULSAO_SEGUNDO_AMARELO
-    await expect(page.getByText('Expulsão 2º Amarelo', { exact: true })).toBeVisible();
+    await expect(linhaTempo.getByText('Expulsão (segundo amarelo)', { exact: true })).toBeVisible();
 
     // 6. Finalizar Partida
     const btnFinalizar = page.getByTestId('btn-finalizar-partida');
     await expect(btnFinalizar).toBeVisible();
     await btnFinalizar.click();
 
-    // Confirma status FINALIZADA exibido no modal
-    await expect(page.getByTestId('badge-status-sumula')).toHaveText('FINALIZADA');
+    // Confirma status traduzido exibido no modal
+    await expect(page.getByTestId('badge-status-sumula')).toHaveText('Finalizada');
 
     // Fecha o modal
     await page.getByTestId('btn-fechar-sumula').click();
@@ -545,9 +561,9 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     });
 
     await page.goto(`/dashboard/competicoes/${idComp}`);
-    await expect(page.getByText('Copa Regional Mata-Mata')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Copa Regional Mata-Mata' })).toBeVisible();
 
-    await page.getByRole('button', { name: /jogos & súmula/i }).click();
+    await page.getByTestId('tab-jogos').click();
     await expect(page.getByText('Jogo #1')).toBeVisible();
 
     // Partida finalizada deve exibir botão Reabrir Jogo
@@ -739,9 +755,9 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     });
 
     await page.goto(`/dashboard/competicoes/${idComp}`);
-    await expect(page.getByText('Campeonato com Empate Técnico')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Campeonato com Empate Técnico' })).toBeVisible();
 
-    await page.getByRole('button', { name: /classificação/i }).click();
+    await page.getByTestId('tab-classificacao').click();
 
     // Banner de alerta com botão de resolver empate deve estar visível
     await expect(page.getByRole('alert', { name: /empates persistentes/i })).toBeVisible();

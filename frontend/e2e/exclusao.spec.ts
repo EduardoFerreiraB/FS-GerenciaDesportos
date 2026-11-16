@@ -38,19 +38,24 @@ test('excluir edição mantém a competição; excluir competição leva tudo', 
   await authenticateDirectly(page);
   await page.goto(`/dashboard/competicoes/${idCompeticao}`);
 
-  // Excluir a edição 2026 exige digitar a identificação
-  await page.getByRole('button', { name: /Edição 2026/ }).click();
+  // Excluir a edição 2026 exige digitar a identificação (ação fica no menu "⋯" da edição)
+  await page.getByLabel('Edição', { exact: true }).selectOption({ label: 'Edição 2026 · Rascunho' });
+  await expect(page.getByRole('heading', { name: 'Edição 2026' })).toBeVisible();
+  await page.getByRole('button', { name: 'Mais ações da edição' }).click();
   await page.getByTestId('btn-excluir-edicao').click();
   const confirmar = page.getByTestId('btn-confirmar-exclusao');
   await expect(confirmar).toBeDisabled();
   await page.getByTestId('input-confirmacao-exclusao').fill('Edição 2026');
   await confirmar.click();
 
-  await expect(page.getByRole('button', { name: /Edição 2026/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Edição 2025/ })).toBeVisible();
+  const seletor = page.getByLabel('Edição', { exact: true });
+  await expect(seletor.getByRole('option', { name: /Edição 2026/ })).toHaveCount(0);
+  await expect(seletor.getByRole('option', { name: /Edição 2025/ })).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Edição 2025' })).toBeVisible();
   await expect(page.getByRole('heading', { name: nome })).toBeVisible();
 
-  // Excluir a competição apaga a edição restante e volta para a lista
+  // Excluir a competição apaga a edição restante e volta para a lista (menu "⋯" do cabeçalho)
+  await page.getByRole('button', { name: 'Mais ações da competição' }).click();
   await page.getByTestId('btn-excluir-competicao').click();
   await page.getByTestId('input-confirmacao-exclusao').fill(nome);
   await page.getByTestId('btn-confirmar-exclusao').click();

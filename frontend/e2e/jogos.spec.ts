@@ -146,7 +146,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     return { idCompeticao, idEdicao };
   }
 
-  test('visualiza aba Jogos & Súmula, gera tabela, agenda partida e lança placar simples', async ({
+  test('visualiza aba Jogos, gera tabela, agenda partida e lança placar simples', async ({
     page,
     request,
   }) => {
@@ -156,8 +156,8 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     // Navega diretamente até a página da competição
     await page.goto(`/dashboard/competicoes/${idCompeticao}`);
 
-    // Clica na aba "Jogos & Súmula"
-    const abaJogos = page.getByRole('button', { name: /jogos & súmula/i });
+    // Clica na aba "Jogos"
+    const abaJogos = page.getByTestId('tab-jogos');
     await expect(abaJogos).toBeVisible({ timeout: 10000 });
     await abaJogos.click();
 
@@ -175,7 +175,8 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
 
     // Deve exibir pelo menos uma partida (ex: Falcões vs Tubarões)
     await expect(page.getByText(/jogo #1/i)).toBeVisible();
-    await expect(page.getByText(/AGENDADA/).first()).toBeVisible();
+    const primeiroCartao = page.locator('[data-testid^="cartao-partida-"]').first();
+    await expect(primeiroCartao.getByTestId('status-partida')).toHaveText('Agendada');
 
     // ----------------------------------------------------
     // Teste de Agendamento da Partida
@@ -228,12 +229,11 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     await expect(page.getByText(/placar do jogo/i)).toBeVisible();
 
     // O placar 3 x 1 deve estar visível no card da partida
-    await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('1', { exact: true }).last()).toBeVisible();
-    await expect(page.getByText('x', { exact: true }).first()).toBeVisible();
+    await expect(primeiroCartao.getByTestId('gols-mandante')).toHaveText('3');
+    await expect(primeiroCartao.getByTestId('gols-visitante')).toHaveText('1');
 
-    // Status deve ser FINALIZADA (badge no card)
-    await expect(page.locator('span', { hasText: /^FINALIZADA$/ }).first()).toBeVisible();
+    // Status traduzido (badge no card)
+    await expect(primeiroCartao.getByTestId('status-partida')).toHaveText('Finalizada');
 
     // Jogo finalizado só é corrigido por reabertura justificada
     await expect(page.getByRole('button', { name: /reabrir jogo/i }).first()).toBeVisible();
@@ -247,7 +247,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     const { idCompeticao } = await criarCompeticaoComEdicaoEEquipes(request, token);
 
     await page.goto(`/dashboard/competicoes/${idCompeticao}`);
-    await page.getByRole('button', { name: /jogos & súmula/i }).click();
+    await page.getByTestId('tab-jogos').click();
 
     // Gera a tabela
     await page.getByRole('button', { name: /gerar calendário \/ tabela/i }).first().click();
@@ -272,8 +272,10 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     await expect(page.getByRole('dialog', { name: /lançar placar simples/i })).not.toBeVisible();
     await expect(page.getByText(/placar do jogo/i)).toBeVisible();
 
-    // Status deve ser FINALIZADA
-    await expect(page.locator('span', { hasText: /^FINALIZADA$/ }).first()).toBeVisible();
+    // Status traduzido no card
+    await expect(
+      page.locator('[data-testid^="cartao-partida-"]').first().getByTestId('status-partida')
+    ).toHaveText('Finalizada');
 
     // Testa filtro por status FINALIZADA
     await page.locator('#filtro-status').selectOption('FINALIZADA');

@@ -1,7 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  Field,
+  Input,
+  Textarea,
+} from '@/components/ui';
 import { criarEventoComEdicao, isErroApi } from '@/services/competicoes';
 import type { EventoDetalhe } from '@/types/competicoes';
 
@@ -23,8 +32,6 @@ export default function ModalNovoEvento({
   const [dataFim, setDataFim] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-
-  if (!aberto) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,135 +77,89 @@ export default function ModalNovoEvento({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-novo-evento-titulo"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
+    <Dialog
+      open={aberto}
+      onOpenChange={(v) => {
+        if (!v && !carregando) onClose();
+      }}
     >
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 border border-slate-200">
-        <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-slate-800">
-            <Calendar className="w-5 h-5 text-blue-600" />
-            <h2 id="modal-novo-evento-titulo" className="text-xl font-bold">
-              Novo Evento Esportivo
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+      <DialogContent
+        size="md"
+        title="Novo Evento Esportivo"
+        description="Eventos agrupam competições, como jogos escolares e olimpíadas."
+      >
+        <form id="form-novo-evento" onSubmit={handleSubmit} className="space-y-6">
+          {erro ? <Alert tone="danger">{erro}</Alert> : null}
 
-        {erro && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" />
-            <span>{erro}</span>
-          </div>
-        )}
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold text-fg">Evento</h3>
+            <Field label="Nome do Evento" htmlFor="nome-evento" required>
+              <Input
+                id="nome-evento"
+                type="text"
+                required
+                placeholder="Ex: Jogos da Primavera 2026"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+              />
+            </Field>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label htmlFor="nome-evento" className="block text-sm font-semibold text-slate-700 mb-1">
-              Nome do Evento
-            </label>
-            <input
-              id="nome-evento"
-              type="text"
-              required
-              placeholder="Ex: Jogos da Primavera 2026"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            <Field label="Descrição (Opcional)" htmlFor="descricao-evento">
+              <Textarea
+                id="descricao-evento"
+                rows={2}
+                placeholder="Informações gerais sobre o evento..."
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+              />
+            </Field>
+          </section>
 
-          <div>
-            <label htmlFor="descricao-evento" className="block text-sm font-medium text-slate-700 mb-1">
-              Descrição (Opcional)
-            </label>
-            <textarea
-              id="descricao-evento"
-              rows={2}
-              placeholder="Informações gerais sobre o evento..."
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <section className="space-y-4 border-t border-line pt-6">
+            <h3 className="text-sm font-semibold text-fg">Primeira edição do evento</h3>
+            <Field label="Identificação da Edição" htmlFor="identificacao-edicao" required>
+              <Input
+                id="identificacao-edicao"
+                type="text"
+                required
+                placeholder="Ex: 2026 ou 1ª Edição"
+                value={identificacao}
+                onChange={(e) => setIdentificacao(e.target.value)}
+              />
+            </Field>
 
-          <div className="pt-2 border-t border-slate-100">
-            <h3 className="text-sm font-bold text-slate-800 mb-3">Primeira Edição do Evento</h3>
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="identificacao-edicao" className="block text-sm font-medium text-slate-700 mb-1">
-                  Identificação da Edição
-                </label>
-                <input
-                  id="identificacao-edicao"
-                  type="text"
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Data de Início" htmlFor="data-inicio-edicao" required>
+                <Input
+                  id="data-inicio-edicao"
+                  type="date"
                   required
-                  placeholder="Ex: 2026 ou 1ª Edição"
-                  value={identificacao}
-                  onChange={(e) => setIdentificacao(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="data-inicio-edicao" className="block text-sm font-medium text-slate-700 mb-1">
-                    Data de Início
-                  </label>
-                  <input
-                    id="data-inicio-edicao"
-                    type="date"
-                    required
-                    value={dataInicio}
-                    onChange={(e) => setDataInicio(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="data-fim-edicao" className="block text-sm font-medium text-slate-700 mb-1">
-                    Data de Término
-                  </label>
-                  <input
-                    id="data-fim-edicao"
-                    type="date"
-                    required
-                    value={dataFim}
-                    onChange={(e) => setDataFim(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+              </Field>
+              <Field label="Data de Término" htmlFor="data-fim-edicao" required>
+                <Input
+                  id="data-fim-edicao"
+                  type="date"
+                  required
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                />
+              </Field>
             </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={carregando}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium text-sm transition"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={carregando}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition flex items-center gap-2 shadow-sm disabled:opacity-50"
-            >
-              {carregando && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>Criar Evento</span>
-            </button>
-          </div>
+          </section>
         </form>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose} disabled={carregando}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="form-novo-evento" loading={carregando}>
+            Criar Evento
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

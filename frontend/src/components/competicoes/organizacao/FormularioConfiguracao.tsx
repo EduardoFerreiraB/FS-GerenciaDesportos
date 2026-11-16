@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import type {
   Configuracao,
   ConfiguracaoPontosCorridos,
@@ -12,7 +11,18 @@ import type {
   PontuacaoConfig,
   DisciplinaConfig,
 } from '@/types/competicoes';
-import { AlertTriangle, HelpCircle } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
+import { ROTULO_FORMATO } from '@/lib/rotulos';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  Field,
+  Input,
+  Select,
+} from '@/components/ui';
 
 export const PONTUACAO_PADRAO: PontuacaoConfig = {
   vitoria: 3,
@@ -125,403 +135,210 @@ export default function FormularioConfiguracao({
     setFormatoPendente(null);
   };
 
+  const grupos = configuracao as ConfiguracaoGruposMataMata;
+  const pontos = configuracao as ConfiguracaoPontosCorridos;
+  const mata = configuracao as ConfiguracaoMataMata;
+  const usaPontuacao = formato === 'PONTOS_CORRIDOS' || formato === 'GRUPOS_MATA_MATA';
+  const pontuacaoAtual =
+    formato === 'PONTOS_CORRIDOS' ? pontos.pontuacao : formato === 'GRUPOS_MATA_MATA' ? grupos.pontuacao : undefined;
+
+  const atualizarPontuacao = (campo: keyof PontuacaoConfig, val: number) => {
+    if (formato === 'PONTOS_CORRIDOS') {
+      onChange({ ...pontos, pontuacao: { ...pontos.pontuacao, [campo]: val } });
+    } else {
+      onChange({ ...grupos, pontuacao: { ...grupos.pontuacao, [campo]: val } });
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Seletor de Formato */}
-      <div>
-        <label htmlFor="formato" className="block text-sm font-semibold text-slate-700 mb-1">
-          Formato
-        </label>
-        <select
-          id="formato"
-          value={formatoPendente ?? formato}
-          disabled={desabilitado}
-          onChange={(e) => handleTentativaMudarFormato(e.target.value as FormatoCompeticao)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-slate-100 disabled:text-slate-500"
+    <div className="space-y-4">
+      <Bloco titulo="Formato da disputa">
+        <Field
+          label="Formato"
+          htmlFor="formato"
+          hint="Define as regras estruturais de fases e partidas desta competição."
         >
-          <option value="GRUPOS_MATA_MATA">Grupos + Mata-mata</option>
-          <option value="PONTOS_CORRIDOS">Pontos Corridos</option>
-          <option value="MATA_MATA">Mata-mata</option>
-        </select>
-        <p className="text-xs text-slate-500 mt-1">
-          Define as regras estruturais de fases e partidas desta competição.
-        </p>
-      </div>
-
-      {/* Diálogo de confirmação de descarte de configuração */}
-      {mostrarDialogoDescarte && typeof window !== 'undefined' &&
-        createPortal(
-          <div
-            role="dialog"
-            aria-label="Descartar configurações incompatíveis"
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          <Select
+            id="formato"
+            value={formatoPendente ?? formato}
+            disabled={desabilitado}
+            onChange={(e) => handleTentativaMudarFormato(e.target.value as FormatoCompeticao)}
           >
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-amber-200">
-              <div className="flex items-center gap-3 mb-4 text-amber-600">
-                <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-                <h3 className="text-lg font-bold text-slate-900">Descartar configuração atual?</h3>
-              </div>
-              <p className="text-sm text-slate-600 mb-6">
-                Alterar o formato para{' '}
-                <strong className="text-slate-900">
-                  {formatoPendente === 'PONTOS_CORRIDOS'
-                    ? 'Pontos Corridos'
-                    : formatoPendente === 'GRUPOS_MATA_MATA'
-                    ? 'Grupos + Mata-mata'
-                    : 'Mata-mata'}
-                </strong>{' '}
-                descartará os campos e regras específicos do formato anterior. Deseja continuar?
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={cancelarTrocaFormato}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium text-sm transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => formatoPendente && aplicarTrocaFormato(formatoPendente)}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-sm transition shadow-sm"
-                >
-                  Descartar alterações
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+            <option value="GRUPOS_MATA_MATA">{ROTULO_FORMATO.GRUPOS_MATA_MATA}</option>
+            <option value="PONTOS_CORRIDOS">{ROTULO_FORMATO.PONTOS_CORRIDOS}</option>
+            <option value="MATA_MATA">{ROTULO_FORMATO.MATA_MATA}</option>
+          </Select>
+        </Field>
+      </Bloco>
 
-      {/* Campos Específicos de Grupos + Mata-mata */}
+      {/* Confirmação de descarte da configuração do formato anterior */}
+      <Dialog
+        open={mostrarDialogoDescarte}
+        onOpenChange={(aberto) => {
+          if (!aberto) cancelarTrocaFormato();
+        }}
+      >
+        <DialogContent size="sm" title="Descartar configuração atual?">
+          <div className="flex items-start gap-3">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-warning" />
+            <p className="text-sm text-fg-muted">
+              Alterar o formato para{' '}
+              <strong className="text-fg">{formatoPendente ? ROTULO_FORMATO[formatoPendente] : ''}</strong>{' '}
+              descartará os campos e regras específicos do formato anterior. Deseja continuar?
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={cancelarTrocaFormato}>
+              Cancelar
+            </Button>
+            <Button onClick={() => formatoPendente && aplicarTrocaFormato(formatoPendente)}>
+              Descartar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {formato === 'GRUPOS_MATA_MATA' && (
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-          <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-            Estrutura da Fase de Grupos
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="quantidade_grupos" className="block text-sm font-medium text-slate-700 mb-1">
-                Quantidade de grupos
-              </label>
-              <input
+        <Bloco titulo="Estrutura da fase de grupos">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Quantidade de grupos" htmlFor="quantidade_grupos">
+              <Input
                 id="quantidade_grupos"
                 type="number"
                 min={1}
                 max={32}
                 disabled={desabilitado}
-                value={(configuracao as ConfiguracaoGruposMataMata).quantidade_grupos ?? 2}
+                value={grupos.quantidade_grupos ?? 2}
                 onChange={(e) => {
                   const val = parseInt(e.target.value, 10) || 0;
-                  onChange({
-                    ...(configuracao as ConfiguracaoGruposMataMata),
-                    quantidade_grupos: val,
-                  });
+                  onChange({ ...grupos, quantidade_grupos: val });
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               />
-            </div>
-            <div>
-              <label htmlFor="classificados_por_grupo" className="block text-sm font-medium text-slate-700 mb-1">
-                Classificados por grupo
-              </label>
-              <input
+            </Field>
+            <Field label="Classificados por grupo" htmlFor="classificados_por_grupo">
+              <Input
                 id="classificados_por_grupo"
                 type="number"
                 min={1}
                 max={16}
                 disabled={desabilitado}
-                value={(configuracao as ConfiguracaoGruposMataMata).classificados_por_grupo ?? 2}
+                value={grupos.classificados_por_grupo ?? 2}
                 onChange={(e) => {
                   const val = parseInt(e.target.value, 10) || 0;
-                  onChange({
-                    ...(configuracao as ConfiguracaoGruposMataMata),
-                    classificados_por_grupo: val,
-                  });
+                  onChange({ ...grupos, classificados_por_grupo: val });
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               />
-            </div>
+            </Field>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!!(configuracao as ConfiguracaoGruposMataMata).turno_e_returno_grupos}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoGruposMataMata),
-                    turno_e_returno_grupos: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Turno e returno nos grupos
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!!(configuracao as ConfiguracaoGruposMataMata).ida_volta_eliminatoria}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoGruposMataMata),
-                    ida_volta_eliminatoria: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Ida e volta no mata-mata
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!(configuracao as ConfiguracaoGruposMataMata).final_unica === false}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoGruposMataMata),
-                    final_unica: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Final única
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!!(configuracao as ConfiguracaoGruposMataMata).terceiro_lugar}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoGruposMataMata),
-                    terceiro_lugar: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Disputa de 3º lugar
-            </label>
-          </div>
-        </div>
-      )}
-
-      {/* Campos Específicos de Pontos Corridos */}
-      {formato === 'PONTOS_CORRIDOS' && (
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-          <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-            Regras de Turno
-          </h4>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-            <input
-              type="checkbox"
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Opcao
+              rotulo="Turno e returno nos grupos"
               disabled={desabilitado}
-              checked={!!(configuracao as ConfiguracaoPontosCorridos).turno_e_returno}
-              onChange={(e) =>
-                onChange({
-                  ...(configuracao as ConfiguracaoPontosCorridos),
-                  turno_e_returno: e.target.checked,
-                })
-              }
-              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+              checked={!!grupos.turno_e_returno_grupos}
+              onChange={(v) => onChange({ ...grupos, turno_e_returno_grupos: v })}
             />
-            Turno e returno (ida e volta)
-          </label>
-        </div>
-      )}
-
-      {/* Campos Específicos de Mata-mata */}
-      {formato === 'MATA_MATA' && (
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-          <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-            Regras Eliminatórias
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!!(configuracao as ConfiguracaoMataMata).ida_volta}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoMataMata),
-                    ida_volta: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Confrontos em ida e volta
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!(configuracao as ConfiguracaoMataMata).final_unica === false}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoMataMata),
-                    final_unica: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Final única
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-              <input
-                type="checkbox"
-                disabled={desabilitado}
-                checked={!!(configuracao as ConfiguracaoMataMata).terceiro_lugar}
-                onChange={(e) =>
-                  onChange({
-                    ...(configuracao as ConfiguracaoMataMata),
-                    terceiro_lugar: e.target.checked,
-                  })
-                }
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-              />
-              Disputa de 3º lugar
-            </label>
+            <Opcao
+              rotulo="Ida e volta no mata-mata"
+              disabled={desabilitado}
+              checked={!!grupos.ida_volta_eliminatoria}
+              onChange={(v) => onChange({ ...grupos, ida_volta_eliminatoria: v })}
+            />
+            <Opcao
+              rotulo="Final única"
+              disabled={desabilitado}
+              checked={!!grupos.final_unica}
+              onChange={(v) => onChange({ ...grupos, final_unica: v })}
+            />
+            <Opcao
+              rotulo="Disputa de 3º lugar"
+              disabled={desabilitado}
+              checked={!!grupos.terceiro_lugar}
+              onChange={(v) => onChange({ ...grupos, terceiro_lugar: v })}
+            />
           </div>
-        </div>
+        </Bloco>
       )}
 
-      {/* Pontuação e Desempate (Pontos Corridos ou Grupos) */}
-      {(formato === 'PONTOS_CORRIDOS' || formato === 'GRUPOS_MATA_MATA') && (
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-          <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-            Pontuação das Partidas
-          </h4>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="pts_vitoria" className="block text-xs font-medium text-slate-600 mb-1">
-                Vitória
-              </label>
-              <input
+      {formato === 'PONTOS_CORRIDOS' && (
+        <Bloco titulo="Regras de turno">
+          <Opcao
+            rotulo="Turno e returno (ida e volta)"
+            disabled={desabilitado}
+            checked={!!pontos.turno_e_returno}
+            onChange={(v) => onChange({ ...pontos, turno_e_returno: v })}
+          />
+        </Bloco>
+      )}
+
+      {formato === 'MATA_MATA' && (
+        <Bloco titulo="Regras eliminatórias">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Opcao
+              rotulo="Confrontos em ida e volta"
+              disabled={desabilitado}
+              checked={!!mata.ida_volta}
+              onChange={(v) => onChange({ ...mata, ida_volta: v })}
+            />
+            <Opcao
+              rotulo="Final única"
+              disabled={desabilitado}
+              checked={!!mata.final_unica}
+              onChange={(v) => onChange({ ...mata, final_unica: v })}
+            />
+            <Opcao
+              rotulo="Disputa de 3º lugar"
+              disabled={desabilitado}
+              checked={!!mata.terceiro_lugar}
+              onChange={(v) => onChange({ ...mata, terceiro_lugar: v })}
+            />
+          </div>
+        </Bloco>
+      )}
+
+      {usaPontuacao && (
+        <Bloco titulo="Pontuação das partidas" descricao="Pontos que cada equipe recebe por resultado.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="Vitória" htmlFor="pts_vitoria">
+              <Input
                 id="pts_vitoria"
                 type="number"
                 min={0}
                 disabled={desabilitado}
-                value={
-                  formato === 'PONTOS_CORRIDOS'
-                    ? (configuracao as ConfiguracaoPontosCorridos).pontuacao?.vitoria ?? 3
-                    : (configuracao as ConfiguracaoGruposMataMata).pontuacao?.vitoria ?? 3
-                }
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10) || 0;
-                  if (formato === 'PONTOS_CORRIDOS') {
-                    onChange({
-                      ...(configuracao as ConfiguracaoPontosCorridos),
-                      pontuacao: {
-                        ...(configuracao as ConfiguracaoPontosCorridos).pontuacao,
-                        vitoria: val,
-                      },
-                    });
-                  } else {
-                    onChange({
-                      ...(configuracao as ConfiguracaoGruposMataMata),
-                      pontuacao: {
-                        ...(configuracao as ConfiguracaoGruposMataMata).pontuacao,
-                        vitoria: val,
-                      },
-                    });
-                  }
-                }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="tabular-nums"
+                value={pontuacaoAtual?.vitoria ?? 3}
+                onChange={(e) => atualizarPontuacao('vitoria', parseInt(e.target.value, 10) || 0)}
               />
-            </div>
-            <div>
-              <label htmlFor="pts_empate" className="block text-xs font-medium text-slate-600 mb-1">
-                Empate
-              </label>
-              <input
+            </Field>
+            <Field label="Empate" htmlFor="pts_empate">
+              <Input
                 id="pts_empate"
                 type="number"
                 min={0}
                 disabled={desabilitado}
-                value={
-                  formato === 'PONTOS_CORRIDOS'
-                    ? (configuracao as ConfiguracaoPontosCorridos).pontuacao?.empate ?? 1
-                    : (configuracao as ConfiguracaoGruposMataMata).pontuacao?.empate ?? 1
-                }
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10) || 0;
-                  if (formato === 'PONTOS_CORRIDOS') {
-                    onChange({
-                      ...(configuracao as ConfiguracaoPontosCorridos),
-                      pontuacao: {
-                        ...(configuracao as ConfiguracaoPontosCorridos).pontuacao,
-                        empate: val,
-                      },
-                    });
-                  } else {
-                    onChange({
-                      ...(configuracao as ConfiguracaoGruposMataMata),
-                      pontuacao: {
-                        ...(configuracao as ConfiguracaoGruposMataMata).pontuacao,
-                        empate: val,
-                      },
-                    });
-                  }
-                }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="tabular-nums"
+                value={pontuacaoAtual?.empate ?? 1}
+                onChange={(e) => atualizarPontuacao('empate', parseInt(e.target.value, 10) || 0)}
               />
-            </div>
-            <div>
-              <label htmlFor="pts_derrota" className="block text-xs font-medium text-slate-600 mb-1">
-                Derrota
-              </label>
-              <input
+            </Field>
+            <Field label="Derrota" htmlFor="pts_derrota">
+              <Input
                 id="pts_derrota"
                 type="number"
                 min={0}
                 disabled={desabilitado}
-                value={
-                  formato === 'PONTOS_CORRIDOS'
-                    ? (configuracao as ConfiguracaoPontosCorridos).pontuacao?.derrota ?? 0
-                    : (configuracao as ConfiguracaoGruposMataMata).pontuacao?.derrota ?? 0
-                }
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10) || 0;
-                  if (formato === 'PONTOS_CORRIDOS') {
-                    onChange({
-                      ...(configuracao as ConfiguracaoPontosCorridos),
-                      pontuacao: {
-                        ...(configuracao as ConfiguracaoPontosCorridos).pontuacao,
-                        derrota: val,
-                      },
-                    });
-                  } else {
-                    onChange({
-                      ...(configuracao as ConfiguracaoGruposMataMata),
-                      pontuacao: {
-                        ...(configuracao as ConfiguracaoGruposMataMata).pontuacao,
-                        derrota: val,
-                      },
-                    });
-                  }
-                }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="tabular-nums"
+                value={pontuacaoAtual?.derrota ?? 0}
+                onChange={(e) => atualizarPontuacao('derrota', parseInt(e.target.value, 10) || 0)}
               />
-            </div>
+            </Field>
           </div>
-        </div>
+        </Bloco>
       )}
 
-      {/* Regras Disciplinares */}
-      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-        <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-          Regras Disciplinares (Cartões)
-        </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="limite_amarelos" className="block text-xs font-medium text-slate-600 mb-1">
-              Limite para suspensão por cartões amarelos
-            </label>
-            <input
+      <Bloco titulo="Regras disciplinares" descricao="Quando um atleta passa a cumprir suspensão por cartões.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Limite para suspensão por cartões amarelos" htmlFor="limite_amarelos">
+            <Input
               id="limite_amarelos"
               type="number"
               min={1}
@@ -531,20 +348,13 @@ export default function FormularioConfiguracao({
                 const val = parseInt(e.target.value, 10) || 3;
                 onChange({
                   ...configuracao,
-                  disciplina: {
-                    ...configuracao.disciplina,
-                    limite_amarelos: val,
-                  },
+                  disciplina: { ...configuracao.disciplina, limite_amarelos: val },
                 });
               }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
-          </div>
-          <div>
-            <label htmlFor="jogos_por_vermelho" className="block text-xs font-medium text-slate-600 mb-1">
-              Jogos de suspensão por cartão vermelho
-            </label>
-            <input
+          </Field>
+          <Field label="Jogos de suspensão por cartão vermelho" htmlFor="jogos_por_vermelho">
+            <Input
               id="jogos_por_vermelho"
               type="number"
               min={1}
@@ -554,37 +364,67 @@ export default function FormularioConfiguracao({
                 const val = parseInt(e.target.value, 10) || 1;
                 onChange({
                   ...configuracao,
-                  disciplina: {
-                    ...configuracao.disciplina,
-                    jogos_por_vermelho: val,
-                  },
+                  disciplina: { ...configuracao.disciplina, jogos_por_vermelho: val },
                 });
               }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
-          </div>
+          </Field>
         </div>
         {formato === 'GRUPOS_MATA_MATA' && (
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 pt-1">
-            <input
-              type="checkbox"
-              disabled={desabilitado}
-              checked={!!configuracao.disciplina?.zerar_amarelos_ao_encerrar_grupos}
-              onChange={(e) =>
-                onChange({
-                  ...configuracao,
-                  disciplina: {
-                    ...configuracao.disciplina,
-                    zerar_amarelos_ao_encerrar_grupos: e.target.checked,
-                  },
-                })
-              }
-              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-            />
-            Zerar contagem de amarelos ao encerrar a fase de grupos
-          </label>
+          <Opcao
+            rotulo="Zerar contagem de amarelos ao encerrar a fase de grupos"
+            disabled={desabilitado}
+            checked={!!configuracao.disciplina?.zerar_amarelos_ao_encerrar_grupos}
+            onChange={(v) =>
+              onChange({
+                ...configuracao,
+                disciplina: { ...configuracao.disciplina, zerar_amarelos_ao_encerrar_grupos: v },
+              })
+            }
+          />
         )}
-      </div>
+      </Bloco>
     </div>
+  );
+}
+
+/** Bloco titulado do formulário. */
+function Bloco({
+  titulo,
+  descricao,
+  children,
+}: {
+  titulo: string;
+  descricao?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 rounded-xl border border-line p-4">
+      <div>
+        <h4 className="text-sm font-semibold text-fg">{titulo}</h4>
+        {descricao ? <p className="mt-0.5 text-xs text-fg-subtle">{descricao}</p> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Opção liga/desliga com o rótulo clicável (mantém o nome acessível do checkbox). */
+function Opcao({
+  rotulo,
+  checked,
+  disabled,
+  onChange,
+}: {
+  rotulo: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (valor: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-fg has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+      <Checkbox checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      {rotulo}
+    </label>
   );
 }

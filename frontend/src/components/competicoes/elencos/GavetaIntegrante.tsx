@@ -1,7 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, AlertTriangle, AlertCircle, CheckCircle2, User, UserX, Loader2 } from 'lucide-react';
+import { UserX } from 'lucide-react';
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  Field,
+  Input,
+  StatusBadge,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui';
+import { Avatar } from './Avatar';
 import BuscaCompetidor from './BuscaCompetidor';
 import ImportarAluno from './ImportarAluno';
 import { competicoesService, isErroApi } from '@/services/competicoes';
@@ -53,8 +68,6 @@ export default function GavetaIntegrante({
       }
     }
   }, [isOpen, integranteParaEditar]);
-
-  if (!isOpen) return null;
 
   // Regra de camisa repetida na equipe
   const camisaNumero = numeroCamisa.trim() !== '' ? parseInt(numeroCamisa, 10) : null;
@@ -134,204 +147,127 @@ export default function GavetaIntegrante({
     }
   };
 
+  const titulo = integranteParaEditar ? 'Detalhes do Integrante' : 'Adicionar Integrante';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={integranteParaEditar ? 'Detalhes do Integrante' : 'Adicionar Integrante'}
-        className="bg-white w-full max-w-xl h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300"
+    <Dialog open={isOpen} onOpenChange={(aberto) => (!aberto ? onClose() : undefined)}>
+      <DialogContent
+        side="right"
+        title={titulo}
+        description={
+          <>
+            Equipe: <span className="font-medium text-fg">{equipe.nome}</span>
+          </>
+        }
       >
-        {/* Cabeçalho */}
-        <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <UserPlus size={20} className="text-indigo-600" />
-              {integranteParaEditar ? 'Detalhes do Integrante' : 'Adicionar Integrante'}
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Equipe: <span className="font-semibold text-slate-700">{equipe.nome}</span>
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <div className="space-y-6">
+          {erro && <Alert tone="danger">{erro}</Alert>}
 
-        {/* Conteúdo rolável */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {erro && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2">
-              <AlertCircle size={18} className="shrink-0" />
-              <span>{erro}</span>
-            </div>
-          )}
-
-          {/* Modo: Integrante Existente (Visualização / Inativação) */}
           {integranteParaEditar ? (
             <div className="space-y-6">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-base font-bold text-slate-800">
-                    {integranteParaEditar.nome_esportivo}
+              <div className="space-y-4 rounded-xl border border-line bg-surface-muted p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar nome={integranteParaEditar.nome_esportivo} className="size-10 text-sm" />
+                    <span className="truncate text-base font-semibold text-fg">
+                      {integranteParaEditar.nome_esportivo}
+                    </span>
                   </div>
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                      integranteParaEditar.situacao === 'ATIVO'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    {integranteParaEditar.situacao}
-                  </span>
+                  <StatusBadge tipo="integrante" valor={integranteParaEditar.situacao} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+                <dl className="grid grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="font-medium text-slate-400 block">Camisa:</span>
-                    <span className="text-sm font-semibold text-slate-700">
+                    <dt className="text-fg-muted">Camisa</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-fg">
                       {integranteParaEditar.numero_camisa !== null
                         ? `#${integranteParaEditar.numero_camisa}`
                         : 'Sem número'}
-                    </span>
+                    </dd>
                   </div>
                   <div>
-                    <span className="font-medium text-slate-400 block">Posição:</span>
-                    <span className="text-sm font-semibold text-slate-700">
+                    <dt className="text-fg-muted">Posição</dt>
+                    <dd className="text-sm font-semibold text-fg">
                       {integranteParaEditar.posicao || 'Não definida'}
-                    </span>
+                    </dd>
                   </div>
-                </div>
+                </dl>
               </div>
 
               {integranteParaEditar.situacao === 'ATIVO' && (
-                <div className="pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    disabled={inativando}
+                <div className="space-y-2 border-t border-line pt-4">
+                  <Button
+                    variant="danger-outline"
+                    className="w-full"
+                    loading={inativando}
+                    leftIcon={<UserX className="size-4" />}
                     onClick={handleInativarIntegrante}
-                    className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
                   >
-                    {inativando ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <UserX size={16} />
-                    )}
                     Inativar Integrante da Equipe
-                  </button>
-                  <p className="text-xs text-slate-400 mt-2 text-center">
+                  </Button>
+                  <p className="text-center text-xs text-fg-muted">
                     O integrante será marcado como inativo, preservando o histórico de jogos e súmulas.
                   </p>
                 </div>
               )}
             </div>
           ) : (
-            /* Modo: Novo Integrante */
-            <form onSubmit={handleSalvarInscricao} className="space-y-6">
-              {/* Seção 1: Seleção do Competidor */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  1. Selecionar Atleta
-                </label>
+            <form id="form-integrante" onSubmit={handleSalvarInscricao} className="space-y-6">
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-fg">1. Selecionar atleta</h3>
 
                 {competidorSelecionado ? (
-                  <div className="p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
-                        <User size={18} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-indigo-900">
-                          {competidorSelecionado.nome}
-                        </div>
-                        <div className="text-xs text-indigo-700">
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary-soft p-3.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar nome={competidorSelecionado.nome} className="size-9 bg-primary-solid text-on-primary" />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-fg">{competidorSelecionado.nome}</div>
+                        <div className="text-xs text-fg-muted">
                           {competidorSelecionado.id_aluno_origem
                             ? 'Aluno Escolar Importado'
                             : 'Competidor Comunitário (Terceiro)'}
                         </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setCompetidorSelecionado(null)}
-                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => setCompetidorSelecionado(null)}>
                       Trocar
-                    </button>
+                    </Button>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="flex border-b border-slate-200">
-                      <button
-                        type="button"
-                        role="tab"
-                        onClick={() => setAbaOrigem('busca')}
-                        className={`py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
-                          abaOrigem === 'busca'
-                            ? 'border-indigo-600 text-indigo-600'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Buscar / Novo Terceiro
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        onClick={() => setAbaOrigem('importar')}
-                        className={`py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
-                          abaOrigem === 'importar'
-                            ? 'border-indigo-600 text-indigo-600'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        Importar Aluno da Escola
-                      </button>
-                    </div>
-
-                    {abaOrigem === 'busca' ? (
+                  <Tabs value={abaOrigem} onValueChange={(v) => setAbaOrigem(v as 'busca' | 'importar')}>
+                    <TabsList>
+                      <TabsTrigger value="busca">Buscar / Novo Terceiro</TabsTrigger>
+                      <TabsTrigger value="importar">Importar Aluno da Escola</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="busca">
                       <BuscaCompetidor
                         onSelectCompetidor={handleSelectCompetidor}
                         competidorSelecionado={competidorSelecionado}
                       />
-                    ) : (
+                    </TabsContent>
+                    <TabsContent value="importar">
                       <ImportarAluno onAlunoImportado={handleSelectCompetidor} />
-                    )}
-                  </div>
+                    </TabsContent>
+                  </Tabs>
                 )}
-              </div>
+              </section>
 
-              {/* Seção 2: Dados de Inscrição na Equipe */}
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  2. Dados da Inscrição na Equipe
-                </label>
+              <section className="space-y-4 border-t border-line pt-4">
+                <h3 className="text-sm font-semibold text-fg">2. Dados da inscrição na equipe</h3>
 
-                <div>
-                  <label htmlFor="nome-esportivo" className="block text-xs font-medium text-slate-700 mb-1">
-                    Nome Esportivo (na camisa / súmula) *
-                  </label>
-                  <input
+                <Field label="Nome esportivo (na camisa / súmula)" htmlFor="nome-esportivo" required>
+                  <Input
                     id="nome-esportivo"
                     type="text"
-                    required
                     value={nomeEsportivo}
                     onChange={(e) => setNomeEsportivo(e.target.value)}
                     placeholder="Ex: Romário, Ronaldinho"
-                    aria-label="Nome esportivo"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
-                </div>
+                </Field>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="numero-camisa" className="block text-xs font-medium text-slate-700 mb-1">
-                      Número da Camisa
-                    </label>
-                    <input
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Número da camisa" htmlFor="numero-camisa">
+                    <Input
                       id="numero-camisa"
                       type="number"
                       min="0"
@@ -339,63 +275,46 @@ export default function GavetaIntegrante({
                       value={numeroCamisa}
                       onChange={(e) => setNumeroCamisa(e.target.value)}
                       placeholder="Ex: 10"
-                      aria-label="Número da camisa"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                  </div>
-
-                  <div>
-                    <label htmlFor="posicao" className="block text-xs font-medium text-slate-700 mb-1">
-                      Posição
-                    </label>
-                    <input
+                  </Field>
+                  <Field label="Posição" htmlFor="posicao">
+                    <Input
                       id="posicao"
                       type="text"
                       value={posicao}
                       onChange={(e) => setPosicao(e.target.value)}
                       placeholder="Ex: Atacante, Goleiro"
-                      aria-label="Posição"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                  </div>
+                  </Field>
                 </div>
 
-                {/* Regra de camisa repetida: Aviso visual amigável sem bloqueio */}
+                {/* Regra de camisa repetida: aviso amigável, sem bloqueio */}
                 {isCamisaRepetida && (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center gap-2.5">
-                    <AlertTriangle size={18} className="shrink-0 text-amber-600" />
-                    <div>
-                      <span className="font-semibold">Número repetido na equipe:</span> Outro atleta
-                      desta equipe já está registrado com o número {camisaNumero}. A numeração
-                      duplicada é permitida pelas regras da competição, mas certifique-se da
-                      identificação correta na súmula.
-                    </div>
-                  </div>
+                  <Alert tone="warning" title="Número repetido na equipe">
+                    Outro atleta desta equipe já está registrado com o número {camisaNumero}. A numeração duplicada é
+                    permitida pelas regras da competição, mas certifique-se da identificação correta na súmula.
+                  </Alert>
                 )}
-              </div>
-
-              {/* Botões do Rodapé */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvando || !competidorSelecionado || !nomeEsportivo.trim()}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors"
-                >
-                  {salvando && <Loader2 size={16} className="animate-spin" />}
-                  Salvar
-                </button>
-              </div>
+              </section>
             </form>
           )}
         </div>
-      </div>
-    </div>
+        {!integranteParaEditar && (
+          <DialogFooter>
+            <Button variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="form-integrante"
+              loading={salvando}
+              disabled={!competidorSelecionado || !nomeEsportivo.trim()}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

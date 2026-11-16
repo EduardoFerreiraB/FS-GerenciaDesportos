@@ -1,21 +1,24 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { CheckCircle, ListX, PlusCircle, ShieldAlert, Trash2, UserCheck, X } from 'lucide-react';
 import {
-  X,
-  Trophy,
-  AlertCircle,
-  AlertTriangle,
-  Loader2,
-  CheckCircle,
-  PlusCircle,
-  Trash2,
-  UserCheck,
-  ShieldAlert,
-  Clock,
-  Flag,
-  User,
-} from 'lucide-react';
+  Alert,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  Select,
+  Skeleton,
+  StatusBadge,
+  Textarea,
+} from '@/components/ui';
+import { EscudoIniciais } from '@/components/competicoes/visual';
+import LinhaTempoSumula from './LinhaTempoSumula';
 import {
   obterSumula,
   listarEquipes,
@@ -327,228 +330,151 @@ export default function ModalSumulaDetalhada({
     }
   };
 
+  const nomeMandante = partida.nome_mandante || 'Mandante';
+  const nomeVisitante = partida.nome_visitante || 'Visitante';
+  const totalOcorrencias = sumula?.ocorrencias?.length || 0;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sumula-titulo"
-        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden"
+    <Dialog open onOpenChange={(aberto) => (!aberto ? onClose() : undefined)}>
+      <DialogContent
+        title={`Súmula Detalhada do Jogo #${partida.numero_partida || partida.id_partida}`}
+        description={`${nomeMandante} vs ${nomeVisitante}`}
+        size="xl"
       >
-        {/* Cabeçalho do Modal */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Trophy size={20} />
-            </div>
-            <div>
-              <h2 id="sumula-titulo" className="text-lg font-bold text-slate-800">
-                Súmula Detalhada do Jogo #{partida.numero_partida || partida.id_partida}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {partida.nome_mandante || 'Mandante'} vs {partida.nome_visitante || 'Visitante'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span
-              data-testid="badge-status-sumula"
-              className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
-                statusAtual === 'AGENDADA'
-                  ? 'bg-sky-50 text-sky-700 border-sky-200'
-                  : statusAtual === 'EM_ANDAMENTO'
-                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : statusAtual === 'FINALIZADA'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-rose-50 text-rose-700 border-rose-200'
-              }`}
-            >
-              {statusAtual}
-            </span>
-            <button
-              type="button"
-              data-testid="btn-fechar-sumula"
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Conteúdo com rolagem */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Mensagens de Sucesso / Erro */}
+        <div className="space-y-6">
+          {/* Avisos */}
           {sucesso && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle size={16} className="text-emerald-600 shrink-0" />
-                <span>{sucesso}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSucesso(null)}
-                className="text-emerald-600 hover:text-emerald-800 p-1"
-              >
-                <X size={14} />
-              </button>
-            </div>
+            <Alert
+              tone="success"
+              action={
+                <IconButton aria-label="Fechar aviso" size="sm" onClick={() => setSucesso(null)}>
+                  <X aria-hidden="true" />
+                </IconButton>
+              }
+            >
+              {sucesso}
+            </Alert>
           )}
-
           {erro && (
-            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs font-medium flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={16} className="text-red-600 shrink-0" />
-                <span>{erro}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setErro(null)}
-                className="text-red-600 hover:text-red-800 p-1"
-              >
-                <X size={14} />
-              </button>
-            </div>
+            <Alert
+              tone="danger"
+              action={
+                <IconButton aria-label="Fechar aviso" size="sm" onClick={() => setErro(null)}>
+                  <X aria-hidden="true" />
+                </IconButton>
+              }
+            >
+              {erro}
+            </Alert>
           )}
 
-          {/* Destaque do Placar */}
-          <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md">
-            <div className="grid grid-cols-12 items-center gap-4">
-              {/* Mandante */}
-              <div className="col-span-5 text-right">
-                <h3 className="font-extrabold text-base md:text-xl truncate" title={partida.nome_mandante || 'Mandante'}>
-                  {partida.nome_mandante || 'Mandante'}
-                </h3>
-                {partida.sigla_mandante && (
-                  <span className="text-xs text-slate-400 font-semibold uppercase">
-                    {partida.sigla_mandante}
-                  </span>
-                )}
+          {/* Placar com as equipes lado a lado */}
+          <section aria-label="Placar" className="rounded-xl border border-line bg-surface-muted p-4 sm:p-5">
+            <div className="mb-3 flex justify-center">
+              <StatusBadge tipo="partida" valor={statusAtual} data-testid="badge-status-sumula" />
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 sm:gap-6">
+              <div className="flex min-w-0 flex-row-reverse items-center gap-3 text-right">
+                <EscudoIniciais nome={partida.nome_mandante} sigla={partida.sigla_mandante} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-fg sm:text-lg" title={nomeMandante}>
+                    {nomeMandante}
+                  </p>
+                  <p className="text-xs text-fg-subtle">Mandante</p>
+                </div>
               </div>
-
-              {/* Placar Central */}
-              <div className="col-span-2 flex flex-col items-center justify-center">
-                <div className="flex items-center gap-3">
-                  <span
-                    data-testid="placar-mandante"
-                    className="text-3xl md:text-4xl font-black text-amber-400"
-                  >
+              <div className="flex flex-col items-center">
+                <div className="flex items-center gap-3 leading-none">
+                  <span data-testid="placar-mandante" className="text-4xl font-semibold tabular-nums text-fg">
                     {golsMandante}
                   </span>
-                  <span className="text-slate-500 font-bold text-xl">x</span>
-                  <span
-                    data-testid="placar-visitante"
-                    className="text-3xl md:text-4xl font-black text-amber-400"
-                  >
+                  <span aria-hidden="true" className="text-lg text-fg-subtle">
+                    ×
+                  </span>
+                  <span data-testid="placar-visitante" className="text-4xl font-semibold tabular-nums text-fg">
                     {golsVisitante}
                   </span>
                 </div>
-                {partidaAtual.placar?.penaltis_mandante != null &&
-                  partidaAtual.placar?.penaltis_visitante != null && (
-                    <span className="text-xs text-slate-300 font-medium mt-1">
-                      (Pên: {partidaAtual.placar.penaltis_mandante} x{' '}
-                      {partidaAtual.placar.penaltis_visitante})
-                    </span>
-                  )}
-              </div>
-
-              {/* Visitante */}
-              <div className="col-span-5 text-left">
-                <h3 className="font-extrabold text-base md:text-xl truncate" title={partida.nome_visitante || 'Visitante'}>
-                  {partida.nome_visitante || 'Visitante'}
-                </h3>
-                {partida.sigla_visitante && (
-                  <span className="text-xs text-slate-400 font-semibold uppercase">
-                    {partida.sigla_visitante}
+                {partidaAtual.placar?.penaltis_mandante != null && partidaAtual.placar?.penaltis_visitante != null && (
+                  <span className="mt-2 text-xs tabular-nums text-fg-muted">
+                    Pênaltis {partidaAtual.placar.penaltis_mandante} × {partidaAtual.placar.penaltis_visitante}
                   </span>
                 )}
               </div>
+              <div className="flex min-w-0 items-center gap-3">
+                <EscudoIniciais nome={partida.nome_visitante} sigla={partida.sigla_visitante} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-fg sm:text-lg" title={nomeVisitante}>
+                    {nomeVisitante}
+                  </p>
+                  <p className="text-xs text-fg-subtle">Visitante</p>
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
 
-          {/* Banner de Alerta Disciplinar (Atletas Suspensos) */}
+          {/* Alerta disciplinar (informativo, não bloqueia) */}
           {sumula?.alertas_suspensos && sumula.alertas_suspensos.length > 0 && (
-            <div
+            <Alert
+              tone="warning"
               role="alert"
               aria-label="Alerta de atletas suspensos"
-              className="p-4 bg-amber-50 border-l-4 border-amber-500 border-y border-r border-amber-200 rounded-xl space-y-2"
+              title="Alerta Disciplinar: Atletas com Suspensão Ativa"
             >
-              <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-                <ShieldAlert size={18} className="text-amber-600 shrink-0" />
-                <span>Alerta Disciplinar: Atletas com Suspensão Ativa</span>
-              </div>
-              <p className="text-xs text-amber-800 leading-relaxed">
-                Os seguintes atletas vinculados a esta partida possuem suspensão automática ou disciplinar pendente.
-                <span className="font-semibold ml-1">
-                  Nota informativa (Ruling R33): Este alerta não bloqueia a súmula nem a participação do atleta.
-                </span>
+              <p>
+                Estes atletas têm suspensão pendente. O alerta é informativo: não bloqueia a súmula nem a
+                participação do atleta.
               </p>
-              <ul className="text-xs text-amber-900 divide-y divide-amber-200/60 pt-1">
+              <ul className="mt-2 divide-y divide-warning/20">
                 {sumula.alertas_suspensos.map((alerta) => (
-                  <li key={alerta.id_suspensao} className="py-1.5 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold">{alerta.nome_esportivo}</span>
-                      <span className="text-amber-700 ml-1">
+                  <li key={alerta.id_suspensao} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                    <span className="min-w-0">
+                      <span className="font-semibold text-fg">{alerta.nome_esportivo}</span>{' '}
+                      <span>
                         ({alerta.id_equipe === partida.id_equipe_mandante ? partida.nome_mandante : partida.nome_visitante})
-                      </span>
-                      <span className="text-amber-600 ml-2 italic">— {alerta.motivo}</span>
-                    </div>
-                    <span className="font-semibold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded text-[11px]">
-                      {alerta.jogos_pendentes} jogo(s) pendente(s)
+                      </span>{' '}
+                      <span className="text-fg-subtle">— {alerta.motivo}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
+                      <ShieldAlert aria-hidden="true" className="size-3.5" />
+                      <span className="tabular-nums">{alerta.jogos_pendentes}</span> jogo(s) pendente(s)
                     </span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </Alert>
           )}
 
-          {/* Formulário de Registro de Ocorrência */}
+          {/* Registro de ocorrência */}
           {podeRegistrar ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <PlusCircle size={16} className="text-blue-600" />
-                  <span>Registrar Ocorrência na Súmula</span>
-                </h4>
-                <span className="text-[11px] text-slate-500">
-                  Partida {statusAtual === 'AGENDADA' ? 'será iniciada ao lançar' : 'em andamento'}
+            <section aria-labelledby="sumula-registrar" className="space-y-4 rounded-xl border border-line p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 id="sumula-registrar" className="text-sm font-semibold text-fg">
+                  Registrar ocorrência
+                </h3>
+                <span className="text-xs text-fg-subtle">
+                  {statusAtual === 'AGENDADA' ? 'A partida será iniciada ao lançar' : 'Partida em andamento'}
                 </span>
               </div>
 
               <form onSubmit={handleRegistrarOcorrencia} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                  {/* Tipo de Ocorrência */}
-                  <div className="md:col-span-4">
-                    <label
-                      htmlFor="ocorrencia-tipo"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Tipo de Ocorrência *
-                    </label>
-                    <select
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <Field label="Tipo de ocorrência" htmlFor="ocorrencia-tipo" required>
+                    <Select
                       id="ocorrencia-tipo"
                       data-testid="select-tipo-ocorrencia"
                       value={tipoOcorrencia}
                       onChange={(e) => setTipoOcorrencia(e.target.value as TipoOcorrenciaLancamento)}
-                      className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                     >
-                      <option value="GOL">⚽ Gol</option>
-                      <option value="GOL_CONTRA">🥅 Gol Contra (a favor adversário)</option>
-                      <option value="CARTAO_AMARELO">🟨 Cartão Amarelo</option>
-                      <option value="CARTAO_VERMELHO_DIRETO">🟥 Cartão Vermelho Direto</option>
-                    </select>
-                  </div>
+                      <option value="GOL">Gol</option>
+                      <option value="GOL_CONTRA">Gol contra (a favor do adversário)</option>
+                      <option value="CARTAO_AMARELO">Cartão amarelo</option>
+                      <option value="CARTAO_VERMELHO_DIRETO">Cartão vermelho direto</option>
+                    </Select>
+                  </Field>
 
-                  {/* Equipe */}
-                  <div className="md:col-span-4">
-                    <label
-                      htmlFor="ocorrencia-equipe"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Equipe do Atleta *
-                    </label>
-                    <select
+                  <Field label="Equipe do atleta" htmlFor="ocorrencia-equipe" required>
+                    <Select
                       id="ocorrencia-equipe"
                       data-testid="select-equipe-ocorrencia"
                       value={idEquipeSelecionada}
@@ -556,38 +482,29 @@ export default function ModalSumulaDetalhada({
                         setIdEquipeSelecionada(Number(e.target.value));
                         setIdIntegranteSelecionado('');
                       }}
-                      className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                       {partida.id_equipe_mandante && (
-                        <option value={partida.id_equipe_mandante}>
-                          {partida.nome_mandante || 'Mandante'} (Mandante)
-                        </option>
+                        <option value={partida.id_equipe_mandante}>{nomeMandante} (mandante)</option>
                       )}
                       {partida.id_equipe_visitante && (
-                        <option value={partida.id_equipe_visitante}>
-                          {partida.nome_visitante || 'Visitante'} (Visitante)
-                        </option>
+                        <option value={partida.id_equipe_visitante}>{nomeVisitante} (visitante)</option>
                       )}
-                    </select>
-                  </div>
+                    </Select>
+                  </Field>
 
-                  {/* Atleta / Integrante */}
-                  <div className="md:col-span-4">
-                    <label
-                      htmlFor="ocorrencia-integrante"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Atleta {tipoOcorrencia === 'GOL' ? '(opcional para autoria)' : '*'}
-                    </label>
-                    <select
+                  <Field
+                    label={tipoOcorrencia === 'GOL' ? 'Atleta (opcional para autoria)' : 'Atleta'}
+                    htmlFor="ocorrencia-integrante"
+                    required={tipoOcorrencia !== 'GOL'}
+                  >
+                    <Select
                       id="ocorrencia-integrante"
                       data-testid="select-integrante-ocorrencia"
                       value={idIntegranteSelecionado}
                       onChange={(e) => setIdIntegranteSelecionado(e.target.value)}
-                      className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                     >
                       <option value="">
-                        {tipoOcorrencia === 'GOL' ? '-- Sem autoria definida --' : '-- Selecione o atleta --'}
+                        {tipoOcorrencia === 'GOL' ? 'Sem autoria definida' : 'Selecione o atleta'}
                       </option>
                       {integrantesEquipeSelecionada.map((integ) => (
                         <option key={integ.id_integrante} value={integ.id_integrante}>
@@ -595,415 +512,270 @@ export default function ModalSumulaDetalhada({
                           {integ.nome_esportivo}
                         </option>
                       ))}
-                    </select>
-                  </div>
+                    </Select>
+                  </Field>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                  {/* Minuto */}
-                  <div className="md:col-span-2">
-                    <label
-                      htmlFor="ocorrencia-minuto"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Minuto
-                    </label>
-                    <input
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-[6rem_minmax(0,1fr)_minmax(0,1.5fr)_auto] md:items-end">
+                  <Field label="Minuto" htmlFor="ocorrencia-minuto">
+                    <Input
                       id="ocorrencia-minuto"
                       data-testid="input-minuto-ocorrencia"
                       type="number"
                       min={0}
                       max={150}
-                      placeholder="Ex: 35"
+                      placeholder="Ex.: 35"
                       value={minuto}
                       onChange={(e) => setMinuto(e.target.value)}
-                      className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                      className="tabular-nums"
                     />
-                  </div>
+                  </Field>
 
-                  {/* Período */}
-                  <div className="md:col-span-3">
-                    <label
-                      htmlFor="ocorrencia-periodo"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Período
-                    </label>
-                    <select
+                  <Field label="Período" htmlFor="ocorrencia-periodo">
+                    <Select
                       id="ocorrencia-periodo"
                       data-testid="select-periodo-ocorrencia"
                       value={periodo}
                       onChange={(e) => setPeriodo(e.target.value)}
-                      className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                     >
-                      <option value="1º Tempo">1º Tempo</option>
-                      <option value="2º Tempo">2º Tempo</option>
-                      <option value="Prorrogação 1T">Prorrogação 1T</option>
-                      <option value="Prorrogação 2T">Prorrogação 2T</option>
-                      <option value="Disputa de Pênaltis">Disputa de Pênaltis</option>
-                    </select>
-                  </div>
+                      <option value="1º Tempo">1º tempo</option>
+                      <option value="2º Tempo">2º tempo</option>
+                      <option value="Prorrogação 1T">Prorrogação 1º tempo</option>
+                      <option value="Prorrogação 2T">Prorrogação 2º tempo</option>
+                      <option value="Disputa de Pênaltis">Disputa de pênaltis</option>
+                    </Select>
+                  </Field>
 
-                  {/* Observação */}
-                  <div className="md:col-span-5">
-                    <label
-                      htmlFor="ocorrencia-obs"
-                      className="block text-xs font-semibold text-slate-700 mb-1"
-                    >
-                      Observação (opcional)
-                    </label>
-                    <input
+                  <Field label="Observação (opcional)" htmlFor="ocorrencia-obs" className="sm:col-span-2 md:col-span-1">
+                    <Input
                       id="ocorrencia-obs"
                       data-testid="input-obs-ocorrencia"
                       type="text"
-                      placeholder="Ex: Falta tática, pênalti sofrido..."
+                      placeholder="Ex.: falta tática, pênalti sofrido..."
                       value={observacao}
                       onChange={(e) => setObservacao(e.target.value)}
-                      className="w-full text-xs font-medium px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                     />
-                  </div>
+                  </Field>
 
-                  {/* Botão Salvar Ocorrência */}
-                  <div className="md:col-span-2 flex items-end">
-                    <button
-                      type="submit"
-                      data-testid="btn-registrar-ocorrencia"
-                      disabled={salvandoOcorrencia}
-                      className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs transition shadow-sm disabled:opacity-50 h-[34px]"
-                    >
-                      {salvandoOcorrencia ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <PlusCircle size={14} />
-                      )}
-                      <span>Lançar</span>
-                    </button>
-                  </div>
+                  <Button
+                    type="submit"
+                    data-testid="btn-registrar-ocorrencia"
+                    loading={salvandoOcorrencia}
+                    leftIcon={<PlusCircle className="size-4" aria-hidden="true" />}
+                    className="sm:col-span-2 md:col-span-1"
+                  >
+                    Lançar
+                  </Button>
                 </div>
               </form>
-            </div>
+            </section>
           ) : (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between">
-              <span>
-                Partida <strong className="uppercase">{statusAtual}</strong>. Novos lançamentos de ocorrência estão bloqueados.
-              </span>
-              <span className="text-[11px] text-slate-400">Para lançar ocorrências, reabra a partida.</span>
-            </div>
+            <Alert tone="info">
+              Partida {statusAtual === 'FINALIZADA' ? 'finalizada' : 'cancelada'}: novos lançamentos estão
+              bloqueados. Para lançar ocorrências, reabra a partida.
+            </Alert>
           )}
 
-          {/* Listagem de Ocorrências Registradas */}
-          <div className="space-y-3">
-            <h4 className="font-bold text-slate-800 text-sm flex items-center justify-between">
-              <span>Ocorrências do Jogo ({sumula?.ocorrencias?.length || 0})</span>
-              <span className="text-xs font-normal text-slate-500">
-                Gols e cartões computados oficialmente
-              </span>
-            </h4>
+          {/* Linha do tempo */}
+          <section aria-labelledby="sumula-ocorrencias" className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 id="sumula-ocorrencias" className="text-sm font-semibold text-fg">
+                Ocorrências do jogo (<span className="tabular-nums">{totalOcorrencias}</span>)
+              </h3>
+              <span className="text-xs text-fg-subtle">Gols e cartões computados oficialmente</span>
+            </div>
 
             {carregando && !sumula ? (
-              <div className="p-8 text-center bg-white rounded-xl border border-slate-200">
-                <Loader2 size={24} className="animate-spin text-blue-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-500">Carregando súmula...</p>
+              <div className="space-y-2" aria-busy="true" aria-label="Carregando súmula">
+                <Skeleton className="h-16" />
+                <Skeleton className="h-16" />
               </div>
             ) : !sumula?.ocorrencias || sumula.ocorrencias.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-500">
-                Nenhuma ocorrência registrada nesta partida até o momento.
-              </div>
+              <EmptyState
+                icon={<ListX />}
+                title="Nenhuma ocorrência registrada"
+                description="Gols e cartões lançados aparecem aqui em ordem de minuto."
+                className="py-8"
+              />
             ) : (
-              <div className="space-y-2">
-                {sumula.ocorrencias.map((oc) => {
+              <LinhaTempoSumula
+                ocorrencias={sumula.ocorrencias}
+                idMandante={partida.id_equipe_mandante}
+                nomeMandante={nomeMandante}
+                nomeVisitante={nomeVisitante}
+                nomeAtleta={(oc) =>
+                  oc.nome_integrante || (oc.id_integrante ? mapaIntegrantes.get(oc.id_integrante)?.nome : null)
+                }
+                camisaAtleta={(oc) =>
+                  oc.numero_camisa ?? (oc.id_integrante ? mapaIntegrantes.get(oc.id_integrante)?.camisa : null)
+                }
+                acoes={(oc) => {
                   const isExpulsaoDerivada = oc.tipo === 'EXPULSAO_SEGUNDO_AMARELO';
-                  const equipeBeneficiadaNome =
-                    oc.id_equipe_beneficiada === partida.id_equipe_mandante
-                      ? partida.nome_mandante || 'Mandante'
-                      : partida.nome_visitante || 'Visitante';
-
-                  let badgeInfo = {
-                    texto: 'Gol',
-                    cor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-                  };
-                  if (oc.tipo === 'GOL_CONTRA') {
-                    badgeInfo = {
-                      texto: 'Gol Contra',
-                      cor: 'bg-rose-100 text-rose-800 border-rose-200',
-                    };
-                  } else if (oc.tipo === 'CARTAO_AMARELO') {
-                    badgeInfo = {
-                      texto: 'Cartão Amarelo',
-                      cor: 'bg-amber-100 text-amber-800 border-amber-200',
-                    };
-                  } else if (oc.tipo === 'CARTAO_VERMELHO_DIRETO') {
-                    badgeInfo = {
-                      texto: 'Vermelho Direto',
-                      cor: 'bg-red-100 text-red-800 border-red-200',
-                    };
-                  } else if (oc.tipo === 'EXPULSAO_SEGUNDO_AMARELO') {
-                    badgeInfo = {
-                      texto: 'Expulsão 2º Amarelo',
-                      cor: 'bg-red-200 text-red-900 border-red-300 font-bold',
-                    };
-                  }
-
-                  const nomeAtleta =
-                    oc.nome_integrante ||
-                    (oc.id_integrante ? mapaIntegrantes.get(oc.id_integrante)?.nome : null);
-                  const camisaAtleta =
-                    oc.numero_camisa ??
-                    (oc.id_integrante ? mapaIntegrantes.get(oc.id_integrante)?.camisa : null);
-
+                  const podeAutor = !oc.id_integrante || oc.tipo === 'GOL';
+                  const podeRemover = statusAtual === 'EM_ANDAMENTO' && !isExpulsaoDerivada;
+                  if (!podeAutor && !podeRemover) return null;
                   return (
-                    <div
-                      key={oc.id_ocorrencia}
-                      className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border ${badgeInfo.cor}`}
+                    <>
+                      {podeAutor && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`btn-identificar-autor-${oc.id_ocorrencia}`}
+                          onClick={() => handleAbrirAtribuirAutor(oc)}
+                          leftIcon={<UserCheck className="size-3.5" aria-hidden="true" />}
                         >
-                          {badgeInfo.texto}
-                        </span>
-
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            {nomeAtleta ? (
-                              <span className="font-bold text-slate-800">
-                                {camisaAtleta != null ? `#${camisaAtleta} ` : ''}
-                                {nomeAtleta}
-                              </span>
-                            ) : (
-                              <span className="font-semibold text-amber-600 italic">
-                                Sem autoria definida
-                              </span>
-                            )}
-
-                            <span className="text-slate-300">•</span>
-                            <span className="text-slate-600 font-medium">
-                              Beneficiou: <strong>{equipeBeneficiadaNome}</strong>
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-slate-400 text-[11px]">
-                            {oc.minuto != null && (
-                              <span>
-                                {oc.minuto}&apos;
-                                {oc.periodo ? ` (${oc.periodo})` : ''}
-                              </span>
-                            )}
-                            {oc.observacao && <span>• {oc.observacao}</span>}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Ações da Ocorrência */}
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        {/* Botão Identificar / Editar Autor */}
-                        {(!oc.id_integrante || oc.tipo === 'GOL') && (
-                          <button
-                            type="button"
-                            data-testid={`btn-identificar-autor-${oc.id_ocorrencia}`}
-                            onClick={() => handleAbrirAtribuirAutor(oc)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
-                          >
-                            <UserCheck size={13} />
-                            <span>{oc.id_integrante ? 'Alterar Autor' : 'Identificar Autor'}</span>
-                          </button>
-                        )}
-
-                        {/* Botão Remover Ocorrência */}
-                        {statusAtual === 'EM_ANDAMENTO' && !isExpulsaoDerivada && (
-                          <button
-                            type="button"
-                            data-testid={`btn-remover-ocorrencia-${oc.id_ocorrencia}`}
-                            disabled={removendoId === oc.id_ocorrencia}
-                            onClick={() => handleRemoverOcorrencia(oc.id_ocorrencia)}
-                            title="Remover ocorrência"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition disabled:opacity-50"
-                          >
-                            {removendoId === oc.id_ocorrencia ? (
-                              <Loader2 size={13} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={13} />
-                            )}
-                            <span>Remover</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                          {oc.id_integrante ? 'Alterar Autor' : 'Identificar Autor'}
+                        </Button>
+                      )}
+                      {podeRemover && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`btn-remover-ocorrencia-${oc.id_ocorrencia}`}
+                          loading={removendoId === oc.id_ocorrencia}
+                          onClick={() => handleRemoverOcorrencia(oc.id_ocorrencia)}
+                          title="Remover ocorrência"
+                          leftIcon={<Trash2 className="size-3.5" aria-hidden="true" />}
+                          className="text-danger hover:bg-danger-soft hover:text-danger"
+                        >
+                          Remover
+                        </Button>
+                      )}
+                    </>
                   );
-                })}
-              </div>
+                }}
+              />
             )}
-          </div>
+          </section>
 
-          {/* Seção de Finalização da Partida (se AGENDADA ou EM_ANDAMENTO) */}
+          {/* Finalização da partida */}
           {podeRegistrar && (
-            <div className="pt-4 border-t border-slate-200 space-y-3">
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm">Finalizar Partida</h4>
-                  <p className="text-xs text-slate-500">
-                    Ao finalizar, o placar e as estatísticas serão consolidados no campeonato.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  {/* Se for mata-mata e estiver empatado, exige disputa de pênaltis */}
-                  {empateMataMata && (
-                    <div className="flex items-center gap-2 text-xs bg-white p-2 border border-slate-200 rounded-xl">
-                      <span className="font-bold text-slate-700">Pênaltis:</span>
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="Mandante"
-                        value={penaltisMandante}
-                        onChange={(e) => setPenaltisMandante(e.target.value)}
-                        data-testid="input-penaltis-mandante"
-                        className="w-16 px-2 py-1 text-center border border-slate-300 rounded font-bold"
-                      />
-                      <span>x</span>
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="Visitante"
-                        value={penaltisVisitante}
-                        onChange={(e) => setPenaltisVisitante(e.target.value)}
-                        data-testid="input-penaltis-visitante"
-                        className="w-16 px-2 py-1 text-center border border-slate-300 rounded font-bold"
-                      />
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    data-testid="btn-finalizar-partida"
-                    disabled={finalizando}
-                    onClick={handleFinalizarPartida}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-sm disabled:opacity-50"
-                  >
-                    {finalizando ? (
-                      <>
-                        <Loader2 size={15} className="animate-spin" />
-                        <span>Finalizando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle size={15} />
-                        <span>Finalizar Partida</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+            <section
+              aria-labelledby="sumula-finalizar"
+              className="flex flex-col gap-4 rounded-xl border border-line bg-surface-muted p-4 md:flex-row md:items-center md:justify-between"
+            >
+              <div>
+                <h3 id="sumula-finalizar" className="text-sm font-semibold text-fg">
+                  Finalizar partida
+                </h3>
+                <p className="text-xs text-fg-muted">
+                  Ao finalizar, o placar e as estatísticas são consolidados no campeonato.
+                </p>
               </div>
-            </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                {/* Mata-mata empatado exige a disputa de pênaltis */}
+                {empateMataMata && (
+                  <fieldset className="flex items-center gap-2">
+                    <legend className="sr-only">Placar da disputa de pênaltis</legend>
+                    <span className="text-sm font-medium text-fg">Pênaltis</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Mand."
+                      aria-label={`Pênaltis ${nomeMandante}`}
+                      value={penaltisMandante}
+                      onChange={(e) => setPenaltisMandante(e.target.value)}
+                      data-testid="input-penaltis-mandante"
+                      className="w-20 text-center tabular-nums"
+                    />
+                    <span aria-hidden="true" className="text-fg-subtle">
+                      ×
+                    </span>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Visit."
+                      aria-label={`Pênaltis ${nomeVisitante}`}
+                      value={penaltisVisitante}
+                      onChange={(e) => setPenaltisVisitante(e.target.value)}
+                      data-testid="input-penaltis-visitante"
+                      className="w-20 text-center tabular-nums"
+                    />
+                  </fieldset>
+                )}
+
+                <Button
+                  data-testid="btn-finalizar-partida"
+                  loading={finalizando}
+                  onClick={handleFinalizarPartida}
+                  leftIcon={<CheckCircle className="size-4" aria-hidden="true" />}
+                >
+                  Finalizar Partida
+                </Button>
+              </div>
+            </section>
           )}
         </div>
 
-        {/* Rodapé do Modal */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 text-xs">
-          <span className="text-slate-500">
-            {sumula?.ocorrencias?.length || 0} ocorrência(s) registrada(s)
-          </span>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition"
-          >
-            Fechar
-          </button>
-        </div>
-
-        {/* Sub-Modal / Popover: Atribuir ou Corrigir Autor */}
-        {ocorrenciaEditandoAutor && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs animate-in fade-in">
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="autor-titulo"
-              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 border border-slate-200 space-y-4"
-            >
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h4 id="autor-titulo" className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <UserCheck size={16} className="text-blue-600" />
-                  <span>Identificar / Alterar Autor do Gol</span>
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setOcorrenciaEditandoAutor(null)}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-md"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSalvarAutor} className="space-y-4 text-xs">
-                <div>
-                  <label htmlFor="autor-select" className="block font-semibold text-slate-700 mb-1">
-                    Selecione o Atleta
-                  </label>
-                  <select
+        {/* Atribuir ou corrigir autor: modal aninhado (Esc / clique fora fecham só este) */}
+        <Dialog
+          open={Boolean(ocorrenciaEditandoAutor)}
+          onOpenChange={(aberto) => (!aberto && !salvandoAutor ? setOcorrenciaEditandoAutor(null) : undefined)}
+        >
+          {ocorrenciaEditandoAutor && (
+            <DialogContent title="Identificar / Alterar Autor do Gol" size="sm">
+              <form id="form-autor-ocorrencia" onSubmit={handleSalvarAutor} className="space-y-4">
+                <Field label="Atleta" htmlFor="autor-select">
+                  <Select
                     id="autor-select"
                     data-testid="select-novo-autor"
                     value={novoAutorId}
                     onChange={(e) => setNovoAutorId(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
                   >
-                    <option value="">-- Sem autoria / Remover autor --</option>
+                    <option value="">Sem autoria (remover autor)</option>
                     {(
-                      equipes.find(
-                        (e) => e.id_equipe === ocorrenciaEditandoAutor.id_equipe_beneficiada
-                      )?.integrantes || []
+                      equipes.find((e) => e.id_equipe === ocorrenciaEditandoAutor.id_equipe_beneficiada)?.integrantes || []
                     ).map((integ) => (
                       <option key={integ.id_integrante} value={integ.id_integrante}>
                         {integ.numero_camisa != null ? `#${integ.numero_camisa} ` : ''}
                         {integ.nome_esportivo}
                       </option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
 
-                {/* Motivo obrigatório se a partida estiver FINALIZADA */}
+                {/* Motivo obrigatório se a partida estiver finalizada */}
                 {isFinalizada && (
-                  <div>
-                    <label htmlFor="autor-motivo" className="block font-semibold text-slate-700 mb-1">
-                      Justificativa da Alteração * (mín. 3 caracteres)
-                    </label>
-                    <textarea
+                  <Field
+                    label="Justificativa da alteração"
+                    htmlFor="autor-motivo"
+                    required
+                    hint="Mínimo de 3 caracteres."
+                  >
+                    <Textarea
                       id="autor-motivo"
                       data-testid="input-motivo-autor"
                       rows={2}
                       placeholder="Informe o motivo da alteração de autoria em partida finalizada..."
                       value={motivoAutor}
                       onChange={(e) => setMotivoAutor(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                      className="resize-none"
                     />
-                  </div>
+                  </Field>
                 )}
-
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setOcorrenciaEditandoAutor(null)}
-                    disabled={salvandoAutor}
-                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold transition"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    data-testid="btn-salvar-autor"
-                    disabled={salvandoAutor}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition shadow-xs disabled:opacity-50"
-                  >
-                    {salvandoAutor && <Loader2 size={13} className="animate-spin" />}
-                    <span>Confirmar Autor</span>
-                  </button>
-                </div>
               </form>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+              <DialogFooter>
+                <Button variant="secondary" onClick={() => setOcorrenciaEditandoAutor(null)} disabled={salvandoAutor}>
+                  Cancelar
+                </Button>
+                <Button type="submit" form="form-autor-ocorrencia" data-testid="btn-salvar-autor" loading={salvandoAutor}>
+                  Confirmar Autor
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          )}
+        </Dialog>
+
+        <DialogFooter className="items-center sm:justify-between">
+          <span className="hidden text-xs text-fg-muted sm:inline">
+            <span className="tabular-nums">{totalOcorrencias}</span> ocorrência(s) registrada(s)
+          </span>
+          <Button variant="secondary" data-testid="btn-fechar-sumula" onClick={onClose}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

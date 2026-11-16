@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, PlusCircle, UserCheck, User, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, PlusCircle, UserCheck } from 'lucide-react';
+import { Alert, Badge, Button, EmptyState, Field, Input, Spinner } from '@/components/ui';
+import { cn } from '@/lib/cn';
+import { Avatar } from './Avatar';
 import { competicoesService, isErroApi } from '@/services/competicoes';
 import type { CompetidorDetalhe, PaginaCompetidores } from '@/types/competicoes';
 
@@ -95,46 +98,30 @@ export default function BuscaCompetidor({
     }
   };
 
+  const classeModo = (ativo: boolean) =>
+    cn(
+      '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-4 focus-visible:ring-focus',
+      ativo ? 'border-primary text-primary' : 'border-transparent text-fg-muted hover:text-fg',
+    );
+
   return (
     <div className="space-y-4">
-      {/* Seletor de Modo */}
-      <div className="flex border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setModo('busca')}
-          className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-            modo === 'busca'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <span className="flex items-center gap-1.5">
-            <Search size={16} />
-            Buscar Competidor
-          </span>
+      <div className="flex border-b border-line">
+        <button type="button" onClick={() => setModo('busca')} className={classeModo(modo === 'busca')}>
+          <Search className="size-4" aria-hidden="true" />
+          Buscar Competidor
         </button>
-        <button
-          type="button"
-          onClick={() => setModo('novo')}
-          className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-            modo === 'novo'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <span className="flex items-center gap-1.5">
-            <PlusCircle size={16} />
-            Novo Terceiro (Avulso)
-          </span>
+        <button type="button" onClick={() => setModo('novo')} className={classeModo(modo === 'novo')}>
+          <PlusCircle className="size-4" aria-hidden="true" />
+          Novo Terceiro (Avulso)
         </button>
       </div>
 
-      {/* Modo: Busca de Competidor */}
       {modo === 'busca' && (
         <div className="space-y-3">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <input
+              <Input
                 type="text"
                 value={termoBusca}
                 onChange={(e) => setTermoBusca(e.target.value)}
@@ -147,53 +134,43 @@ export default function BuscaCompetidor({
                 }}
                 placeholder="Buscar competidor por nome..."
                 aria-label="Buscar competidor"
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="pl-9"
               />
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" />
             </div>
-            <button
-              type="button"
-              disabled={carregando}
+            <Button
+              variant="secondary"
+              loading={carregando}
               onClick={() => {
                 setPagina(1);
                 executarBusca(termoBusca, 1);
               }}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
             >
-              {carregando ? <Loader2 size={16} className="animate-spin" /> : 'Buscar'}
-            </button>
+              Buscar
+            </Button>
           </div>
 
-          {erroBusca && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
-              <AlertCircle size={16} />
-              <span>{erroBusca}</span>
-            </div>
-          )}
+          {erroBusca && <Alert tone="danger">{erroBusca}</Alert>}
 
-          {/* Lista de Resultados */}
-          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto">
+          <div className="max-h-56 divide-y divide-line overflow-y-auto rounded-xl border border-line bg-surface">
             {carregando && (
-              <div className="p-6 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
-                <Loader2 size={18} className="animate-spin text-indigo-600" />
+              <div className="flex items-center justify-center gap-2 p-6 text-sm text-fg-muted">
+                <Spinner size="sm" />
                 <span>Buscando competidores...</span>
               </div>
             )}
 
             {!carregando && resultado && resultado.itens.length === 0 && (
-              <div className="p-6 text-center text-slate-500 text-sm">
-                Nenhum competidor encontrado.{' '}
-                <button
-                  type="button"
-                  onClick={() => setModo('novo')}
-                  className="text-indigo-600 hover:underline font-medium"
-                >
-                  Cadastrar novo terceiro
-                </button>
-              </div>
+              <EmptyState
+                className="border-0 py-8"
+                icon={<Search />}
+                title="Nenhum competidor encontrado"
+                action={
+                  <Button variant="secondary" size="sm" onClick={() => setModo('novo')}>
+                    Cadastrar novo terceiro
+                  </Button>
+                }
+              />
             )}
 
             {!carregando &&
@@ -202,162 +179,105 @@ export default function BuscaCompetidor({
                 return (
                   <div
                     key={c.id_competidor}
-                    className={`p-3 flex items-center justify-between hover:bg-slate-50 transition-colors ${
-                      isSelected ? 'bg-indigo-50/50' : ''
-                    }`}
+                    className={cn(
+                      'flex items-center justify-between gap-3 p-3 transition-colors duration-150 hover:bg-surface-muted/60',
+                      isSelected && 'bg-primary-soft',
+                    )}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
-                        <User size={16} />
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                          {c.nome}
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar nome={c.nome} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
+                          <span className="truncate">{c.nome}</span>
                           {c.id_aluno_origem ? (
-                            <span className="text-[11px] font-normal px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-                              Aluno Escola
-                            </span>
+                            <Badge tone="primary">Aluno Escola</Badge>
                           ) : (
-                            <span className="text-[11px] font-normal px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
-                              Terceiro
-                            </span>
+                            <Badge tone="warning">Terceiro</Badge>
                           )}
                         </div>
-                        {c.documento && (
-                          <div className="text-xs text-slate-500">Doc: {c.documento}</div>
-                        )}
+                        {c.documento && <div className="text-xs text-fg-muted">Doc: {c.documento}</div>}
                       </div>
                     </div>
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      variant={isSelected ? 'secondary' : 'primary'}
+                      leftIcon={isSelected ? <UserCheck className="size-3.5" /> : undefined}
                       onClick={() => onSelectCompetidor(c)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
-                        isSelected
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      }`}
                     >
-                      {isSelected ? (
-                        <>
-                          <UserCheck size={14} /> Selecionado
-                        </>
-                      ) : (
-                        'Selecionar'
-                      )}
-                    </button>
+                      {isSelected ? 'Selecionado' : 'Selecionar'}
+                    </Button>
                   </div>
                 );
               })}
           </div>
 
-          {/* Paginação */}
           {resultado && resultado.total > resultado.tamanho && (
-            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-              <span>
-                Total: {resultado.total} competidor(es)
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
+            <div className="flex items-center justify-between pt-1 text-xs text-fg-muted">
+              <span>Total: {resultado.total} competidor(es)</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={pagina <= 1}
                   onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
                 >
                   Anterior
-                </button>
-                <span className="px-2 py-1">Página {pagina}</span>
-                <button
-                  type="button"
+                </Button>
+                <span>Página {pagina}</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={pagina * resultado.tamanho >= resultado.total}
                   onClick={() => setPagina((p) => p + 1)}
-                  className="px-2.5 py-1 border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
                 >
                   Próxima
-                </button>
+                </Button>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Modo: Cadastro de Terceiro Avulso */}
       {modo === 'novo' && (
-        <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <div className="text-xs text-slate-600">
+        <div className="space-y-3 rounded-xl border border-line bg-surface-muted p-4">
+          <p className="text-xs text-fg-muted">
             Cadastre um competidor comunitário avulso (sem matrícula escolar).
-          </div>
+          </p>
 
-          {erroCriacao && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
-              <AlertCircle size={16} />
-              <span>{erroCriacao}</span>
-            </div>
-          )}
+          {erroCriacao && <Alert tone="danger">{erroCriacao}</Alert>}
 
-          <div>
-            <label htmlFor="nome-terceiro" className="block text-xs font-medium text-slate-700 mb-1">
-              Nome do competidor *
-            </label>
-            <input
+          <Field label="Nome do competidor" htmlFor="nome-terceiro" required>
+            <Input
               id="nome-terceiro"
               type="text"
-              required
               value={nomeNovo}
               onChange={(e) => setNomeNovo(e.target.value)}
               placeholder="Ex: João da Silva"
-              aria-label="Nome do competidor"
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-          </div>
+          </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="doc-terceiro" className="block text-xs font-medium text-slate-700 mb-1">
-                Documento (RG/CPF)
-              </label>
-              <input
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Documento (RG/CPF)" htmlFor="doc-terceiro">
+              <Input
                 id="doc-terceiro"
                 type="text"
                 value={docNovo}
                 onChange={(e) => setDocNovo(e.target.value)}
                 placeholder="Ex: 12345678"
-                aria-label="Documento"
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-            </div>
-
-            <div>
-              <label htmlFor="nasc-terceiro" className="block text-xs font-medium text-slate-700 mb-1">
-                Data de Nascimento
-              </label>
-              <input
-                id="nasc-terceiro"
-                type="date"
-                value={nascNovo}
-                onChange={(e) => setNascNovo(e.target.value)}
-                aria-label="Data de nascimento"
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
+            </Field>
+            <Field label="Data de nascimento" htmlFor="nasc-terceiro">
+              <Input id="nasc-terceiro" type="date" value={nascNovo} onChange={(e) => setNascNovo(e.target.value)} />
+            </Field>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setModo('busca')}
-              className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
-            >
+            <Button variant="ghost" size="sm" onClick={() => setModo('busca')}>
               Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={criando || !nomeNovo.trim()}
-              onClick={handleCriarTerceiro}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
-            >
-              {criando && <Loader2 size={14} className="animate-spin" />}
+            </Button>
+            <Button size="sm" loading={criando} disabled={!nomeNovo.trim()} onClick={handleCriarTerceiro}>
               Cadastrar e Selecionar
-            </button>
+            </Button>
           </div>
         </div>
       )}

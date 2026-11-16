@@ -246,7 +246,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
 
     // 4. Navega até o Painel da Edição
     await page.goto(`/dashboard/competicoes/${idCompeticao}`);
-    await expect(page.getByText(`Torneio Disciplina E2E`)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { level: 1, name: /Torneio Disciplina E2E/ })).toBeVisible({ timeout: 10000 });
 
     // 5. Clica na aba "Disciplina"
     const abaDisciplina = page.getByTestId('tab-disciplina');
@@ -258,9 +258,11 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     await expect(painelDisciplina).toBeVisible();
 
     // --- Sub-Aba 1: Suspensões & Cumprimentos ---
-    await expect(page.getByTestId('subtab-suspensoes')).toHaveClass(/bg-blue-600/);
+    // Sub-abas são Radix Tabs: a ativa tem data-state="active" / aria-selected="true".
+    await expect(page.getByTestId('subtab-suspensoes')).toHaveAttribute('data-state', 'active');
+    await expect(page.getByTestId('subtab-suspensoes')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText('Carlos')).toBeVisible();
-    await expect(page.getByText('Vermelho Direto', { exact: true })).toBeVisible();
+    await expect(page.getByText('Vermelho direto', { exact: true })).toBeVisible();
     await expect(
       page.getByText(/suspensão automática por cartão vermelho direto/i)
     ).toBeVisible();
@@ -268,12 +270,17 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     await expect(
       page.locator('[data-testid^="badge-situacao-"]').first()
     ).toContainText('Ativa');
-    await expect(page.getByRole('button', { name: /^cumprir$/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^ajustar$/i })).toBeVisible();
+    // Ações da linha ficam no menu "⋯"
+    await page.getByRole('button', { name: /mais ações da suspensão de carlos/i }).click();
+    await expect(page.getByRole('menuitem', { name: /^cumprir$/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^ajustar$/i })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
 
     // --- Sub-Aba 2: Controle de Cartões ---
     const subtabCartoes = page.getByTestId('subtab-cartoes');
     await subtabCartoes.click();
+    await expect(subtabCartoes).toHaveAttribute('data-state', 'active');
 
     // Nota informativa obrigatória da Spec 7.4
     const notaSegundoAmarelo = page.getByTestId('nota-segundo-amarelo');
@@ -354,7 +361,8 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     await page.goto(`/dashboard/competicoes/${idCompeticao}`);
     await page.getByTestId('tab-disciplina').click();
 
-    // 5. Clica no botão "Cumprir" da suspensão
+    // 5. Abre o menu "⋯" e clica em "Cumprir"
+    await page.getByTestId(`btn-acoes-suspensao-${suspensao.id_suspensao}`).click();
     const btnCumprir = page.getByTestId(`btn-cumprir-${suspensao.id_suspensao}`);
     await expect(btnCumprir).toBeVisible();
     await btnCumprir.click();
@@ -383,8 +391,11 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     const linhaSuspensao = page.getByTestId(`linha-suspensao-${suspensao.id_suspensao}`);
     await expect(linhaSuspensao).toContainText('1 / 1 jogos');
 
-    // Botão de cumprir não deve mais existir para suspensão cumprida
-    await expect(page.getByTestId(`btn-cumprir-${suspensao.id_suspensao}`)).not.toBeVisible();
+    // "Cumprir" não deve mais existir no menu de uma suspensão cumprida
+    await page.getByTestId(`btn-acoes-suspensao-${suspensao.id_suspensao}`).click();
+    await expect(page.getByTestId(`btn-ajustar-${suspensao.id_suspensao}`)).toBeVisible();
+    await expect(page.getByTestId(`btn-cumprir-${suspensao.id_suspensao}`)).toHaveCount(0);
+    await page.keyboard.press('Escape');
   });
 
   test('Cenário 3: cria suspensão manual e ajusta situação com justificativa obrigatória', async ({
@@ -431,7 +442,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     // 4. Modal fecha e nova suspensão aparece na tabela
     await expect(page.getByRole('dialog', { name: /nova suspensão manual/i })).not.toBeVisible();
     await expect(page.getByText('Marcos')).toBeVisible();
-    await expect(page.getByText('Punição Administrativa')).toBeVisible();
+    await expect(page.getByText('Manual', { exact: true })).toBeVisible();
     await expect(page.getByText('Suspensão administrativa por indisciplina no vestiário')).toBeVisible();
     await expect(page.getByText('0 / 2 jogos')).toBeVisible();
 
@@ -448,6 +459,7 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     );
     expect(suspensaoManual).toBeDefined();
 
+    await page.getByTestId(`btn-acoes-suspensao-${suspensaoManual.id_suspensao}`).click();
     const btnAjustar = page.getByTestId(`btn-ajustar-${suspensaoManual.id_suspensao}`);
     await expect(btnAjustar).toBeVisible();
     await btnAjustar.click();
@@ -521,14 +533,15 @@ test.describe('Painel de Disciplina, Cumprimentos e Artilharia (Fatia 3 - Task 8
     // Verifica que o alerta de destaque para EM_REVISAO aparece
     const alertaRevisao = page.getByTestId('alerta-em-revisao');
     await expect(alertaRevisao).toBeVisible();
-    await expect(alertaRevisao).toContainText('Suspensões Requerendo Revisão Administrativa');
+    await expect(alertaRevisao).toContainText('Suspensões em revisão administrativa');
 
     // Verifica o badge especial de EM_REVISAO
     const badgeRevisao = page.getByTestId(`badge-em-revisao-${suspensao.id_suspensao}`);
     await expect(badgeRevisao).toBeVisible();
-    await expect(badgeRevisao).toContainText('Em Revisão');
+    await expect(badgeRevisao).toContainText(/em revisão/i);
 
-    // O botão de ação deve ter o texto "Revisar"
+    // A ação no menu "⋯" deve ter o texto "Revisar"
+    await page.getByTestId(`btn-acoes-suspensao-${suspensao.id_suspensao}`).click();
     const btnRevisar = page.getByTestId(`btn-ajustar-${suspensao.id_suspensao}`);
     await expect(btnRevisar).toBeVisible();
     await expect(btnRevisar).toHaveText('Revisar');

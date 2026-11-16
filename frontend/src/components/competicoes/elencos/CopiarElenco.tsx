@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Copy, AlertTriangle, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { Copy } from 'lucide-react';
+import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Input, Select } from '@/components/ui';
+import { rotuloDoEstado } from '@/lib/rotulos';
 import { competicoesService, isErroApi } from '@/services/competicoes';
 import type { EstadoEdicao, EdicaoCompeticaoDetalhe } from '@/types/competicoes';
 
@@ -25,7 +27,6 @@ export default function CopiarElenco({
   const [carregandoEdicoes, setCarregandoEdicoes] = useState(false);
   const [copiando, setCopiando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState<string | null>(null);
 
   const isRascunho = estadoEdicao === 'RASCUNHO';
 
@@ -34,7 +35,6 @@ export default function CopiarElenco({
 
     setIdOrigemInput('');
     setErro(null);
-    setSucesso(null);
 
     let ativo = true;
     async function carregarHistoricoEdicoes() {
@@ -66,8 +66,6 @@ export default function CopiarElenco({
     };
   }, [idEdicaoCompeticao, isOpen]);
 
-  if (!isOpen) return null;
-
   const handleCopiar = async (e: React.FormEvent) => {
     e.preventDefault();
     const idOrigem = parseInt(idOrigemInput, 10);
@@ -77,13 +75,12 @@ export default function CopiarElenco({
     }
 
     if (!isRascunho) {
-      setErro('A cópia de equipes e elencos só é permitida enquanto a edição destino estiver em RASCUNHO.');
+      setErro('A cópia de equipes e elencos só é permitida enquanto a edição de destino estiver em rascunho.');
       return;
     }
 
     setCopiando(true);
     setErro(null);
-    setSucesso(null);
 
     try {
       await competicoesService.copiarEquipes(idEdicaoCompeticao, idOrigem);
@@ -101,150 +98,80 @@ export default function CopiarElenco({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Copiar Elenco"
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 relative animate-in zoom-in-95"
+    <Dialog open={isOpen} onOpenChange={(aberto) => (!aberto && !copiando ? onClose() : undefined)}>
+      <DialogContent
+        title="Copiar Elenco"
+        description="Replica as equipes e as inscrições de atletas de uma edição anterior para a edição atual."
+        size="md"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
-        >
-          <X size={20} />
-        </button>
+        <form id="form-copiar-elenco" onSubmit={handleCopiar} className="space-y-4">
+          {!isRascunho && (
+            <Alert tone="danger" title="Ação bloqueada">
+              A cópia de elencos só é permitida quando a edição de destino estiver em rascunho. A edição atual está{' '}
+              {rotuloDoEstado('edicao', estadoEdicao).toLowerCase()}.
+            </Alert>
+          )}
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-            <Copy size={24} />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">Copiar Elenco de Edição Anterior</h3>
-            <p className="text-xs text-slate-500">
-              Replica as equipes e inscrições de atletas para a edição atual
-            </p>
-          </div>
-        </div>
+          <Alert tone="warning" title="Escopo da cópia">
+            Apenas equipes e inscrições de competidores são copiadas; partidas e punições não são copiadas.
+          </Alert>
 
-        {/* Bloqueio se não estiver em RASCUNHO */}
-        {!isRascunho && (
-          <div className="p-3.5 mb-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-start gap-2.5">
-            <AlertCircle size={18} className="shrink-0 text-red-600 mt-0.5" />
-            <div>
-              <span className="font-bold">Ação Bloqueada:</span> A cópia de elencos só é permitida quando a edição de destino estiver no estado <span className="font-semibold">RASCUNHO</span>. A edição atual está em estado {estadoEdicao}.
-            </div>
-          </div>
-        )}
+          {erro && <Alert tone="danger">{erro}</Alert>}
 
-        {/* Aviso Explícito: Apenas equipes e inscrições são copiadas */}
-        <div className="p-3.5 mb-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
-          <AlertTriangle size={18} className="shrink-0 text-amber-600 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-semibold text-amber-800">Escopo da Operação de Cópia</p>
-            <p className="text-amber-700 leading-relaxed">
-              Apenas equipes e inscrições de competidores são copiadas; partidas e punições não são copiadas.
-            </p>
-          </div>
-        </div>
+          {edicoesDisponiveis.length > 0 && (
+            <Field label="Edições desta competição" htmlFor="edicao-origem-select">
+              <Select
+                id="edicao-origem-select"
+                value={idOrigemInput}
+                onChange={(e) => setIdOrigemInput(e.target.value)}
+                disabled={!isRascunho || copiando}
+              >
+                {edicoesDisponiveis.map((ed) => (
+                  <option key={ed.id_edicao_competicao} value={ed.id_edicao_competicao}>
+                    Edição {ed.identificacao} ({rotuloDoEstado('edicao', ed.estado)})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
 
-        {erro && (
-          <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-center gap-2">
-            <AlertCircle size={16} className="shrink-0" />
-            <span>{erro}</span>
-          </div>
-        )}
-
-        {sucesso && (
-          <div className="p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center gap-2">
-            <CheckCircle2 size={16} className="shrink-0" />
-            <span>{sucesso}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleCopiar} className="space-y-4">
-          <div>
-            <label htmlFor="edicao-origem" className="block text-xs font-semibold text-slate-700 mb-1">
-              Edição de Origem *
-            </label>
-
-            {edicoesDisponiveis.length > 0 ? (
-              <div className="space-y-2">
-                <select
-                  id="edicao-origem-select"
-                  aria-label="Selecionar edição anterior"
-                  value={idOrigemInput}
-                  onChange={(e) => setIdOrigemInput(e.target.value)}
-                  disabled={!isRascunho || copiando}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  {edicoesDisponiveis.map((ed) => (
-                    <option key={ed.id_edicao_competicao} value={ed.id_edicao_competicao}>
-                      Edição {ed.identificacao} (ID: {ed.id_edicao_competicao}) - {ed.estado}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-[11px] text-slate-500">
-                  Ou digite o ID da edição de origem:
-                </div>
-                <input
-                  id="edicao-origem"
-                  type="number"
-                  aria-label="Edição de origem"
-                  value={idOrigemInput}
-                  onChange={(e) => setIdOrigemInput(e.target.value)}
-                  placeholder="ID da edição de origem"
-                  disabled={!isRascunho || copiando}
-                  className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            ) : (
-              <div>
-                <input
-                  id="edicao-origem"
-                  aria-label="Edição de origem"
-                  type="number"
-                  required
-                  value={idOrigemInput}
-                  onChange={(e) => setIdOrigemInput(e.target.value)}
-                  placeholder="Ex: 1"
-                  disabled={!isRascunho || copiando}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {carregandoEdicoes && (
-                  <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                    <Loader2 size={12} className="animate-spin" /> Buscando edições da competição...
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={copiando}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={!isRascunho || copiando || !idOrigemInput.trim()}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors"
-            >
-              {copiando ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Copy size={16} />
-              )}
-              Confirmar Cópia
-            </button>
-          </div>
+          <Field
+            label="Edição de origem"
+            htmlFor="edicao-origem"
+            required
+            hint={
+              carregandoEdicoes
+                ? 'Buscando edições da competição...'
+                : edicoesDisponiveis.length > 0
+                  ? 'Ou digite o ID da edição de origem.'
+                  : 'Informe o ID da edição de origem.'
+            }
+          >
+            <Input
+              id="edicao-origem"
+              type="number"
+              value={idOrigemInput}
+              onChange={(e) => setIdOrigemInput(e.target.value)}
+              placeholder="Ex: 1"
+              disabled={!isRascunho || copiando}
+            />
+          </Field>
         </form>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose} disabled={copiando}>
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            form="form-copiar-elenco"
+            loading={copiando}
+            disabled={!isRascunho || !idOrigemInput.trim()}
+            leftIcon={<Copy className="size-4" />}
+          >
+            Confirmar Cópia
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
