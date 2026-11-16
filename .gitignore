@@ -33,3 +33,18 @@ coverage.xml
 htmlcov/
 scratch/
 coverage_output.txt
+# Marcadores vazios criados pelo sandbox do Claude Code
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.mcp.json
+/.profile
+/.ripgreprc
+/.zprofile
+/.zshrc
+/.idea
+/.vscode
+/.claude/
+# Backups locais de banco
+/*.sql
