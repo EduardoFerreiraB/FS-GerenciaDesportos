@@ -1,14 +1,22 @@
-'use client';
+import Link from 'next/link';
+import { CalendarX2 } from 'lucide-react';
+import { Button, EmptyState } from '@/components/ui';
 
+/** Rota antiga de eventos públicos: mantida só para não quebrar links antigos. */
 export default function EventoPublicoDetalhesPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-        <h1 className="text-xl font-bold text-slate-800">Recurso descontinuado</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Esta rota de eventos públicos antigos foi descontinuada na reestruturação do módulo esportivo.
-        </p>
-      </div>
-    </div>
+    <main className="flex min-h-screen items-center justify-center bg-canvas p-6 text-fg">
+      <EmptyState
+        className="w-full max-w-md"
+        icon={<CalendarX2 />}
+        title="Recurso descontinuado"
+        description="Esta página de eventos públicos foi substituída pelo novo portal de competições."
+        action={
+          <Button asChild variant="secondary">
+            <Link href="/">Ver competições públicas</Link>
+          </Button>
+        }
+      />
+    </main>
   );
 }

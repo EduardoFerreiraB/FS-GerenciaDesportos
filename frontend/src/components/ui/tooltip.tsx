@@ -16,7 +16,6 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
-            data-ui=""
             side={side}
             sideOffset={6}
             className="z-50 max-w-xs rounded-lg bg-fg px-2.5 py-1.5 text-xs text-canvas shadow-lg"
