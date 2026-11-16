@@ -1,41 +1,83 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { 
-  GraduationCap, 
-  ArrowLeft, 
-  User, 
-  Calendar, 
-  Clock, 
-  Users,
-  ClipboardCheck,
-  Download,
-  CheckCircle,
-  XCircle,
-  CheckSquare,
-  Loader2,
-  AlertTriangle
-} from 'lucide-react';
 import Link from 'next/link';
-import { clsx } from 'clsx';
+import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
+import {
+  Calendar,
+  CheckCheck,
+  CheckSquare,
+  ClipboardCheck,
+  Clock,
+  Dumbbell,
+  Pencil,
+  User,
+  Users,
+} from 'lucide-react';
 import api from '@/lib/api';
+import { cn } from '@/lib/cn';
+import { useBreadcrumb } from '@/context/BreadcrumbContext';
+import { useNotification } from '@/context/NotificationContext';
+import { formatarData, formatarHora } from '@/lib/formatos';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Skeleton,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
+
+const ROTULO_DIA: Record<string, string> = {
+  SEG: 'Segunda', TER: 'Terça', QUA: 'Quarta', QUI: 'Quinta', SEX: 'Sexta', SAB: 'Sábado', DOM: 'Domingo',
+};
+
+function iniciais(nome: string) {
+  return (nome || '?').trim().split(/\s+/).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('');
+}
+
+function descreverDias(dias: unknown): string | null {
+  if (Array.isArray(dias)) return dias.length ? dias.map((d) => ROTULO_DIA[d] || d).join(', ') : null;
+  if (typeof dias === 'string' && dias) return dias.split(',').map((d) => ROTULO_DIA[d.trim()] || d.trim()).join(', ');
+  return null;
+}
 
 export default function DetalhesTurmaPage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id;
+  const { toast } = useNotification();
   const [activeTab, setActiveTab] = useState<'alunos' | 'frequencia'>('alunos');
-  
-  const { data: turma, error: errorTurma, isLoading: loadingTurma } = useSWR(id ? `/turmas/${id}` : null, fetcher);
-  const { data: matriculas, isLoading: loadingMatriculas } = useSWR(id ? `/matriculas/?turma_id=${id}` : null, fetcher);
-  
+
+  const { data: turma, error: errorTurma, isLoading: loadingTurma, mutate: recarregarTurma } = useSWR(id ? `/turmas/${id}` : null, fetcher);
+  const { data: matriculas, error: errorMatriculas, isLoading: loadingMatriculas, mutate: recarregarMatriculas } = useSWR(id ? `/matriculas/?turma_id=${id}` : null, fetcher);
+
   const [chamada, setChamada] = useState<Record<number, 'P' | 'A' | null>>({});
   const [dataChamada, setDataChamada] = useState(new Date().toISOString().split('T')[0]);
   const [loadingChamada, setLoadingChamada] = useState(false);
+  const [salvandoChamada, setSalvandoChamada] = useState(false);
+
+  const nomeTurma = turma?.descricao || (id ? `Turma #${id}` : 'Turma');
+  useBreadcrumb([{ label: 'Turmas', href: '/dashboard/turmas' }, { label: nomeTurma }]);
 
   const alunos = matriculas?.map((m: any) => m.aluno) || [];
 
@@ -76,103 +118,259 @@ export default function DetalhesTurmaPage() {
             return m ? { id_matricula: m.id_matricula, status: status === 'P' ? 'Presente' : 'Ausente' } : null;
         }).filter(Boolean);
 
-    if (presencasParaEnviar.length === 0) return alert("Marque pelo menos um aluno.");
+    if (presencasParaEnviar.length === 0) {
+      toast('Marque pelo menos um aluno.', 'warning');
+      return;
+    }
 
+    setSalvandoChamada(true);
     try {
       await api.post('/presencas/lote', { data_aula: dataChamada, id_turma: parseInt(id as string), presencas: presencasParaEnviar });
-      alert('Frequência salva com sucesso!');
+      toast('Frequência salva com sucesso!', 'success');
     } catch (error) {
-      alert('Erro ao salvar frequência.');
+      toast('Erro ao salvar frequência.', 'error');
+    } finally {
+      setSalvandoChamada(false);
     }
   };
 
-  if (loadingTurma) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600" size={48}/></div>;
-  if (errorTurma) return <div className="text-center p-20 text-red-500"><AlertTriangle size={48} className="mx-auto mb-4"/><h2>Erro ao carregar turma.</h2></div>;
+  if (loadingTurma) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-8 w-72" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Skeleton className="h-72 w-full" />
+          <Skeleton className="h-72 w-full lg:col-span-2" />
+        </div>
+      </div>
+    );
+  }
+
+  if (errorTurma) {
+    return (
+      <div>
+        <Alert
+          tone="danger"
+          title="Erro ao carregar turma."
+          action={
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={() => recarregarTurma()}>Tentar novamente</Button>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/turmas')}>Voltar para a lista</Button>
+            </div>
+          }
+        >
+          Não foi possível obter os dados desta turma.
+        </Alert>
+      </div>
+    );
+  }
+
+  const horario = turma?.horario_inicio || turma?.horario_fim
+    ? `${formatarHora(turma?.horario_inicio) || '—'} - ${formatarHora(turma?.horario_fim) || '—'}`
+    : null;
+  const marcados = Object.values(chamada).filter(Boolean).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ArrowLeft size={24}/></button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">{turma?.descricao}<span className="text-sm font-bold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">{turma?.categoria_idade}</span></h1>
-          <p className="text-slate-500">Gestão de alunos e frequência.</p>
-        </div>
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            <span className="min-w-0 break-words">{nomeTurma}</span>
+            {turma?.categoria_idade ? <Badge tone="primary">{turma.categoria_idade}</Badge> : null}
+          </span>
+        }
+        description="Gestão de alunos e frequência."
+        actions={
+          <Button asChild variant="secondary" leftIcon={<Pencil className="size-4" />}>
+            <Link href={`/dashboard/turmas/${id}/editar`}>Editar Turma</Link>
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><GraduationCap className="text-indigo-600" size={20}/>Informações</h2>
-            <div className="space-y-4">
-              <InfoItem label="Modalidade" value={turma?.modalidade?.nome} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="h-fit">
+          <CardHeader title="Informações" />
+          <CardBody>
+            <dl className="space-y-4">
+              <InfoItem label="Modalidade" value={turma?.modalidade?.nome} icon={Dumbbell} />
               <InfoItem label="Professor" value={turma?.professor?.nome} icon={User} />
-              <InfoItem label="Dias" value={turma?.dias_semana} icon={Calendar} />
-              <InfoItem label="Horário" value={`${turma?.horario_inicio} - ${turma?.horario_fim}`} icon={Clock} />
-              <div className="pt-4 border-t border-slate-100"><p className="text-sm text-slate-500 leading-relaxed">{turma?.descricao}</p></div>
-            </div>
-          </div>
-          <Link href={`/dashboard/turmas/${id}/editar`} className="block"><button className="w-full py-3 rounded-xl border border-indigo-200 text-indigo-600 font-semibold hover:bg-indigo-50 transition-colors">Editar Turma</button></Link>
-        </div>
+              <InfoItem label="Dias" value={descreverDias(turma?.dias_semana)} icon={Calendar} />
+              <InfoItem label="Horário" value={horario} icon={Clock} numerico />
+              <InfoItem label="Alunos matriculados" value={matriculas ? String(alunos.length) : null} icon={Users} numerico />
+            </dl>
+          </CardBody>
+        </Card>
 
-        <div className="lg:col-span-2">
-          <div className="flex gap-4 mb-4 border-b border-slate-200">
-            <button onClick={() => setActiveTab('alunos')} className={clsx("pb-3 px-2 font-semibold text-sm flex items-center gap-2 transition-all border-b-2", activeTab === 'alunos' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700")}><Users size={18}/>Alunos</button>
-            <button onClick={() => setActiveTab('frequencia')} className={clsx("pb-3 px-2 font-semibold text-sm flex items-center gap-2 transition-all border-b-2", activeTab === 'frequencia' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-700")}><ClipboardCheck size={18}/>Frequência</button>
-          </div>
+        <div className="min-w-0 lg:col-span-2">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'alunos' | 'frequencia')}>
+            <TabsList>
+              <TabsTrigger value="alunos" icon={<Users className="size-4" />}>Alunos</TabsTrigger>
+              <TabsTrigger value="frequencia" icon={<ClipboardCheck className="size-4" />}>Frequência</TabsTrigger>
+            </TabsList>
 
-          {activeTab === 'alunos' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"><h2 className="font-bold text-slate-800">Lista de Matriculados <span className="ml-2 text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{alunos.length}</span></h2></div>
-              <div className="divide-y divide-slate-100">
-                {loadingMatriculas ? <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600"/></div> : 
-                  alunos.map((aluno: any) => (
-                    <div key={aluno.id_aluno} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">{aluno.nome_completo.charAt(0)}</div><span className="font-medium text-slate-700">{aluno.nome_completo}</span></div>
-                      <span className="text-xs font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">Matriculado</span>
-                    </div>
-                  ))
-                }
-              </div>
-            </div>
-          )}
+            <TabsContent value="alunos">
+              <Card>
+                <CardHeader
+                  title={<span className="flex items-center gap-2">Lista de Matriculados <Badge className="tabular-nums">{alunos.length}</Badge></span>}
+                />
+                {loadingMatriculas ? (
+                  <CardBody className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </CardBody>
+                ) : errorMatriculas ? (
+                  <CardBody>
+                    <Alert tone="danger" title="Erro ao carregar alunos" action={<Button variant="secondary" size="sm" onClick={() => recarregarMatriculas()}>Tentar novamente</Button>}>
+                      Não foi possível obter os alunos desta turma.
+                    </Alert>
+                  </CardBody>
+                ) : alunos.length === 0 ? (
+                  <CardBody>
+                    <EmptyState
+                      icon={<Users />}
+                      title="Nenhum aluno matriculado"
+                      description="Matricule alunos nesta turma pela tela de Matrículas."
+                      action={<Button asChild variant="secondary"><Link href="/dashboard/matriculas">Nova matrícula</Link></Button>}
+                    />
+                  </CardBody>
+                ) : (
+                  <CardBody className="p-0">
+                  <Table embutida>
+                    <THead>
+                      <TR className="hover:bg-transparent">
+                        <TH>Aluno</TH>
+                        <TH className="hidden sm:table-cell">Nascimento</TH>
+                        <TH className="text-right">Situação</TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {alunos.map((aluno: any) => (
+                        <TR key={aluno.id_aluno}>
+                          <TD>
+                            <div className="flex items-center gap-3">
+                              <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary">
+                                {iniciais(aluno.nome_completo)}
+                              </span>
+                              <Link href={`/dashboard/alunos/${aluno.id_aluno}`} className="truncate font-medium text-fg hover:text-primary" title={aluno.nome_completo}>
+                                {aluno.nome_completo}
+                              </Link>
+                            </div>
+                          </TD>
+                          <TD className="hidden whitespace-nowrap tabular-nums text-fg-muted sm:table-cell">{formatarData(aluno.data_nascimento) || '—'}</TD>
+                          <TD className="text-right"><Badge tone="success" dot>Matriculado</Badge></TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                  </CardBody>
+                )}
+              </Card>
+            </TabsContent>
 
-          {activeTab === 'frequencia' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div><h2 className="font-bold text-slate-800">Controle de Frequência</h2><p className="text-xs text-slate-500 mt-1">Selecione a data e marque a presença.</p></div>
-                <div className="flex items-center gap-2"><input type="date" value={dataChamada} onChange={(e) => setDataChamada(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 outline-none"/><button className="p-2 text-slate-500 hover:text-indigo-600 transition-all"><Download size={20}/></button></div>
-              </div>
-              <div className="p-4 space-y-3">
-                {loadingMatriculas || loadingChamada ? <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600"/></div> : 
-                  alunos.map((aluno: any) => {
-                    const status = chamada[aluno.id_aluno];
-                    return (
-                      <div key={aluno.id_aluno} className={clsx("flex items-center justify-between p-4 rounded-xl border transition-all duration-300", status === 'P' ? 'bg-emerald-50 border-emerald-200' : status === 'A' ? 'bg-red-50 border-red-200' : 'bg-white border-slate-100')}>
-                        <div className="flex items-center gap-3"><div className={clsx("w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs", status === 'P' ? 'bg-emerald-200 text-emerald-700' : status === 'A' ? 'bg-red-200 text-red-700' : 'bg-slate-100 text-slate-500')}>{aluno.nome_completo.charAt(0)}</div><span className="font-medium">{aluno.nome_completo}</span></div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handlePresenca(aluno.id_aluno, 'P')} className={clsx("px-3 py-1.5 rounded-lg text-sm font-semibold transition-all", status === 'P' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400')}>Presente</button>
-                          <button onClick={() => handlePresenca(aluno.id_aluno, 'A')} className={clsx("px-3 py-1.5 rounded-lg text-sm font-semibold transition-all", status === 'A' ? 'bg-red-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400')}>Ausente</button>
+            <TabsContent value="frequencia">
+              <Card>
+                <CardHeader
+                  title="Controle de Frequência"
+                  description={`Aula de ${formatarData(dataChamada) || '—'}. Selecione a data e marque a presença.`}
+                  actions={
+                    <Field label={<span className="sr-only">Data da aula</span>} htmlFor="data-chamada" className="gap-0">
+                      <Input id="data-chamada" type="date" value={dataChamada} onChange={(e) => setDataChamada(e.target.value)} className="w-auto" />
+                    </Field>
+                  }
+                  className="flex-col sm:flex-row"
+                />
+                <CardBody className="space-y-2">
+                  {loadingMatriculas || loadingChamada ? (
+                    <>
+                      <Skeleton className="h-14 w-full" />
+                      <Skeleton className="h-14 w-full" />
+                      <Skeleton className="h-14 w-full" />
+                    </>
+                  ) : alunos.length === 0 ? (
+                    <EmptyState icon={<ClipboardCheck />} title="Nenhum aluno para a chamada" description="A turma ainda não tem alunos matriculados." />
+                  ) : (
+                    alunos.map((aluno: any) => {
+                      const status = chamada[aluno.id_aluno];
+                      return (
+                        <div
+                          key={aluno.id_aluno}
+                          className={cn(
+                            'flex flex-col gap-3 rounded-lg border p-3 transition-colors duration-150 sm:flex-row sm:items-center sm:justify-between',
+                            status === 'P' ? 'border-success/40 bg-success-soft' : status === 'A' ? 'border-danger/40 bg-danger-soft' : 'border-line bg-surface',
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span aria-hidden="true" className={cn(
+                              'flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                              status === 'P' ? 'bg-surface text-success' : status === 'A' ? 'bg-surface text-danger' : 'bg-surface-muted text-fg-muted',
+                            )}>
+                              {iniciais(aluno.nome_completo)}
+                            </span>
+                            <span className="truncate font-medium text-fg" title={aluno.nome_completo}>{aluno.nome_completo}</span>
+                          </div>
+                          <div className="flex items-center gap-2" role="group" aria-label={`Presença de ${aluno.nome_completo}`}>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-pressed={status === 'P'}
+                              onClick={() => handlePresenca(aluno.id_aluno, 'P')}
+                              className={cn('h-9', status === 'P' && 'border-success bg-success-soft text-success hover:bg-success-soft')}
+                            >
+                              Presente
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-pressed={status === 'A'}
+                              onClick={() => handlePresenca(aluno.id_aluno, 'A')}
+                              className={cn('h-9', status === 'A' && 'border-danger bg-danger-soft text-danger hover:bg-danger-soft')}
+                            >
+                              Ausente
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                }
-              </div>
-              <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                <button onClick={markAllPresent} className="text-sm font-semibold text-indigo-600 flex items-center gap-2 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"><CheckSquare size={16}/>Marcar Todos Presentes</button>
-                <button onClick={saveChamada} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-lg transition-all flex items-center gap-2"><ClipboardCheck size={18}/>Salvar Chamada</button>
-              </div>
-            </div>
-          )}
+                      );
+                    })
+                  )}
+                </CardBody>
+                <CardFooter className="flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+                  <Button variant="ghost" leftIcon={<CheckSquare className="size-4" />} onClick={markAllPresent} disabled={alunos.length === 0}>
+                    Marcar Todos Presentes
+                  </Button>
+                  <div className="flex items-center justify-end gap-3">
+                    <span className="text-xs tabular-nums text-fg-muted">
+                      <CheckCheck aria-hidden="true" className="mr-1 inline size-3.5" />
+                      {marcados} de {alunos.length} marcados
+                    </span>
+                    <Button leftIcon={<ClipboardCheck className="size-4" />} onClick={saveChamada} loading={salvandoChamada}>
+                      Salvar Chamada
+                    </Button>
+                  </div>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
   );
 }
 
-function InfoItem({ label, value, icon: Icon }: any) {
-  const displayValue = Array.isArray(value) ? value.join(', ') : value;
+function InfoItem({ label, value, icon: Icon, numerico }: { label: string; value?: string | null; icon: React.ElementType; numerico?: boolean }) {
   return (
-    <div><p className="text-xs text-slate-400 font-semibold uppercase mb-0.5 flex items-center gap-1">{Icon && <Icon size={12}/>}{label}</p><p className="text-slate-800 font-medium">{displayValue || '-'}</p></div>
+    <div className="flex items-start gap-3">
+      <span aria-hidden="true" className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-fg-muted">
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0">
+        <dt className="text-xs font-medium text-fg-subtle">{label}</dt>
+        <dd className={cn('break-words text-sm font-medium', value ? 'text-fg' : 'text-fg-muted', numerico && 'tabular-nums')}>{value || 'A definir'}</dd>
+      </div>
+    </div>
   );
 }

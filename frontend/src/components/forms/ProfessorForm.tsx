@@ -3,17 +3,10 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { 
-  UserCheck, 
-  Save, 
-  X, 
-  ShieldCheck, 
-  User, 
-  AlertCircle,
-  Pencil
-} from 'lucide-react';
-import { clsx } from 'clsx';
 import api from '@/lib/api';
+import { useNotification } from '@/context/NotificationContext';
+import { useBreadcrumb } from '@/context/BreadcrumbContext';
+import { Alert, Button, Card, CardBody, CardHeader, Field, Input, PageHeader } from '@/components/ui';
 
 interface ProfessorFormProps {
   initialData?: any;
@@ -22,6 +15,11 @@ interface ProfessorFormProps {
 
 export default function ProfessorForm({ initialData, isEditing = false }: ProfessorFormProps) {
   const router = useRouter();
+  const { toast } = useNotification();
+  useBreadcrumb([
+    { label: 'Professores', href: '/dashboard/professores' },
+    { label: isEditing ? (initialData?.nome ?? 'Editar professor') : 'Novo professor' },
+  ]);
   const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
     mode: 'onChange'
   });
@@ -42,16 +40,16 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
       const payload = { ...data };
       if (isEditing) {
         await api.put(`/professores/${initialData.id_professor}`, payload);
-        alert('Professor atualizado com sucesso!');
+        toast('Professor atualizado com sucesso!', 'success');
       } else {
         await api.post('/professores/', payload);
-        alert('Professor cadastrado com sucesso!');
+        toast('Professor cadastrado com sucesso!', 'success');
       }
       router.push('/dashboard/professores');
     } catch (error: any) {
       console.error(error);
       const msg = error.response?.data?.detail || 'Erro ao salvar professor.';
-      alert(Array.isArray(msg) ? msg[0].msg : msg);
+      toast(Array.isArray(msg) ? msg[0].msg : msg, 'error');
     }
   };
 
@@ -61,158 +59,63 @@ export default function ProfessorForm({ initialData, isEditing = false }: Profes
     }
   };
 
+  const msgErro = (e: any) => (e?.message as string | undefined);
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-12">
-      
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          {isEditing ? <Pencil className="text-emerald-600" size={28} /> : <UserCheck className="text-emerald-600" size={28} />}
-          {isEditing ? 'Editar Professor' : 'Cadastrar Professor'}
-        </h1>
-        <p className="text-slate-500 mt-1">
-          {isEditing ? 'Atualize as informações do professor.' : 'Adicione um novo membro à equipe e configure seu acesso.'}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* 1. Dados Pessoais */}
-        <div className="space-y-6">
-          <CardSection title="Informações Pessoais" icon={User} theme="emerald">
-            <div className="space-y-4">
-              <Input 
-                label="Nome Completo" 
-                placeholder="Ex: Ricardo Oliveira" 
-                register={register('nome', { required: 'O nome é obrigatório' })}
-                error={errors.nome}
-                theme="emerald"
-                required
-              />
-              <Input 
-                label="CPF" 
-                placeholder="Apenas números" 
-                register={register('cpf', { 
-                  required: 'O CPF é obrigatório',
-                  ...numberRegisterOptions
-                })}
-                error={errors.cpf}
-                theme="emerald"
-                required
-              />
-              <Input 
-                label="WhatsApp / Contato" 
-                placeholder="Apenas números" 
-                register={register('contato', { 
-                  required: 'O contato é obrigatório',
-                  ...numberRegisterOptions
-                })}
-                error={errors.contato}
-                theme="emerald"
-                required
-              />
-            </div>
-          </CardSection>
-        </div>
-
-        {/* 2. Configurações de Acesso */}
-        <div className="space-y-6">
-          <CardSection title="Acesso ao Sistema" icon={ShieldCheck} theme="emerald">
-            <div className="space-y-4">
-              <Input 
-                label="Nome de Usuário" 
-                placeholder="Ex: ricardo.oliveira" 
-                register={register('username', { required: 'O usuário é obrigatório' })}
-                error={errors.username}
-                theme="emerald"
-                disabled={isEditing}
-                required
-              />
-              {!isEditing && (
-                <Input 
-                  label="Senha Inicial" 
-                  type="password"
-                  placeholder="••••••••" 
-                  register={register('password', { required: 'A senha é obrigatória', minLength: { value: 6, message: 'Mínimo 6 caracteres' } })}
-                  error={errors.password}
-                  theme="emerald"
-                  required
-                />
-              )}
-              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-                <p className="text-xs text-emerald-700 leading-relaxed">
-                  <strong>Nota:</strong> Este usuário possui acesso de <strong>Professor</strong>. 
-                  Ele poderá visualizar suas turmas, alunos vinculados e realizar chamadas.
-                </p>
-              </div>
-            </div>
-          </CardSection>
-        </div>
-
-      </div>
-
-      {/* Botões de Ação */}
-      <div className="flex items-center justify-end gap-4 pt-4 border-t border-slate-200">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-6 py-3 rounded-xl border border-red-200 text-red-600 font-semibold hover:bg-red-50 transition-colors flex items-center gap-2"
-        >
-          <X size={20} />
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70"
-        >
-          {isSubmitting ? 'Salvando...' : <><Save size={20} /> {isEditing ? 'Salvar Alterações' : 'Cadastrar Professor'}</>}
-        </button>
-      </div>
-
-    </form>
-  );
-}
-
-// --- Componentes Locais ---
-
-function CardSection({ title, icon: Icon, children, theme }: any) {
-  const themeClasses = theme === 'emerald' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600';
-  
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow duration-300 h-full">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/30">
-        <div className={clsx("p-2 rounded-lg", themeClasses)}>
-          <Icon size={20} />
-        </div>
-        <h3 className="font-bold text-slate-800 text-lg">{title}</h3>
-      </div>
-      <div className="p-6">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Input({ label, type = "text", placeholder, register, error, theme, disabled, required }: any) {
-  const focusClasses = theme === 'emerald' ? 'focus:ring-emerald-500/20 focus:border-emerald-500' : 'focus:ring-primary/20 focus:border-primary';
-  
-  return (
-    <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        type={type}
-        disabled={disabled}
-        className={clsx(
-          "w-full px-4 py-3 bg-slate-50 border rounded-xl focus:ring-2 outline-none transition-all placeholder:text-slate-400 disabled:opacity-50 disabled:bg-slate-100",
-          error ? "border-red-300 focus:ring-red-200 focus:border-red-400" : `border-slate-200 ${focusClasses}`
-        )}
-        placeholder={placeholder}
-        {...register}
+    <div>
+      <PageHeader
+        title={isEditing ? 'Editar professor' : 'Novo professor'}
+        description={isEditing ? 'Atualize as informações do professor.' : 'Adicione um novo membro à equipe e configure seu acesso.'}
       />
-      {error && <p className="text-xs text-red-500 flex items-center gap-1 ml-1"><AlertCircle size={12} />{error.message}</p>}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader title="Dados pessoais" />
+            <CardBody className="space-y-5">
+              <Field label="Nome completo" htmlFor="nome" required error={msgErro(errors.nome)}>
+                <Input id="nome" placeholder="Ex: Ricardo Oliveira" {...register('nome', { required: 'O nome é obrigatório' })} />
+              </Field>
+              <Field label="CPF" htmlFor="cpf" required error={msgErro(errors.cpf)}>
+                <Input id="cpf" inputMode="numeric" placeholder="Apenas números" {...register('cpf', { required: 'O CPF é obrigatório', ...numberRegisterOptions })} />
+              </Field>
+              <Field label="WhatsApp / contato" htmlFor="contato" required error={msgErro(errors.contato)}>
+                <Input id="contato" inputMode="numeric" placeholder="Apenas números" {...register('contato', { required: 'O contato é obrigatório', ...numberRegisterOptions })} />
+              </Field>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Acesso ao sistema" />
+            <CardBody className="space-y-5">
+              <Field label="Nome de usuário" htmlFor="username" required error={msgErro(errors.username)}>
+                <Input id="username" placeholder="Ex: ricardo.oliveira" disabled={isEditing} {...register('username', { required: 'O usuário é obrigatório' })} />
+              </Field>
+              {!isEditing && (
+                <Field label="Senha inicial" htmlFor="password" required error={msgErro(errors.password)}>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    {...register('password', { required: 'A senha é obrigatória', minLength: { value: 6, message: 'Mínimo 6 caracteres' } })}
+                  />
+                </Field>
+              )}
+              <Alert tone="info">
+                Este usuário terá acesso de <strong>Professor</strong>: poderá visualizar suas turmas, alunos vinculados e realizar chamadas.
+              </Alert>
+            </CardBody>
+          </Card>
+        </div>
+
+        <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end gap-3 border-t border-line bg-canvas/90 px-1 py-4 backdrop-blur">
+          <Button type="button" variant="secondary" onClick={() => router.back()}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={isSubmitting}>
+            {isEditing ? 'Salvar alterações' : 'Cadastrar professor'}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
