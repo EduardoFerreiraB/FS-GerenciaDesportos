@@ -85,6 +85,20 @@ da de 28/09:
    informativo opcional, sem unicidade; o cadastro foca nome e demais dados do
    competidor. Ver seção 5.5.
 
+7. **Decisões de 2026-10-19, após a revisão das fatias 0–3:**
+   - Gerar a tabela já leva a edição para `EM_ANDAMENTO`; "iniciar edição" sobre tabela gerada é
+     idempotente. Substitui as linhas "Gerar tabela" e "Desfazer tabela" da seção 7.5 quanto ao estado.
+   - A consulta do painel disciplinar pode reconciliar e gravar as sanções automáticas.
+   - **Exclusão em cascata.** Excluir uma edição apaga, em qualquer estado, tudo o que pertence a ela
+     (equipes, elencos, grupos, chaveamento, partidas, súmulas, disciplina, decisões); competidores e
+     auditoria permanecem. Excluir uma equipe apaga seus atletas (inscrições), com a edição em rascunho.
+     Substitui "Exclusão física somente de rascunho…" e "Não configurar cascata…" da seção 7.5.
+   - **Competição é o principal; edição é secundária.** Excluir uma competição apaga, em cascata,
+     todas as suas edições. Excluir ou cancelar uma edição mantém a competição, que pode receber
+     novas edições. Exclusões pedem confirmação digitando o nome.
+   - Páginas de harness de teste não entram no build de produção.
+   - Paginação das listas públicas fica para a etapa de refinamento do frontend.
+
 Decisões de domínio preservadas da especificação de 28/09: competidores
 independentes dos alunos com importação opcional sem sincronização; equipes e
 elencos pertencem à edição; cópia de elenco entre edições; ocorrências como fonte
@@ -663,9 +677,10 @@ das equipes na tabela — fica bloqueada com tabela gerada. Desfazê-la permite
 editar apenas antes do início. Ajuste de descrição, publicação e agendamento tem
 operação própria e nunca reabre configuração esportiva implicitamente.
 
-Exclusão física somente de rascunho sem disputa nem histórico. Bloquear exclusão
-de evento ou competição com edições, e de edição de evento com competições
-vinculadas. Não configurar cascata de pai que apague resultados.
+Exclusão de edição é física e em cascata, em qualquer estado (decisão de
+2026-10-19, seção 3 item 7); exclusão de competição apaga todas as suas edições;
+exclusão de equipe apaga seus atletas e exige edição em rascunho. Bloquear exclusão
+de evento com edições e de edição de evento com competições vinculadas.
 
 ### 7.6 Portão de saída da fatia 3
 
