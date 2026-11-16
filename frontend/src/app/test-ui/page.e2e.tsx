@@ -58,7 +58,7 @@ export default function VitrinePage() {
   const [aba, setAba] = useState('geral');
 
   return (
-    <main data-ui="" className="mx-auto max-w-6xl space-y-8 bg-canvas p-6 text-fg">
+    <main className="mx-auto max-w-6xl space-y-8 bg-canvas p-6 text-fg">
       <PageHeader
         title="Vitrine de componentes"
         description="Todas as variantes nos temas claro e escuro."

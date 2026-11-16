@@ -17,7 +17,6 @@ export function DropdownMenuContent({
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Content
-        data-ui=""
         align={align}
         sideOffset={sideOffset}
         className={cn(

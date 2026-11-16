@@ -122,7 +122,7 @@ test.describe('Componentes de UI (vitrine /test-ui)', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
-  test('isolamento do legado: tema escuro mantém as cores dos tokens', async ({ page }) => {
+  test('tema escuro: elementos com as mesmas classes de token têm as mesmas cores', async ({ page }) => {
     await page.getByRole('button', { name: 'Escuro' }).click();
     await expect(page.locator('html')).toHaveClass(/dark/);
     const cores = await page.evaluate(() => {
@@ -131,7 +131,7 @@ test.describe('Componentes de UI (vitrine /test-ui)', () => {
       h2.textContent = 'Título isolado';
       const input = document.createElement('input');
       input.className = 'bg-surface text-fg';
-      const raiz = document.querySelector('[data-ui]')!;
+      const raiz = document.querySelector('main')!;
       raiz.append(h2, input);
       const ref = document.createElement('div');
       ref.className = 'text-fg-muted';
@@ -155,7 +155,7 @@ test.describe('Componentes de UI (vitrine /test-ui)', () => {
     expect(cores.inputFundo).toBe(cores.inputFundoEsperado);
   });
 
-  test('isolamento do legado em portal: Input e título do modal mantêm as cores dos tokens', async ({ page }) => {
+  test('tema escuro em portal: Input e título do modal usam as cores dos tokens', async ({ page }) => {
     await page.getByRole('button', { name: 'Escuro' }).click();
     await expect(page.locator('html')).toHaveClass(/dark/);
     await page.getByRole('button', { name: 'Modal com campo (abrir)' }).click();
@@ -170,8 +170,8 @@ test.describe('Componentes de UI (vitrine /test-ui)', () => {
       };
       const campo = document.querySelector('[data-testid="campo-modal"]')!;
       const titulo = document.querySelector('[role="dialog"] h2')!;
-      // Referências com as mesmas classes, dentro da raiz [data-ui] da vitrine.
-      const raiz = document.querySelector('main[data-ui]')!;
+      // Referências com as mesmas classes, dentro do main da vitrine.
+      const raiz = document.querySelector('main')!;
       const refCampo = raiz.querySelector('#v-nome')!;
       const refTitulo = document.createElement('div');
       refTitulo.className = 'text-fg';

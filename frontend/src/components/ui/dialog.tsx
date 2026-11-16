@@ -50,9 +50,8 @@ export function DialogContent({
 
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay data-ui="" className="fixed inset-0 z-50 bg-fg/40 data-[state=open]:animate-overlay-in" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-fg/40 data-[state=open]:animate-overlay-in" />
       <DialogPrimitive.Content
-        data-ui=""
         {...(description ? {} : { 'aria-describedby': undefined })}
         className={cn(
           'fixed z-50 flex flex-col border-line bg-surface text-fg shadow-lg outline-none',
