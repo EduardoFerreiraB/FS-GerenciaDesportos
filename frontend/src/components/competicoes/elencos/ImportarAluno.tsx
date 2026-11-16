@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Info, Search, Download, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { Search, Download, UserX } from 'lucide-react';
+import { Alert, Button, EmptyState, Input, Spinner } from '@/components/ui';
+import { formatarData } from '@/lib/formatos';
 import { useAuth } from '@/context/AuthContext';
 import { alunoService } from '@/services';
 import { competicoesService, isErroApi } from '@/services/competicoes';
@@ -64,15 +66,9 @@ export default function ImportarAluno({ onAlunoImportado, onCancel }: ImportarAl
 
   if (!temPermissao) {
     return (
-      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm space-y-2">
-        <div className="flex items-center gap-2 font-semibold">
-          <ShieldAlert size={18} />
-          <span>Acesso Restrito</span>
-        </div>
-        <p>
-          Apenas coordenadores e administradores possuem autorização para importar registros de alunos da escolinha como competidores esportivos.
-        </p>
-      </div>
+      <Alert tone="warning" title="Acesso restrito">
+        Apenas coordenadores e administradores possuem autorização para importar registros de alunos da escolinha como competidores esportivos.
+      </Alert>
     );
   }
 
@@ -102,105 +98,71 @@ export default function ImportarAluno({ onAlunoImportado, onCancel }: ImportarAl
 
   return (
     <div className="space-y-4">
-      {/* Banner Informativo de Desacoplamento e Preservação */}
-      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs flex gap-2.5">
-        <Info size={18} className="shrink-0 text-blue-600 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold text-blue-800">Preservação de Histórico Esportivo</p>
-          <p className="text-blue-700 leading-relaxed">
-            A importação cria um perfil esportivo autônomo. O histórico e as participações deste atleta na competição serão integralmente preservados mesmo se o aluno for futuramente desvinculado da escola.
-          </p>
-        </div>
-      </div>
+      <Alert tone="info" title="Preservação de histórico esportivo">
+        A importação cria um perfil esportivo autônomo. O histórico e as participações deste atleta na competição serão integralmente preservados mesmo se o aluno for futuramente desvinculado da escola.
+      </Alert>
 
-      {erro && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs flex items-center gap-2">
-          <AlertCircle size={16} />
-          <span>{erro}</span>
-        </div>
-      )}
+      {erro && <Alert tone="danger">{erro}</Alert>}
+      {sucesso && <Alert tone="success">{sucesso}</Alert>}
 
-      {sucesso && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center gap-2">
-          <CheckCircle2 size={16} />
-          <span>{sucesso}</span>
-        </div>
-      )}
-
-      {/* Campo de Busca */}
       <div className="relative">
-        <input
+        <Input
           type="text"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar aluno por nome..."
           aria-label="Buscar aluno"
-          className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="pl-9"
         />
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" />
       </div>
 
-      {/* Lista de Alunos Elegíveis */}
-      <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-64 overflow-y-auto bg-white">
+      <div className="max-h-64 divide-y divide-line overflow-y-auto rounded-xl border border-line bg-surface">
         {carregando && (
-          <div className="p-8 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
-            <Loader2 size={18} className="animate-spin text-indigo-600" />
+          <div className="flex items-center justify-center gap-2 p-8 text-sm text-fg-muted">
+            <Spinner size="sm" />
             <span>Carregando alunos da escola...</span>
           </div>
         )}
 
         {!carregando && alunosFiltrados.length === 0 && (
-          <div className="p-8 text-center text-slate-400 text-sm">
-            Nenhum aluno encontrado para importação.
-          </div>
+          <EmptyState
+            className="border-0"
+            icon={<UserX />}
+            title="Nenhum aluno encontrado"
+            description="Nenhum aluno encontrado para importação."
+          />
         )}
 
         {!carregando &&
-          alunosFiltrados.map((aluno) => {
-            const estaImportando = importandoId === aluno.id_aluno;
-            return (
-              <div
-                key={aluno.id_aluno}
-                className="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-              >
-                <div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {aluno.nome_completo}
-                  </div>
-                  {aluno.data_nascimento && (
-                    <div className="text-xs text-slate-500">
-                      Nascimento: {aluno.data_nascimento}
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  disabled={estaImportando}
-                  onClick={() => handleImportar(aluno)}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
-                >
-                  {estaImportando ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                  Importar como Competidor
-                </button>
+          alunosFiltrados.map((aluno) => (
+            <div
+              key={aluno.id_aluno}
+              className="flex items-center justify-between gap-3 p-3 transition-colors duration-150 hover:bg-surface-muted/60"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-fg">{aluno.nome_completo}</div>
+                {aluno.data_nascimento && (
+                  <div className="text-xs text-fg-muted">Nascimento: {formatarData(aluno.data_nascimento)}</div>
+                )}
               </div>
-            );
-          })}
+              <Button
+                size="sm"
+                loading={importandoId === aluno.id_aluno}
+                leftIcon={<Download className="size-3.5" />}
+                onClick={() => handleImportar(aluno)}
+              >
+                Importar como Competidor
+              </Button>
+            </div>
+          ))}
       </div>
 
       {onCancel && (
         <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800"
-          >
+          <Button variant="ghost" size="sm" onClick={onCancel}>
             Voltar
-          </button>
+          </Button>
         </div>
       )}
     </div>

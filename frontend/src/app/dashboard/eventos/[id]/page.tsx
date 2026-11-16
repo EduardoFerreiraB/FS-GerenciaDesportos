@@ -3,16 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import {
-  Calendar,
-  ArrowLeft,
-  Plus,
-  AlertCircle,
-  RefreshCw,
-  Loader2,
-  Trophy,
-  X,
-} from 'lucide-react';
+import { CalendarDays, CalendarPlus, Plus, Trophy } from 'lucide-react';
 import {
   obterEvento,
   criarEdicaoEvento,
@@ -20,6 +11,25 @@ import {
 } from '@/services/competicoes';
 import type { EventoDetalhe } from '@/types/competicoes';
 import ModalNovaCompeticao from '@/components/competicoes/organizacao/ModalNovaCompeticao';
+import { useBreadcrumb } from '@/context/BreadcrumbContext';
+import { formatarPeriodo } from '@/lib/formatos';
+import { cn } from '@/lib/cn';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Skeleton,
+} from '@/components/ui';
 
 export default function EventoDetalhePage() {
   const params = useParams();
@@ -40,6 +50,11 @@ export default function EventoDetalhePage() {
 
   // Modal Adicionar Competição
   const [modalAdicionarCompeticaoAberto, setModalAdicionarCompeticaoAberto] = useState(false);
+
+  useBreadcrumb([
+    { label: 'Eventos', href: '/dashboard/eventos' },
+    ...(evento ? [{ label: evento.nome }] : []),
+  ]);
 
   const carregarEvento = useCallback(async () => {
     if (isNaN(idEvento)) {
@@ -111,39 +126,42 @@ export default function EventoDetalhePage() {
     }
   };
 
-  if (carregando) {
+  if (carregando && !evento) {
     return (
-      <div className="flex flex-col items-center justify-center p-16">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
-        <p className="text-sm text-slate-500">Carregando detalhes do evento...</p>
+      <div className="space-y-6" aria-busy="true" aria-label="Carregando evento">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-72" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+        </div>
+        <Skeleton className="h-40 w-full rounded-xl" />
       </div>
     );
   }
 
   if (erro || !evento) {
     return (
-      <div className="p-8 max-w-4xl mx-auto">
-        <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-4">
-          <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
-          <h3 className="text-lg font-bold text-red-800">Erro ao carregar evento</h3>
-          <p className="text-sm text-red-600 max-w-md mx-auto">{erro}</p>
-          <div className="flex justify-center gap-3">
-            <Link
-              href="/dashboard/eventos"
-              className="px-4 py-2 border border-slate-300 bg-white rounded-lg text-slate-700 text-sm font-medium hover:bg-slate-50 transition"
-            >
-              Voltar para eventos
-            </Link>
-            <button
-              type="button"
-              onClick={carregarEvento}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm transition shadow-sm"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Tentar novamente</span>
-            </button>
-          </div>
-        </div>
+      <div className="space-y-6">
+        <Alert
+          tone="danger"
+          title="Erro ao carregar evento"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/dashboard/eventos">Voltar para eventos</Link>
+              </Button>
+              <Button size="sm" variant="secondary" onClick={carregarEvento}>
+                Tentar novamente
+              </Button>
+            </div>
+          }
+        >
+          {erro}
+        </Alert>
       </div>
     );
   }
@@ -153,228 +171,152 @@ export default function EventoDetalhePage() {
   );
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
-      {/* Navegação e Cabeçalho */}
-      <div>
-        <Link
-          href="/dashboard/eventos"
-          className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition mb-3"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Voltar para eventos</span>
-        </Link>
-
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-              <Calendar className="w-7 h-7 text-blue-600" />
-              {evento.nome}
-            </h1>
-            {evento.descricao && (
-              <p className="text-sm text-slate-500 mt-1">{evento.descricao}</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
+    <div className="space-y-6">
+      <PageHeader
+        title={<span className="block break-words">{evento.nome}</span>}
+        description={evento.descricao || undefined}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              leftIcon={<CalendarPlus className="size-4" aria-hidden="true" />}
               onClick={() => setModalNovaEdicaoAberto(true)}
-              className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-50 font-medium text-sm transition flex items-center gap-2"
             >
-              <Plus className="w-4 h-4 text-slate-500" />
-              <span>Adicionar edição de evento</span>
-            </button>
-            <button
-              type="button"
+              Adicionar edição de evento
+            </Button>
+            <Button
+              leftIcon={<Trophy className="size-4" aria-hidden="true" />}
               onClick={() => setModalAdicionarCompeticaoAberto(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm transition flex items-center gap-2 shadow-sm"
             >
-              <Trophy className="w-4 h-4" />
-              <span>Adicionar competição</span>
-            </button>
-          </div>
-        </div>
-      </div>
+              Adicionar competição
+            </Button>
+          </>
+        }
+      />
 
-      {/* Lista / Seletor de Edições do Evento */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-blue-600" />
-          Edições Registradas do Evento
-        </h3>
-
+      <section className="space-y-3" aria-labelledby="titulo-edicoes-evento">
+        <h2 id="titulo-edicoes-evento" className="text-base font-semibold text-fg">
+          Edições do evento
+        </h2>
         {evento.edicoes && evento.edicoes.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {evento.edicoes.map((ed) => {
               const selecionada = ed.id_edicao_evento === edicaoEventoSelecionadaId;
               return (
-                <div
-                  key={ed.id_edicao_evento}
-                  onClick={() => setEdicaoEventoSelecionadaId(ed.id_edicao_evento)}
-                  className={`p-4 rounded-xl border cursor-pointer transition ${
-                    selecionada
-                      ? 'border-blue-500 bg-blue-50/50 shadow-sm'
-                      : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <strong className="text-base text-slate-800">{ed.identificacao}</strong>
-                    {selecionada && (
-                      <span className="text-[10px] bg-blue-600 text-white font-bold px-2 py-0.5 rounded-full">
-                        Ativa
-                      </span>
+                <li key={ed.id_edicao_evento}>
+                  <button
+                    type="button"
+                    aria-pressed={selecionada}
+                    onClick={() => setEdicaoEventoSelecionadaId(ed.id_edicao_evento)}
+                    className={cn(
+                      'flex w-full flex-col gap-1 rounded-xl border bg-surface p-4 text-left outline-none transition-colors duration-150 focus-visible:ring-4 focus-visible:ring-focus',
+                      selecionada ? 'border-primary bg-primary-soft' : 'border-line hover:border-line-strong',
                     )}
-                  </div>
-                  <p className="text-xs text-slate-600">
-                    Período: {ed.data_inicio} até {ed.data_fim}
-                  </p>
-                </div>
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <strong className="min-w-0 truncate text-sm font-semibold text-fg" title={ed.identificacao}>
+                        {ed.identificacao}
+                      </strong>
+                      {selecionada ? <Badge tone="primary">Selecionada</Badge> : null}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-sm text-fg-muted tabular-nums">
+                      <CalendarDays className="size-4 text-fg-subtle" aria-hidden="true" />
+                      {formatarPeriodo(ed.data_inicio, ed.data_fim)}
+                    </span>
+                  </button>
+                </li>
               );
             })}
-          </div>
+          </ul>
         ) : (
-          <p className="text-sm text-slate-500 italic">
-            Nenhuma edição cadastrada para este evento.
-          </p>
+          <EmptyState
+            icon={<CalendarDays />}
+            title="Nenhuma edição cadastrada"
+            description="Adicione uma edição para vincular competições a este evento."
+          />
         )}
-      </div>
+      </section>
 
-      {/* Detalhe da Edição Ativa */}
       {edicaoAtiva && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">
-                Competições vinculadas a {edicaoAtiva.identificacao}
-              </h3>
-              <p className="text-xs text-slate-500">
-                Período oficial: {edicaoAtiva.data_inicio} até {edicaoAtiva.data_fim}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setModalAdicionarCompeticaoAberto(true)}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Vincular competição</span>
-            </button>
-          </div>
-
-          <p className="text-xs text-slate-500">
-            Todas as competições criadas nesta edição devem respeitar o período do evento ({edicaoAtiva.data_inicio} a {edicaoAtiva.data_fim}).
-          </p>
-        </div>
-      )}
-
-      {/* Modal Adicionar Edição de Evento */}
-      {modalNovaEdicaoAberto && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-edicao-evento-titulo"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
-        >
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-              <h2 id="modal-edicao-evento-titulo" className="text-xl font-bold text-slate-800">
-                Nova Edição do Evento
-              </h2>
-              <button
-                type="button"
-                onClick={() => setModalNovaEdicaoAberto(false)}
-                className="text-slate-400 hover:text-slate-600 transition"
+        <Card>
+          <CardHeader
+            title={`Competições vinculadas a ${edicaoAtiva.identificacao}`}
+            description={`Período oficial: ${formatarPeriodo(edicaoAtiva.data_inicio, edicaoAtiva.data_fim)}`}
+            actions={
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon={<Plus className="size-4" aria-hidden="true" />}
+                onClick={() => setModalAdicionarCompeticaoAberto(true)}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {erroEdicao && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
-                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" />
-                <span>{erroEdicao}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCriarEdicaoEvento} className="mt-4 space-y-4">
-              <div>
-                <label
-                  htmlFor="edicao-evento-identificacao"
-                  className="block text-sm font-semibold text-slate-700 mb-1"
-                >
-                  Identificação da Edição
-                </label>
-                <input
-                  id="edicao-evento-identificacao"
-                  type="text"
-                  required
-                  placeholder="Ex: 2027 ou 2ª Edição"
-                  value={identificacaoEdicao}
-                  onChange={(e) => setIdentificacaoEdicao(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="edicao-evento-inicio"
-                    className="block text-sm font-medium text-slate-700 mb-1"
-                  >
-                    Data de Início
-                  </label>
-                  <input
-                    id="edicao-evento-inicio"
-                    type="date"
-                    required
-                    value={dataInicioEdicao}
-                    onChange={(e) => setDataInicioEdicao(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="edicao-evento-fim"
-                    className="block text-sm font-medium text-slate-700 mb-1"
-                  >
-                    Data de Término
-                  </label>
-                  <input
-                    id="edicao-evento-fim"
-                    type="date"
-                    required
-                    value={dataFimEdicao}
-                    onChange={(e) => setDataFimEdicao(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalNovaEdicaoAberto(false)}
-                  disabled={salvandoEdicao}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium text-sm transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvandoEdicao}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition flex items-center gap-2 shadow-sm disabled:opacity-50"
-                >
-                  {salvandoEdicao && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>Salvar Edição</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                Vincular competição
+              </Button>
+            }
+          />
+          <CardBody>
+            <p className="text-sm text-fg-muted">
+              Todas as competições criadas nesta edição devem respeitar o período do evento (
+              <span className="tabular-nums">{formatarPeriodo(edicaoAtiva.data_inicio, edicaoAtiva.data_fim)}</span>).
+            </p>
+          </CardBody>
+        </Card>
       )}
 
-      {/* Modal Adicionar Competição ao Evento */}
+      <Dialog
+        open={modalNovaEdicaoAberto}
+        onOpenChange={(aberto) => {
+          if (!aberto && !salvandoEdicao) setModalNovaEdicaoAberto(false);
+        }}
+      >
+        <DialogContent size="md" title="Nova Edição do Evento">
+          <form id="form-edicao-evento" onSubmit={handleCriarEdicaoEvento} className="space-y-4">
+            {erroEdicao ? <Alert tone="danger">{erroEdicao}</Alert> : null}
+            <Field label="Identificação da Edição" htmlFor="edicao-evento-identificacao" required>
+              <Input
+                id="edicao-evento-identificacao"
+                type="text"
+                required
+                placeholder="Ex: 2027 ou 2ª Edição"
+                value={identificacaoEdicao}
+                onChange={(e) => setIdentificacaoEdicao(e.target.value)}
+              />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Data de Início" htmlFor="edicao-evento-inicio" required>
+                <Input
+                  id="edicao-evento-inicio"
+                  type="date"
+                  required
+                  value={dataInicioEdicao}
+                  onChange={(e) => setDataInicioEdicao(e.target.value)}
+                />
+              </Field>
+              <Field label="Data de Término" htmlFor="edicao-evento-fim" required>
+                <Input
+                  id="edicao-evento-fim"
+                  type="date"
+                  required
+                  value={dataFimEdicao}
+                  onChange={(e) => setDataFimEdicao(e.target.value)}
+                />
+              </Field>
+            </div>
+          </form>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setModalNovaEdicaoAberto(false)}
+              disabled={salvandoEdicao}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" form="form-edicao-evento" loading={salvandoEdicao}>
+              Salvar Edição
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ModalNovaCompeticao
         aberto={modalAdicionarCompeticaoAberto}
         onClose={() => setModalAdicionarCompeticaoAberto(false)}

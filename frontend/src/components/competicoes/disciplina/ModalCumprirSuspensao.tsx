@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, CheckCircle2, AlertCircle, Loader2, Calendar } from 'lucide-react';
+import { CircleCheck } from 'lucide-react';
+import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Select } from '@/components/ui';
+import { rotuloDoEstado } from '@/lib/rotulos';
 import { cumprirSuspensao, isErroApi } from '@/services/competicoes';
 import type { SuspensaoDetalhe, PartidaDetalhe } from '@/types/competicoes';
+import { ResumoSuspensao } from './ResumoSuspensao';
 
 interface ModalCumprirSuspensaoProps {
   suspensao: SuspensaoDetalhe | null;
@@ -11,6 +14,13 @@ interface ModalCumprirSuspensaoProps {
   isOpen: boolean;
   onClose: () => void;
   onSucesso: () => void;
+}
+
+function rotuloPartida(p: PartidaDetalhe): string {
+  const mandante = p.nome_mandante || 'Mandante';
+  const visitante = p.nome_visitante || 'Visitante';
+  const rodada = p.rodada ? ` (Rodada ${p.rodada})` : '';
+  return `Jogo ${p.numero_partida}${rodada}: ${mandante} × ${visitante} · ${rotuloDoEstado('partida', p.status)}`;
 }
 
 export default function ModalCumprirSuspensao({
@@ -59,12 +69,12 @@ export default function ModalCumprirSuspensao({
     } else {
       setIdPartida('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, suspensao?.id_suspensao]);
-
-  if (!isOpen || !suspensao) return null;
 
   const handleConfirmar = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!suspensao) return;
     if (!idPartida) {
       setErro('Selecione uma partida válida para cumprir a suspensão.');
       return;
@@ -93,195 +103,99 @@ export default function ModalCumprirSuspensao({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-cumprir-titulo"
+    <Dialog
+      open={isOpen && suspensao !== null}
+      onOpenChange={(aberto) => (!aberto && !salvando ? onClose() : undefined)}
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
-        {/* Cabeçalho */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2
-                id="modal-cumprir-titulo"
-                className="text-lg font-bold text-slate-800"
-              >
-                Registrar Cumprimento
-              </h2>
-              <p className="text-xs text-slate-500">
-                Suspensão #{suspensao.id_suspensao}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
-            aria-label="Fechar"
-            data-testid="btn-fechar-modal-cumprir"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Formulário */}
-        <form onSubmit={handleConfirmar} className="p-6 space-y-4">
-          {erro && (
-            <div
-              className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-2.5 animate-in fade-in"
-              role="alert"
-              data-testid="alerta-erro-cumprimento"
-            >
-              <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" />
-              <div className="flex-1 font-medium">{erro}</div>
-            </div>
-          )}
-
-          {/* Resumo da Suspensão */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-2 text-sm">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Atleta
-              </span>
-              <span className="font-bold text-slate-800">
-                {suspensao.nome_esportivo || `Integrante #${suspensao.id_integrante}`}
-              </span>
-            </div>
-
-            {suspensao.nome_equipe && (
-              <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Equipe
-                </span>
-                <span className="font-medium text-slate-700">
-                  {suspensao.nome_equipe}
-                </span>
-              </div>
+      {suspensao && (
+        <DialogContent title="Registrar cumprimento" description={`Suspensão #${suspensao.id_suspensao}`}>
+          <form id="form-cumprir-suspensao" onSubmit={handleConfirmar} className="space-y-4">
+            {erro && (
+              <Alert tone="danger" data-testid="alerta-erro-cumprimento">
+                {erro}
+              </Alert>
             )}
 
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Origem / Motivo
-              </span>
-              <span className="font-medium text-slate-700 text-right max-w-[240px] truncate" title={suspensao.motivo}>
-                {suspensao.motivo}
-              </span>
-            </div>
+            <ResumoSuspensao
+              itens={[
+                {
+                  rotulo: 'Atleta',
+                  valor: suspensao.nome_esportivo || `Integrante #${suspensao.id_integrante}`,
+                },
+                ...(suspensao.nome_equipe ? [{ rotulo: 'Equipe', valor: suspensao.nome_equipe }] : []),
+                { rotulo: 'Motivo', valor: suspensao.motivo, truncar: true },
+                {
+                  rotulo: 'Progresso',
+                  valor: `${suspensao.jogos_cumpridos} de ${suspensao.jogos} ${
+                    suspensao.jogos === 1 ? 'jogo cumprido' : 'jogos cumpridos'
+                  }`,
+                  numerico: true,
+                },
+              ]}
+            />
 
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Progresso
-              </span>
-              <span className="font-semibold text-blue-700">
-                {suspensao.jogos_cumpridos} de {suspensao.jogos} jogos cumpridos
-              </span>
-            </div>
-          </div>
-
-          {/* Seleção de Partida */}
-          <div>
-            <label
+            <Field
+              label="Partida em que cumpriu a suspensão"
               htmlFor="select-partida-cumprimento"
-              className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5"
+              hint="O cumprimento deve ser registrado em uma partida finalizada posterior da equipe do atleta."
+              required
             >
-              Partida onde cumpriu suspensão <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select
+              <Select
                 id="select-partida-cumprimento"
                 data-testid="select-partida-cumprimento"
                 value={idPartida}
                 onChange={(e) => setIdPartida(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
-                <option value="">Selecione a partida...</option>
+                <option value="">Selecione a partida…</option>
                 {partidasEquipe.length > 0 && outrasPartidas.length > 0 ? (
                   <>
                     <optgroup label={`Partidas de ${suspensao.nome_equipe || 'Equipe'}`}>
-                      {partidasEquipe.map((p) => {
-                        const labelMandante = p.nome_mandante || 'Mandante';
-                        const labelVisitante = p.nome_visitante || 'Visitante';
-                        const rodadaStr = p.rodada ? `(Rodada ${p.rodada})` : '';
-                        const statusStr = p.status === 'FINALIZADA' ? 'Finalizada' : p.status;
-                        return (
-                          <option key={p.id_partida} value={p.id_partida}>
-                            Jogo #{p.numero_partida} {rodadaStr}: {labelMandante} vs {labelVisitante} [{statusStr}]
-                          </option>
-                        );
-                      })}
+                      {partidasEquipe.map((p) => (
+                        <option key={p.id_partida} value={p.id_partida}>
+                          {rotuloPartida(p)}
+                        </option>
+                      ))}
                     </optgroup>
-                    <optgroup label="Outras Partidas da Edição">
-                      {outrasPartidas.map((p) => {
-                        const labelMandante = p.nome_mandante || 'Mandante';
-                        const labelVisitante = p.nome_visitante || 'Visitante';
-                        const rodadaStr = p.rodada ? `(Rodada ${p.rodada})` : '';
-                        const statusStr = p.status === 'FINALIZADA' ? 'Finalizada' : p.status;
-                        return (
-                          <option key={p.id_partida} value={p.id_partida}>
-                            Jogo #{p.numero_partida} {rodadaStr}: {labelMandante} vs {labelVisitante} [{statusStr}]
-                          </option>
-                        );
-                      })}
+                    <optgroup label="Outras partidas da edição">
+                      {outrasPartidas.map((p) => (
+                        <option key={p.id_partida} value={p.id_partida}>
+                          {rotuloPartida(p)}
+                        </option>
+                      ))}
                     </optgroup>
                   </>
                 ) : (
-                  (partidasEquipe.length > 0 ? partidasEquipe : partidas).map((p) => {
-                    const labelMandante = p.nome_mandante || 'Mandante';
-                    const labelVisitante = p.nome_visitante || 'Visitante';
-                    const rodadaStr = p.rodada ? `(Rodada ${p.rodada})` : '';
-                    const statusStr = p.status === 'FINALIZADA' ? 'Finalizada' : p.status;
-                    return (
-                      <option key={p.id_partida} value={p.id_partida}>
-                        Jogo #{p.numero_partida} {rodadaStr}: {labelMandante} vs {labelVisitante} [{statusStr}]
-                      </option>
-                    );
-                  })
+                  (partidasEquipe.length > 0 ? partidasEquipe : partidas).map((p) => (
+                    <option key={p.id_partida} value={p.id_partida}>
+                      {rotuloPartida(p)}
+                    </option>
+                  ))
                 )}
-              </select>
-            </div>
-            <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              O cumprimento deve ser registrado em uma partida finalizada posterior da equipe do atleta.
-            </p>
-          </div>
-
-          {/* Botões */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
+              </Select>
+            </Field>
+          </form>
+          <DialogFooter>
+            <Button
+              variant="secondary"
               onClick={onClose}
               disabled={salvando}
               data-testid="btn-cancelar-cumprimento"
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={salvando || !idPartida}
+              form="form-cumprir-suspensao"
+              loading={salvando}
+              disabled={!idPartida}
               data-testid="btn-confirmar-cumprimento"
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              leftIcon={<CircleCheck className="size-4" />}
             >
-              {salvando ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  Confirmar Cumprimento
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              Confirmar cumprimento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      )}
+    </Dialog>
   );
 }

@@ -3,6 +3,21 @@ import { authenticateDirectly } from './helpers/auth';
 
 test.describe('Classificação e Chaveamento Eliminatório', () => {
   test.beforeEach(async ({ page }) => {
+    // Fallback de menor prioridade (registrado primeiro): a aba padrão "Visão geral" busca
+    // equipes, partidas, classificação, artilharia e painel disciplinar. Sem mock, essas
+    // chamadas iriam ao backend real com o token falso, recebendo 401 e deslogando a sessão.
+    // 404 deixa cada indicador como "—" (falha parcial prevista); mocks dos testes têm prioridade.
+    await page.route(
+      /\/competicoes\/edicoes\/\d+\/(equipes|partidas|classificacao|artilharia|disciplinar)(\?.*)?$/,
+      (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{"detail":"sem mock"}' }),
+    );
+
+    // A página da competição busca as modalidades em GET /modalidades (o backend redireciona
+    // para /modalidades/); com o token falso isso daria 401. Mocks dos testes têm prioridade.
+    await page.route(/\/modalidades\/?(\?.*)?$/, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
     // Autentica token para acessar o dashboard
     await page.addInitScript(() => {
       localStorage.setItem('token', 'fake-jwt-token-for-e2e');
@@ -181,16 +196,16 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
     await page.goto(`/dashboard/competicoes/${idComp}`);
 
     // Aguarda painel da edição carregar
-    await expect(page.getByText('Campeonato Municipal de Futebol')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Campeonato Municipal de Futebol' })).toBeVisible();
 
     // Clica na aba Classificação
-    const abaClassificacao = page.getByRole('button', { name: /classificação/i });
+    const abaClassificacao = page.getByTestId('tab-classificacao');
     await abaClassificacao.click();
 
     // Verifica cabeçalhos da tabela
     await expect(page.getByRole('columnheader', { name: 'Pos', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Equipe', exact: true })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'PTS', exact: true })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'P', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'J', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'V', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'E', exact: true })).toBeVisible();
@@ -306,13 +321,13 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
     });
 
     await page.goto(`/dashboard/competicoes/${idComp}`);
-    await page.getByRole('button', { name: /classificação/i }).click();
+    await page.getByTestId('tab-classificacao').click();
 
     // Banner de alerta deve ser renderizado
     await expect(page.getByRole('alert', { name: /empates persistentes/i })).toBeVisible();
     await expect(
       page.getByText(
-        'Atenção: existem empates pontuais que não puderam ser desempáticos pelos critérios técnicos do regulamento. Uma resolução manual ou sorteio pode ser necessária.'
+        'Há equipes empatadas que os critérios de desempate do regulamento não separaram. Registre a ordem decidida pela organização (por exemplo, por sorteio).'
       )
     ).toBeVisible();
   });
@@ -548,39 +563,41 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
 
     await page.goto(`/dashboard/competicoes/${idComp}`);
 
-    // Clica na aba Jogos & Súmula onde o chaveamento eliminatório reside
-    await page.getByRole('button', { name: /jogos & súmula/i }).click();
+    // Clica na aba Jogos onde o chaveamento eliminatório reside
+    await page.getByTestId('tab-jogos').click();
 
     // Chaveamento deve estar visível
     const secaoChaveamento = page.getByRole('region', { name: /chaveamento eliminatório/i });
     await expect(secaoChaveamento).toBeVisible();
 
-    // Fases devem estar rotuladas
-    await expect(page.getByText('Semifinais', { exact: true })).toBeVisible();
-    await expect(page.getByText('Grande Final', { exact: true })).toBeVisible();
+    // Fases rotuladas (escopo no chaveamento: a lista de jogos também agrupa por fase)
+    await expect(secaoChaveamento.getByRole('heading', { name: 'Semifinal', exact: true })).toBeVisible();
+    await expect(secaoChaveamento.getByRole('heading', { name: 'Final', exact: true })).toBeVisible();
 
-    // Duelo 1 resolvido com vencedor destacado
-    const cardDuelo1 = page.getByRole('article', { name: /duelo 1/i });
+    // Semifinal 1 resolvida com vencedor destacado
+    const cardDuelo1 = secaoChaveamento.getByRole('article', { name: 'Semifinal 1', exact: true });
     await expect(cardDuelo1).toBeVisible();
     await expect(cardDuelo1).toContainText('Resolvido');
     await expect(cardDuelo1).toContainText('Águia Dourada');
-    await expect(cardDuelo1).toContainText('3'); // score mandante
-    await expect(cardDuelo1).toContainText('1'); // score visitante
+    await expect(cardDuelo1).toContainText('(vencedor)');
+    await expect(cardDuelo1).toContainText('3'); // placar mandante
+    await expect(cardDuelo1).toContainText('1'); // placar visitante
 
-    // Grande final mostra Águia Dourada aguardando vencedor do jogo 2
-    const cardFinal = page.getByRole('article', { name: /duelo 3/i });
+    // Final: Águia Dourada aguardando o vencedor da Semifinal 2
+    const cardFinal = secaoChaveamento.getByRole('article', { name: 'Final', exact: true });
     await expect(cardFinal).toBeVisible();
     await expect(cardFinal).toContainText('Águia Dourada');
-    await expect(cardFinal).toContainText('Venc. Jogo 2');
+    await expect(cardFinal).toContainText('Vencedor de Semifinal 2');
 
     // Disputa de 3º lugar
-    await expect(page.getByText('Disputa de 3º Lugar (Medalha de Bronze)')).toBeVisible();
-    const card3Lugar = page.getByRole('article', { name: /duelo 4/i });
+    await expect(secaoChaveamento.getByRole('heading', { name: 'Disputa de 3º lugar', exact: true })).toBeVisible();
+    const card3Lugar = secaoChaveamento.getByRole('article', { name: 'Disputa de 3º lugar', exact: true });
     await expect(card3Lugar).toBeVisible();
     await expect(card3Lugar).toContainText('Falcão Real');
+    await expect(card3Lugar).toContainText('Perdedor de Semifinal 2');
   });
 
-  test('na aba Classificação de campeonato MATA_MATA, orienta ir para Jogos & Súmula', async ({
+  test('na aba Classificação de campeonato MATA_MATA, orienta ir para a aba Jogos', async ({
     page,
   }) => {
     const idComp = 104;
@@ -643,10 +660,10 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
     });
 
     await page.goto(`/dashboard/competicoes/${idComp}`);
-    await page.getByRole('button', { name: /classificação/i }).click();
+    await page.getByTestId('tab-classificacao').click();
 
     // Deve exibir aviso explicativo sobre formato mata-mata
-    await expect(page.getByText('Competição em Formato Mata-Mata')).toBeVisible();
-    await expect(page.getByText(/Acesse a aba/i)).toContainText('Jogos & Súmula');
+    await expect(page.getByText('Competição em formato mata-mata')).toBeVisible();
+    await expect(page.getByText(/Acesse a aba/i)).toContainText('Jogos');
   });
 });
