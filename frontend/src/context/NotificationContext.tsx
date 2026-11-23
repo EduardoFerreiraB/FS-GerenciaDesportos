@@ -1,9 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { Button, Dialog, DialogContent, DialogFooter } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { extrairErro } from '@/lib/erros';
 
 interface Toast {
   id: string;
@@ -37,14 +39,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const toast = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-
-    // Some em 4 s, exceto erro (fica ate fechar)
-    if (type !== 'error') {
-      setTimeout(() => {
-        removeToast(id);
-      }, 4000);
-    }
+    // No máximo um erro visível: o novo substitui o anterior (DF-RT02-03).
+    setToasts((prev) => [...(type === 'error' ? prev.filter((t) => t.type !== 'error') : prev), { id, message, type }]);
+    setTimeout(() => removeToast(id), type === 'error' ? 6000 : 4000);
   }, [removeToast]);
 
   const confirm = useCallback((options: ConfirmOptions) => {
@@ -116,9 +113,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     <NotificationContext.Provider value={{ toast, confirm }}>
       {children}
 
-      {/* Toasts: canto inferior direito */}
+      {/* Toasts no canto superior direito: longe do rodapé dos diálogos (DF-RT04-02).
+          `data-notificacao` faz o diálogo aberto ignorar cliques aqui. O portal só existe
+          enquanto há aviso: montado depois de um diálogo abrir, ele não herda o
+          aria-hidden que o diálogo aplica ao resto da página. */}
+      {toasts.length > 0 && typeof document !== 'undefined' && createPortal(
       <div
-        className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6"
+        data-notificacao
+        className="pointer-events-none fixed right-4 top-4 z-[60] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2 sm:right-6 sm:top-6"
       >
         {toasts.map((t) => {
           const Icon = { success: CheckCircle2, error: AlertTriangle, warning: AlertTriangle, info: Info }[t.type];
@@ -153,7 +155,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             </div>
           );
         })}
-      </div>
+      </div>,
+      document.body,
+      )}
 
       <Dialog open={Boolean(confirmModal?.isOpen)} onOpenChange={(aberto) => { if (!aberto) handleCancelAction(); }}>
         {confirmModal && (
@@ -174,3 +178,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 }
 
 export const useNotification = () => useContext(NotificationContext);
+
+/** Atalho com a leitura de erro padronizada: `erro(e)` aceita o erro da API diretamente. */
+export function useNotificacao() {
+  const { toast } = useContext(NotificationContext);
+  return React.useMemo(
+    () => ({
+      sucesso: (mensagem: string) => toast(mensagem, 'success'),
+      aviso: (mensagem: string) => toast(mensagem, 'warning'),
+      erro: (erro: unknown) => toast(typeof erro === 'string' ? erro : extrairErro(erro).mensagem, 'error'),
+    }),
+    [toast],
+  );
+}

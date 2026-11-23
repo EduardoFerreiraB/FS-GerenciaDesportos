@@ -1,15 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { type RefObject } from 'react';
 import { useForm } from 'react-hook-form';
 import api from '@/lib/api';
-import { useNotification } from '@/context/NotificationContext';
+import { useNotificacao } from '@/context/NotificationContext';
 import { Button, Dialog, DialogContent, DialogFooter, Field, Input } from '@/components/ui';
 
 interface ChangePasswordModalProps {
   onClose: () => void;
   onSuccess: () => void;
   forceChange?: boolean;
+  /** Elemento que recebe o foco quando o diálogo fecha (DF-RT08-04). */
+  focoAoFechar?: RefObject<HTMLElement | null>;
 }
 
 interface FormSenha {
@@ -18,9 +20,9 @@ interface FormSenha {
   confirm_password: string;
 }
 
-export default function ChangePasswordModal({ onClose, onSuccess, forceChange = false }: ChangePasswordModalProps) {
+export default function ChangePasswordModal({ onClose, onSuccess, forceChange = false, focoAoFechar }: ChangePasswordModalProps) {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<FormSenha>();
-  const { toast } = useNotification();
+  const notificacao = useNotificacao();
 
   const onSubmit = async (data: FormSenha) => {
     try {
@@ -29,11 +31,10 @@ export default function ChangePasswordModal({ onClose, onSuccess, forceChange = 
         new_password: data.new_password,
         confirm_password: data.confirm_password,
       });
-      toast('Senha alterada com sucesso!', 'success');
+      notificacao.sucesso('Senha alterada com sucesso!');
       onSuccess();
-    } catch (error: any) {
-      console.error(error);
-      toast(error.response?.data?.detail || 'Erro ao alterar senha.', 'error');
+    } catch (error) {
+      notificacao.erro(error);
     }
   };
 
@@ -51,9 +52,16 @@ export default function ChangePasswordModal({ onClose, onSuccess, forceChange = 
             ? 'Por segurança, você precisa alterar sua senha no primeiro acesso.'
             : 'Digite sua senha atual e a nova senha.'
         }
+        semFechar={forceChange}
         onEscapeKeyDown={bloquear}
         onPointerDownOutside={bloquear}
         onInteractOutside={bloquear}
+        onCloseAutoFocus={(e) => {
+          if (focoAoFechar?.current) {
+            e.preventDefault();
+            focoAoFechar.current.focus();
+          }
+        }}
       >
         <form id="form-alterar-senha" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Field label="Senha atual" htmlFor="old_password" required error={errors.old_password && 'Campo obrigatório'}>
