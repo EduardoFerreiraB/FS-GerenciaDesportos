@@ -65,6 +65,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 import uuid
 
 async def get_current_active_user(current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "detail": "Troque sua senha para continuar.",
+                "codigo": "SENHA_TROCA_OBRIGATORIA",
+            },
+        )
     return current_user
 
 async def check_admin_role(current_user: models.Usuario = Depends(get_current_active_user)):

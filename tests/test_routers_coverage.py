@@ -46,6 +46,9 @@ def get_auth_headers(client, db, role: str, username: str):
         )
         db.add(user)
         db.commit()
+    elif user.must_change_password:
+        user.must_change_password = False
+        db.commit()
     
     response = client.post(
         "/token",
@@ -238,6 +241,10 @@ def test_alunos_coverage(client, db):
     res = client.post(
         "/alunos/",
         data={"nome_completo": s1_name, "data_nascimento": "2010-01-01", "telefone_1": "123", "endereco": "R", "escola": "Esc", "serie_ano": "9", "ids_turmas": str(id_turma)},
+        files={
+            "documento": ("doc.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+            "atestado": ("ate.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+        },
         headers=coord_headers
     )
     id_aluno1 = res.json()["id_aluno"]
@@ -246,6 +253,10 @@ def test_alunos_coverage(client, db):
     res = client.post(
         "/alunos/",
         data={"nome_completo": s2_name, "data_nascimento": "2010-01-01", "telefone_1": "123", "endereco": "R", "escola": "Esc", "serie_ano": "9", "ids_turmas": str(id_turma_other)},
+        files={
+            "documento": ("doc.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+            "atestado": ("ate.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+        },
         headers=coord_headers
     )
     id_aluno2 = res.json()["id_aluno"]
@@ -662,6 +673,10 @@ def test_extra_routers_coverage(client, db):
             "escola": "School 1",
             "serie_ano": "9",
             "ids_turmas": str(id_turma)
+        },
+        files={
+            "documento": ("doc.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+            "atestado": ("ate.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
         },
         headers=coord_headers
     )
