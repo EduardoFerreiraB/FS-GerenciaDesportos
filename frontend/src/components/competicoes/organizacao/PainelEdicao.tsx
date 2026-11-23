@@ -23,12 +23,15 @@ import TabelaClassificacao from '@/components/competicoes/classificacao/TabelaCl
 import PainelDisciplina from '@/components/competicoes/disciplina/PainelDisciplina';
 import FormularioConfiguracao from './FormularioConfiguracao';
 import ModalConfirmarExclusao from './ModalConfirmarExclusao';
+import ModalEditarEdicao from './ModalEditarEdicao';
+import { gravarParametroUrl, lerParametroUrl } from '@/lib/url';
 import VisaoGeralEdicao, { type AbaEdicao } from './VisaoGeralEdicao';
 import {
   Alert,
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -56,6 +59,7 @@ import {
   LayoutDashboard,
   Lock,
   MoreHorizontal,
+  Pencil,
   RotateCcw,
   Save,
   Settings,
@@ -67,6 +71,8 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
+
+const ABAS_VALIDAS: AbaEdicao[] = ['visao_geral', 'configuracao', 'equipes', 'jogos', 'classificacao', 'disciplina'];
 
 interface PainelEdicaoProps {
   idEdicaoCompeticao: number;
@@ -84,7 +90,14 @@ export default function PainelEdicao({
   const [carregando, setCarregando] = useState(true);
   const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
 
-  const [abaAtiva, setAbaAtiva] = useState<AbaEdicao>('visao_geral');
+  // A aba fica no endereço (?aba=jogos) para sobreviver ao recarregar (DF-RT10-02).
+  const [abaAtiva, setAbaAtiva] = useState<AbaEdicao>(() => {
+    const aba = lerParametroUrl('aba');
+    return aba && ABAS_VALIDAS.includes(aba as AbaEdicao) ? (aba as AbaEdicao) : 'visao_geral';
+  });
+  const [sucessoCiclo, setSucessoCiclo] = useState<string | null>(null);
+  const [confirmarFinalizarAberto, setConfirmarFinalizarAberto] = useState(false);
+  const [editarAberto, setEditarAberto] = useState(false);
 
   // Estado da aba de configuração
   const [formatoEdit, setFormatoEdit] = useState<FormatoCompeticao>('GRUPOS_MATA_MATA');
@@ -125,12 +138,28 @@ export default function PainelEdicao({
     carregarEdicao();
   }, [carregarEdicao]);
 
+  // Versão da disputa: muda quando jogos/tabela mudam e faz o chaveamento recarregar.
+  const [versaoDisputa, setVersaoDisputa] = useState(0);
+  const aoAlterarDisputa = useCallback(async () => {
+    setVersaoDisputa((v) => v + 1);
+    try {
+      // Atualização silenciosa (sem o carregamento da página): estado da edição no
+      // cabeçalho e no seletor da competição passam a refletir a mudança (DF-RT12-01).
+      const dados = await obterEdicao(idEdicaoCompeticao);
+      setEdicao(dados);
+      onEdicaoAtualizada?.(dados);
+    } catch {
+      // Mantém o que está na tela; o próximo carregamento completo corrige.
+    }
+  }, [idEdicaoCompeticao, onEdicaoAtualizada]);
+
   /**
    * Ao trocar de aba, atualiza o cabeçalho em silêncio: gerar/desfazer a tabela
    * na aba Jogos muda o estado da edição sem passar por este painel.
    */
   const trocarAba = (aba: AbaEdicao) => {
     setAbaAtiva(aba);
+    gravarParametroUrl('aba', aba === 'visao_geral' ? null : aba);
     obterEdicao(idEdicaoCompeticao)
       .then((dados) => setEdicao(dados))
       .catch(() => {});
@@ -160,19 +189,15 @@ export default function PainelEdicao({
     }
   };
 
+  // DF-RT13-05: finalizar pede confirmação; o erro da API aparece dentro do diálogo.
   const handleFinalizarEdicao = async () => {
     if (!edicao) return;
-    try {
-      setAlterandoPublicacao(true);
-      setErroPublicacao(null);
-      const atualizada = await finalizarEdicao(edicao.id_edicao_competicao);
-      setEdicao(atualizada);
-      if (onEdicaoAtualizada) onEdicaoAtualizada(atualizada);
-    } catch (err: unknown) {
-      setErroPublicacao(isErroApi(err) ? err.mensagem : 'Falha ao finalizar edição.');
-    } finally {
-      setAlterandoPublicacao(false);
-    }
+    setErroPublicacao(null);
+    setSucessoCiclo(null);
+    const atualizada = await finalizarEdicao(edicao.id_edicao_competicao);
+    setEdicao(atualizada);
+    setSucessoCiclo('Edição finalizada com sucesso.');
+    if (onEdicaoAtualizada) onEdicaoAtualizada(atualizada);
   };
 
   const handleConfirmarCiclo = async () => {
@@ -189,6 +214,8 @@ export default function PainelEdicao({
           ? await reabrirEdicao(edicao.id_edicao_competicao, motivoCiclo.trim())
           : await cancelarEdicao(edicao.id_edicao_competicao, motivoCiclo.trim());
       setEdicao(atualizada);
+      // DF-RT13-08: confirmação visível do resultado.
+      setSucessoCiclo(modalCicloAcao === 'REABRIR' ? 'Edição reaberta com sucesso.' : 'Edição cancelada.');
       setModalCicloAcao(null);
       setMotivoCiclo('');
       if (onEdicaoAtualizada) onEdicaoAtualizada(atualizada);
@@ -280,8 +307,7 @@ export default function PainelEdicao({
       <Button
         data-testid="btn-finalizar-edicao"
         leftIcon={<Flag className="size-4" aria-hidden="true" />}
-        onClick={handleFinalizarEdicao}
-        loading={alterandoPublicacao && !modalCicloAcao}
+        onClick={() => setConfirmarFinalizarAberto(true)}
         disabled={alterandoPublicacao}
       >
         Finalizar edição
@@ -336,6 +362,10 @@ export default function PainelEdicao({
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
+                <DropdownMenuItem data-testid="btn-editar-edicao" onSelect={() => setEditarAberto(true)}>
+                  <Pencil className="size-4" aria-hidden="true" />
+                  Editar edição
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   data-testid="btn-publicar-edicao"
                   disabled={alterandoPublicacao}
@@ -378,6 +408,11 @@ export default function PainelEdicao({
         {erroPublicacao && !modalCicloAcao ? (
           <Alert tone="danger" className="mt-4">
             {erroPublicacao}
+          </Alert>
+        ) : null}
+        {sucessoCiclo ? (
+          <Alert tone="success" className="mt-4" data-testid="sucesso-ciclo-edicao">
+            {sucessoCiclo}
           </Alert>
         ) : null}
       </div>
@@ -462,15 +497,22 @@ export default function PainelEdicao({
                 idEdicaoCompeticao={edicao.id_edicao_competicao}
                 estado={edicao.estado}
                 formato={edicao.formato}
+                onDadosAlterados={aoAlterarDisputa}
               />
               {edicao.formato !== 'PONTOS_CORRIDOS' && (
-                <ChaveamentoEliminatorio idEdicaoCompeticao={edicao.id_edicao_competicao} />
+                <ChaveamentoEliminatorio idEdicaoCompeticao={edicao.id_edicao_competicao} versao={versaoDisputa} />
               )}
             </div>
           </TabsContent>
 
           <TabsContent value="classificacao" className="pt-0">
-            <TabelaClassificacao idEdicaoCompeticao={edicao.id_edicao_competicao} formato={edicao.formato} />
+            <TabelaClassificacao
+              idEdicaoCompeticao={edicao.id_edicao_competicao}
+              formato={edicao.formato}
+              classificadosPorGrupo={
+                edicao.configuracao?.formato === 'GRUPOS_MATA_MATA' ? edicao.configuracao.classificados_por_grupo : undefined
+              }
+            />
           </TabsContent>
 
           <TabsContent value="disciplina" className="pt-0">
@@ -478,6 +520,27 @@ export default function PainelEdicao({
           </TabsContent>
         </div>
       </Tabs>
+
+      <ConfirmDialog
+        open={confirmarFinalizarAberto}
+        onOpenChange={setConfirmarFinalizarAberto}
+        title="Finalizar edição?"
+        description="A edição passa a ser considerada encerrada e a classificação final fica valendo. Para corrigir depois, será preciso reabrir com justificativa."
+        confirmLabel="Finalizar edição"
+        tone="primary"
+        onConfirm={handleFinalizarEdicao}
+      />
+
+      <ModalEditarEdicao
+        edicao={edicao}
+        aberto={editarAberto}
+        onFechar={() => setEditarAberto(false)}
+        onSalvo={(atualizada) => {
+          setEdicao(atualizada);
+          setSucessoCiclo('Edição atualizada com sucesso.');
+          if (onEdicaoAtualizada) onEdicaoAtualizada(atualizada);
+        }}
+      />
 
       {/* Reabrir / cancelar exigem justificativa */}
       <Dialog

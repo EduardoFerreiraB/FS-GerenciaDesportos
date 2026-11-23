@@ -20,6 +20,9 @@ export type { ChaveFasesProps, DueloChave, VagaChave } from './ChaveFases';
 export { EscudoIniciais, iniciaisDaEquipe } from './EscudoIniciais';
 export type { EscudoIniciaisProps } from './EscudoIniciais';
 
+export { EscudoEquipe } from './EscudoEquipe';
+export type { EscudoEquipeProps } from './EscudoEquipe';
+
 export { IconeOcorrencia } from './IconeOcorrencia';
 export type { IconeOcorrenciaProps } from './IconeOcorrencia';
 

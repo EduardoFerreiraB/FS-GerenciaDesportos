@@ -48,7 +48,7 @@ export default function ModalReabrirPartida({
   let tomBotao: 'primary' | 'danger' = 'primary';
 
   if (modo === 'CANCELAR_PARTIDA') {
-    titulo = `Cancelar Jogo #${partida?.numero_partida || partida?.id_partida || ''}`;
+    titulo = partida ? `Cancelar Jogo ${partida.numero_jogo}` : 'Cancelar Jogo';
     descricao =
       'Esta ação cancelará a partida agendada. Apenas partidas que ainda não possuem ocorrências registradas podem ser canceladas.';
     textoBotao = 'Confirmar Cancelamento';
@@ -59,7 +59,7 @@ export default function ModalReabrirPartida({
       'Esta ação desfaz o encerramento da fase de grupos, permitindo reabrir partidas dos grupos e retificar resultados. Caso o chaveamento mata-mata já tenha duelos com partidas iniciadas, a operação será bloqueada.';
     textoBotao = 'Confirmar Reabertura de Grupos';
   } else if (partida) {
-    titulo = `Reabrir Jogo #${partida.numero_partida || partida.id_partida} (${partida.nome_mandante || 'Mandante'} vs ${partida.nome_visitante || 'Visitante'})`;
+    titulo = `Reabrir Jogo ${partida.numero_jogo} (${partida.nome_mandante || 'Mandante'} × ${partida.nome_visitante || 'Visitante'})`;
   }
 
   const motivoValido = motivo.trim().length >= 3;

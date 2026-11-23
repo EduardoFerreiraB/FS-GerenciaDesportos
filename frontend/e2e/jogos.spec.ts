@@ -169,12 +169,12 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
     await btnGerarTabela.click();
 
     // Aguarda o feedback de sucesso e a renderização dos confrontos
-    await expect(page.getByText(/tabela de jogos e chaveamento gerados com sucesso/i)).toBeVisible({
+    await expect(page.getByText(/tabela de jogos (e chaveamento )?gerad[ao]s? com sucesso/i)).toBeVisible({
       timeout: 10000,
     });
 
     // Deve exibir pelo menos uma partida (ex: Falcões vs Tubarões)
-    await expect(page.getByText(/jogo #1/i)).toBeVisible();
+    await expect(page.getByText('Jogo 1', { exact: true })).toBeVisible();
     const primeiroCartao = page.locator('[data-testid^="cartao-partida-"]').first();
     await expect(primeiroCartao.getByTestId('status-partida')).toHaveText('Agendada');
 
@@ -251,7 +251,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
 
     // Gera a tabela
     await page.getByRole('button', { name: /gerar calendário \/ tabela/i }).first().click();
-    await expect(page.getByText(/tabela de jogos e chaveamento gerados com sucesso/i)).toBeVisible();
+    await expect(page.getByText(/tabela de jogos (e chaveamento )?gerad[ao]s? com sucesso/i)).toBeVisible();
 
     // Abre lançamento de placar
     await page.getByRole('button', { name: /lançar placar/i }).first().click();
@@ -279,7 +279,7 @@ test.describe('Gestão de Partidas, Agendamento e Placar Simples (Fatia 2)', () 
 
     // Testa filtro por status FINALIZADA
     await page.locator('#filtro-status').selectOption('FINALIZADA');
-    await expect(page.getByText('Jogo #1', { exact: true })).toBeVisible();
+    await expect(page.getByText('Jogo 1', { exact: true })).toBeVisible();
 
     // Testa filtro por status AGENDADA -> deve exibir estado vazio de filtros
     await page.locator('#filtro-status').selectOption('AGENDADA');

@@ -8,7 +8,7 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
     // chamadas iriam ao backend real com o token falso, recebendo 401 e deslogando a sessão.
     // 404 deixa cada indicador como "—" (falha parcial prevista); mocks dos testes têm prioridade.
     await page.route(
-      /\/competicoes\/edicoes\/\d+\/(equipes|partidas|classificacao|artilharia|disciplinar)(\?.*)?$/,
+      /\/competicoes\/edicoes\/\d+\/(equipes|partidas|classificacao|artilharia|disciplinar|disputa)(\?.*)?$/,
       (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{"detail":"sem mock"}' }),
     );
 
@@ -551,7 +551,7 @@ test.describe('Classificação e Chaveamento Eliminatório', () => {
             id_equipe_visitante: 2,
             nome_mandante: 'Águia Dourada',
             nome_visitante: 'Falcão Real',
-            numero_partida: 1,
+            numero_jogo: 1,
             status: 'FINALIZADA',
             placar: { gols_mandante: 3, gols_visitante: 1 },
             vencedor_id: 1,

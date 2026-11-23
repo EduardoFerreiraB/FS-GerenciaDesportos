@@ -62,6 +62,8 @@ interface VisualizadorPartidasProps {
   idEdicaoCompeticao: number;
   estado?: string;
   formato?: string;
+  /** Chamado quando jogos, tabela ou chaveamento mudam: o painel atualiza estado e chave (DF-RT12-01/02). */
+  onDadosAlterados?: () => void;
 }
 
 function mensagemDeErro(err: unknown, padrao: string): string {
@@ -81,6 +83,7 @@ export default function VisualizadorPartidas({
   idEdicaoCompeticao,
   estado: estadoInicial = 'RASCUNHO',
   formato,
+  onDadosAlterados,
 }: VisualizadorPartidasProps) {
   const [estadoAtual, setEstadoAtual] = useState<string>(estadoInicial);
   const [partidas, setPartidas] = useState<PartidaEstendida[]>([]);
@@ -164,8 +167,13 @@ export default function VisualizadorPartidas({
 
       await gerarTabela(idEdicaoCompeticao);
       setEstadoAtual('EM_ANDAMENTO');
-      setSucesso('Tabela de jogos e chaveamento gerados com sucesso!');
+      setSucesso(
+        formato === 'PONTOS_CORRIDOS'
+          ? 'Tabela de jogos gerada com sucesso!'
+          : 'Tabela de jogos e chaveamento gerados com sucesso!',
+      );
       await carregarDados();
+      onDadosAlterados?.();
     } catch (err: unknown) {
       setErro(mensagemDeErro(err, 'Erro ao gerar tabela da competição.'));
     } finally {
@@ -185,7 +193,8 @@ export default function VisualizadorPartidas({
     setEstadoAtual('RASCUNHO');
     setPartidas([]);
     setEstrutura(null);
-    setSucesso('Tabela de jogos desfeita com sucesso. A edição retornou ao estado Rascunho.');
+    setSucesso('Tabela de jogos desfeita com sucesso. A edição voltou para rascunho.');
+    onDadosAlterados?.();
   };
 
   // Handler: Encerrar Fase de Grupos
@@ -201,6 +210,7 @@ export default function VisualizadorPartidas({
     }
     setSucesso('Fase de grupos encerrada! As equipes classificadas foram alocadas no chaveamento eliminatório.');
     await carregarDados();
+    onDadosAlterados?.();
   };
 
   // Callbacks de atualização de partida
@@ -208,16 +218,17 @@ export default function VisualizadorPartidas({
     setPartidas((prev) =>
       prev.map((item) => (item.id_partida === atualizada.id_partida ? (atualizada as PartidaEstendida) : item))
     );
-    setSucesso(`Agendamento do jogo #${atualizada.numero_partida || atualizada.id_partida} salvo com sucesso!`);
+    setSucesso(`Agendamento do Jogo ${atualizada.numero_jogo} salvo com sucesso!`);
   };
 
   const handlePlacarRegistrado = (atualizada: PartidaDetalhe) => {
     setPartidas((prev) =>
       prev.map((item) => (item.id_partida === atualizada.id_partida ? (atualizada as PartidaEstendida) : item))
     );
-    setSucesso(`Placar do jogo #${atualizada.numero_partida || atualizada.id_partida} registrado com sucesso!`);
+    setSucesso(`Placar do Jogo ${atualizada.numero_jogo} registrado com sucesso!`);
     // Recarrega estrutura para atualizar eventuais avanços de duelos eliminatórios
     carregarDados();
+    onDadosAlterados?.();
   };
 
   // Mapeamentos e Filtros
@@ -262,9 +273,23 @@ export default function VisualizadorPartidas({
     })) as GrupoDisputaDetalhe[];
   }, [estrutura, partidas, idEdicaoCompeticao]);
 
+  // Fases eliminatórias presentes, na ordem do torneio (3º lugar antes da final).
+  const fasesDisponiveis = useMemo(() => {
+    const fases = new Set<string>();
+    partidas.forEach((p) => {
+      const fase = p.id_duelo != null ? mapaDuelos.get(p.id_duelo) : undefined;
+      if (fase) fases.add(fase.toUpperCase());
+    });
+    const ordem = (f: string) => (f === 'TERCEIRO_LUGAR' ? 6.5 : (ORDEM_FASES[f] ?? 50));
+    return Array.from(fases).sort((a, b) => ordem(a) - ordem(b));
+  }, [partidas, mapaDuelos]);
+
   const partidasFiltradas = useMemo(() => {
     return partidas.filter((p) => {
-      if (filtroRodada !== 'TODAS' && p.rodada !== Number(filtroRodada)) {
+      if (filtroRodada.startsWith('FASE:')) {
+        const fase = p.id_duelo != null ? (mapaDuelos.get(p.id_duelo) || '').toUpperCase() : '';
+        if (fase !== filtroRodada.slice(5)) return false;
+      } else if (filtroRodada !== 'TODAS' && p.rodada !== Number(filtroRodada)) {
         return false;
       }
       if (filtroGrupo !== 'TODOS' && p.id_grupo !== Number(filtroGrupo)) {
@@ -275,7 +300,7 @@ export default function VisualizadorPartidas({
       }
       return true;
     });
-  }, [partidas, filtroRodada, filtroGrupo, filtroStatus]);
+  }, [partidas, filtroRodada, filtroGrupo, filtroStatus, mapaDuelos]);
 
   // Agrupamento visual: rodadas em ordem, depois as fases eliminatórias na ordem do torneio.
   const gruposDeJogos = useMemo<GrupoDeJogos[]>(() => {
@@ -304,6 +329,10 @@ export default function VisualizadorPartidas({
   const isRascunho = estadoAtual === 'RASCUNHO';
   const isEmAndamento = estadoAtual === 'EM_ANDAMENTO';
   const isGruposMataMata = formato === 'GRUPOS_MATA_MATA';
+  // Os jogos do mata-mata só existem depois que a fase de grupos é encerrada (DF-RT12-10).
+  const gruposEncerrados = partidas.some((p) => p.id_duelo != null);
+  // Agendar só com a edição em rascunho ou em andamento (DF-RT13-09, DF-RT13-07).
+  const podeAgendarNaEdicao = isRascunho || isEmAndamento;
   const filtrosAtivos = filtroRodada !== 'TODAS' || filtroGrupo !== 'TODOS' || filtroStatus !== 'TODOS';
   const temMaisAcoes = isEmAndamento;
 
@@ -369,7 +398,7 @@ export default function VisualizadorPartidas({
         <div className="flex flex-wrap items-center gap-2">
           {isRascunho && temTabelaGerada && botaoGerar}
 
-          {isGruposMataMata && isEmAndamento && (
+          {isGruposMataMata && isEmAndamento && !gruposEncerrados && (
             <Button
               variant="secondary"
               onClick={() => setConfirmarEncerrarGruposAberto(true)}
@@ -397,7 +426,7 @@ export default function VisualizadorPartidas({
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {isGruposMataMata && (
+                {isGruposMataMata && gruposEncerrados && (
                   <DropdownMenuItem
                     data-testid="btn-reabrir-grupos"
                     onSelect={() =>
@@ -412,7 +441,7 @@ export default function VisualizadorPartidas({
                     Reabrir Fase de Grupos
                   </DropdownMenuItem>
                 )}
-                {isGruposMataMata && <DropdownMenuSeparator />}
+                {isGruposMataMata && gruposEncerrados && <DropdownMenuSeparator />}
                 <DropdownMenuItem tone="danger" onSelect={() => setConfirmarDesfazerAberto(true)}>
                   <Undo2 className="size-4" aria-hidden="true" />
                   Desfazer Tabela
@@ -431,7 +460,7 @@ export default function VisualizadorPartidas({
             Filtrar
           </div>
 
-          {rodadasDisponiveis.length > 0 && (
+          {rodadasDisponiveis.length + fasesDisponiveis.length > 0 && (
             <div className="flex flex-col gap-1 sm:w-44">
               <label htmlFor="filtro-rodada" className="text-xs font-medium text-fg-muted">
                 Rodada
@@ -441,6 +470,11 @@ export default function VisualizadorPartidas({
                 {rodadasDisponiveis.map((r) => (
                   <option key={r} value={r}>
                     Rodada {r}
+                  </option>
+                ))}
+                {fasesDisponiveis.map((f) => (
+                  <option key={f} value={`FASE:${f}`}>
+                    {rotuloFase(f)}
                   </option>
                 ))}
               </Select>
@@ -509,7 +543,7 @@ export default function VisualizadorPartidas({
       )}
 
       {/* Vazio 3: filtro sem resultados */}
-      {!carregando && temTabelaGerada && partidasFiltradas.length === 0 && (
+      {temTabelaGerada && partidasFiltradas.length === 0 && (
         <EmptyState
           icon={<Filter />}
           title="Nenhuma partida encontrada para os filtros selecionados."
@@ -522,8 +556,8 @@ export default function VisualizadorPartidas({
       )}
 
       {/* Jogos agrupados por rodada / fase */}
-      {!carregando && partidasFiltradas.length > 0 && (
-        <div className="space-y-8">
+      {partidasFiltradas.length > 0 && (
+        <div className="space-y-8" aria-busy={carregando || undefined}>
           {gruposDeJogos.map((grupo) => (
             <section key={grupo.chave} aria-label={grupo.titulo} className="space-y-3">
               <div className="flex items-baseline gap-2">
@@ -537,10 +571,14 @@ export default function VisualizadorPartidas({
                   const statusMatch = (partida.status || partida.estado || 'AGENDADA') as StatusPartida;
                   const isFinalizada = statusMatch === 'FINALIZADA';
                   // Jogo finalizado só é corrigido pela reabertura justificada.
+                  const isCancelada = statusMatch === 'CANCELADA';
                   const podeLancarPlacar =
                     Boolean(partida.id_equipe_mandante && partida.id_equipe_visitante) &&
-                    statusMatch !== 'CANCELADA' &&
+                    !isCancelada &&
                     !isFinalizada;
+                  const mostraAgendar = podeAgendarNaEdicao && !isFinalizada && !isCancelada;
+                  const mostraLancar = isEmAndamento && !isFinalizada && !isCancelada;
+                  const mostraReabrir = isEmAndamento && isFinalizada;
                   const rotulo = partida.id_grupo
                     ? mapaGrupos.get(partida.id_grupo) || `Grupo ${partida.id_grupo}`
                     : undefined;
@@ -554,13 +592,15 @@ export default function VisualizadorPartidas({
                       aoVivo={statusMatch === 'EM_ANDAMENTO'}
                       acoes={
                         <>
-                          <Button
-                            variant="secondary"
-                            onClick={() => setPartidaAgendando(partida)}
-                            leftIcon={<CalendarCheck className="size-4" aria-hidden="true" />}
-                          >
-                            Agendar
-                          </Button>
+                          {mostraAgendar && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => setPartidaAgendando(partida)}
+                              leftIcon={<CalendarCheck className="size-4" aria-hidden="true" />}
+                            >
+                              Agendar
+                            </Button>
+                          )}
                           <Button
                             variant="secondary"
                             data-testid={`btn-sumula-${partida.id_partida}`}
@@ -570,7 +610,7 @@ export default function VisualizadorPartidas({
                           >
                             Súmula
                           </Button>
-                          {!isFinalizada && (
+                          {mostraLancar && (
                             <Button
                               onClick={() => setPartidaPlacar(partida)}
                               disabled={!podeLancarPlacar}
@@ -580,7 +620,7 @@ export default function VisualizadorPartidas({
                               Lançar Placar
                             </Button>
                           )}
-                          {isFinalizada && (
+                          {mostraReabrir && (
                             <Button
                               variant="secondary"
                               data-testid={`btn-reabrir-${partida.id_partida}`}
@@ -632,6 +672,7 @@ export default function VisualizadorPartidas({
           onClose={() => setPartidaSumula(null)}
           onSucesso={async () => {
             await carregarDados();
+            onDadosAlterados?.();
           }}
         />
       )}
@@ -646,6 +687,7 @@ export default function VisualizadorPartidas({
         onSucesso={async () => {
           setSucesso('Operação de reabertura realizada com sucesso!');
           await carregarDados();
+          onDadosAlterados?.();
         }}
       />
 
