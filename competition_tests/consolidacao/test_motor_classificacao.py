@@ -319,9 +319,9 @@ def test_confronto_direto_ignorado_se_jogos_mutuos_nao_finalizados():
 
     linhas = calcular_classificacao(equipes, partidas)
     assert len(linhas) == 2
-    # Sem jogo finalizado, ambas estão em empate persistente
-    assert linhas[0].empate_persistente is True
-    assert linhas[1].empate_persistente is True
+    # Sem jogo finalizado não há empate a resolver (DF-RT12-11): mesma posição, sem alerta.
+    assert linhas[0].empate_persistente is False
+    assert linhas[1].empate_persistente is False
     assert linhas[0].posicao == 1
     assert linhas[1].posicao == 1
 
@@ -417,7 +417,7 @@ def test_classificacao_sem_jogos_todas_empatadas():
     assert len(linhas) == 3
     for l in linhas:
         assert l.posicao == 1
-        assert l.empate_persistente is True
+        assert l.empate_persistente is False  # DF-RT12-11
         assert l.jogos == 0
         assert l.pontos == 0
         assert l.aproveitamento == 0.0

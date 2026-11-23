@@ -10,7 +10,7 @@ from datetime import date, time
 
 from pydantic import Field
 
-from .comuns import Contrato
+from .comuns import Contrato, PlacarDuelo
 
 
 class IntegrantePublico(Contrato):
@@ -99,10 +99,13 @@ class PartidaPublica(Contrato):
     fase: str | None = None
     rodada: int | None = None
     ordem_jogo: int
+    numero_jogo: int
     id_equipe_mandante: int
     nome_mandante: str
+    sigla_mandante: str | None = None
     id_equipe_visitante: int
     nome_visitante: str
+    sigla_visitante: str | None = None
     data: date | None = None
     hora: time | None = None
     local: str | None = None
@@ -147,7 +150,12 @@ class VagaPublica(Contrato):
     origem: str
     id_equipe: int | None = None
     nome_equipe: str | None = None
+    nome_grupo: str | None = None
     descricao_origem: str | None = None
+
+
+class PlacarDueloPublico(PlacarDuelo):
+    """Placar agregado do duelo na ordem das vagas; ``None`` antes do primeiro jogo."""
 
 
 class DueloPublico(Contrato):
@@ -158,6 +166,7 @@ class DueloPublico(Contrato):
     ida_volta: bool
     id_equipe_vencedora: int | None = None
     vagas: list[VagaPublica] = Field(default_factory=list)
+    placar: PlacarDueloPublico | None = None
 
 
 class ChaveamentoPublico(Contrato):
@@ -201,7 +210,8 @@ ALLOWLIST_PUBLICA: dict[type[Contrato], frozenset[str]] = {
     EventoPublico: frozenset({"slug", "nome", "descricao", "edicoes"}),
     PartidaPublica: frozenset({
         "id_partida", "id_grupo", "nome_grupo", "fase", "rodada", "ordem_jogo",
-        "id_equipe_mandante", "nome_mandante", "id_equipe_visitante", "nome_visitante",
+        "numero_jogo", "id_equipe_mandante", "nome_mandante", "sigla_mandante",
+        "id_equipe_visitante", "nome_visitante", "sigla_visitante",
         "data", "hora", "local", "estado", "gols_mandante", "gols_visitante",
         "penaltis_mandante", "penaltis_visitante",
     }),
@@ -212,11 +222,14 @@ ALLOWLIST_PUBLICA: dict[type[Contrato], frozenset[str]] = {
     }),
     GrupoClassificacaoPublico: frozenset({"id_grupo", "nome", "linhas"}),
     ClassificacaoPublica: frozenset({"linhas", "grupos", "possui_empate_persistente"}),
-    VagaPublica: frozenset({"posicao", "origem", "id_equipe", "nome_equipe", "descricao_origem"}),
+    VagaPublica: frozenset({
+        "posicao", "origem", "id_equipe", "nome_equipe", "nome_grupo", "descricao_origem",
+    }),
     DueloPublico: frozenset({
         "id_duelo", "fase", "posicao_chave", "estado", "ida_volta", "id_equipe_vencedora",
-        "vagas",
+        "vagas", "placar",
     }),
+    PlacarDueloPublico: frozenset({"gols", "penaltis"}),
     ChaveamentoPublico: frozenset({"duelos"}),
     ArtilheiroPublico: frozenset({
         "posicao", "nome_esportivo", "numero_camisa", "id_equipe", "nome_equipe", "gols",

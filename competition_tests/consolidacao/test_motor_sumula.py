@@ -394,12 +394,12 @@ def test_calcular_artilharia_ignora_gol_contra_sem_autor_e_canceladas():
     assert tabela.artilheiros[0].gols_em_andamento == 2
 
     assert tabela.artilheiros[1].nome_esportivo == "Bruno Lima"
-    assert tabela.artilheiros[1].posicao == 2
+    assert tabela.artilheiros[1].posicao == 1  # mesmos gols, mesma posição (DF-RT14-04)
     assert tabela.artilheiros[1].gols == 2
     assert tabela.artilheiros[1].gols_em_andamento == 1
 
     assert tabela.artilheiros[2].nome_esportivo == "Carlos Silva"
-    assert tabela.artilheiros[2].posicao == 3
+    assert tabela.artilheiros[2].posicao == 1  # mesmos gols, mesma posição (DF-RT14-04)
     assert tabela.artilheiros[2].gols == 2
     assert tabela.artilheiros[2].gols_em_andamento == 0
 

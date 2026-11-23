@@ -244,7 +244,7 @@ class TestCicloVidaEdicao:
             f"/competicoes/edicoes/{id_ed}/finalizar", headers=headers_coord
         )
         assert resp.status_code == 409
-        assert "empate persistente" in resp.json()["mensagem"].lower()
+        assert "empate não resolvido pelo título" in resp.json()["mensagem"].lower()
 
         # 5. Adiciona um gol definindo campeão -> POST /finalizar -> 200 FINALIZADA
         db.add(

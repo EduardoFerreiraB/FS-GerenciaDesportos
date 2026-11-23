@@ -36,6 +36,7 @@ from competicoes.modelos import (
     Partida,
     VagaDuelo,
 )
+from competicoes.servicos.chave import descrever_origem, placares_dos_duelos
 from competicoes.servicos.classificacao import obter_classificacao_edicao
 from competicoes.servicos.motores.chaveamento import (
     distribuir_equipes_grupos,
@@ -139,7 +140,7 @@ def gerar_tabela_edicao(
 
     if edicao.estado != "RASCUNHO":
         raise ConflitoEstado(
-            "Apenas edições em estado RASCUNHO podem ter a tabela gerada.",
+            "A tabela só pode ser gerada com a edição em rascunho.",
             campos=["estado"],
         )
 
@@ -539,6 +540,10 @@ def obter_estrutura_disputa(db: Session, id_edicao: int) -> EstruturaDisputaDeta
         .order_by(DueloEliminatorio.fase, DueloEliminatorio.posicao_chave)
     ).scalars().all()
 
+    nomes_grupos = {g.id_grupo: g.nome for g in grupos_db}
+    duelos_por_id = {d.id_duelo: d for d in duelos_db}
+    placares = placares_dos_duelos(db, duelos_db)
+
     duelos_res: list[DueloDetalhe] = []
     for d in duelos_db:
         vagas_db = db.execute(
@@ -546,20 +551,24 @@ def obter_estrutura_disputa(db: Session, id_edicao: int) -> EstruturaDisputaDeta
             .where(VagaDuelo.id_duelo == d.id_duelo)
             .order_by(VagaDuelo.posicao)
         ).scalars().all()
-        vagas_res = [
-            VagaDueloDetalhe(
+        vagas_res = []
+        for v in vagas_db:
+            origem = duelos_por_id.get(v.id_duelo_origem)
+            vagas_res.append(VagaDueloDetalhe(
                 id_vaga=v.id_vaga,
                 id_duelo=v.id_duelo,
                 posicao=v.posicao,
                 origem=v.origem,
                 id_equipe=v.id_equipe,
                 id_grupo=v.id_grupo,
+                nome_grupo=nomes_grupos.get(v.id_grupo),
                 posicao_grupo=v.posicao_grupo,
                 id_duelo_origem=v.id_duelo_origem,
+                posicao_duelo_origem=origem.posicao_chave if origem else None,
+                fase_origem=origem.fase if origem else None,
                 id_equipe_resolvida=v.id_equipe_resolvida,
-            )
-            for v in vagas_db
-        ]
+                descricao_origem=descrever_origem(v, nomes_grupos, duelos_por_id),
+            ))
         duelos_res.append(
             DueloDetalhe(
                 id_duelo=d.id_duelo,
@@ -570,6 +579,7 @@ def obter_estrutura_disputa(db: Session, id_edicao: int) -> EstruturaDisputaDeta
                 id_equipe_vencedora=d.id_equipe_vencedora,
                 ida_volta=d.ida_volta,
                 vagas=vagas_res,
+                placar=placares.get(d.id_duelo),
             )
         )
 
@@ -624,13 +634,13 @@ def encerrar_fase_grupos(
 
     if edicao.formato != "GRUPOS_MATA_MATA":
         raise ConflitoEstado(
-            "Apenas edições no formato GRUPOS_MATA_MATA possuem encerramento de fase de grupos.",
+            "Apenas edições no formato grupos + mata-mata possuem encerramento de fase de grupos.",
             campos=["formato"],
         )
 
     if edicao.estado != "EM_ANDAMENTO":
         raise ConflitoEstado(
-            "A edição deve estar EM_ANDAMENTO para encerrar a fase de grupos.",
+            "A edição precisa estar em andamento para encerrar a fase de grupos.",
             campos=["estado"],
         )
 
@@ -726,13 +736,13 @@ def reabrir_fase_grupos(
 
     if edicao.formato != "GRUPOS_MATA_MATA":
         raise ConflitoEstado(
-            "Apenas edições no formato GRUPOS_MATA_MATA possuem fase de grupos para reabertura.",
+            "Apenas edições no formato grupos + mata-mata possuem fase de grupos para reabertura.",
             campos=["formato"],
         )
 
     if edicao.estado != "EM_ANDAMENTO":
         raise ConflitoEstado(
-            "A edição deve estar EM_ANDAMENTO para reabrir a fase de grupos.",
+            "A edição precisa estar em andamento para reabrir a fase de grupos.",
             campos=["estado"],
         )
 

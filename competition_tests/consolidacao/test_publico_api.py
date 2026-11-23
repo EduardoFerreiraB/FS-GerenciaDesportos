@@ -192,7 +192,7 @@ class TestDisputaPublica:
 
         (final,) = [d for d in duelos if d["fase"] == "FINAL"]
         assert [v["descricao_origem"] for v in final["vagas"]] == [
-            "Vencedor de SEMIFINAL 1", "Vencedor de SEMIFINAL 2",
+            "Vencedor da Semifinal 1", "Vencedor da Semifinal 2",
         ]
         assert all(v["nome_equipe"] is None for v in final["vagas"])
         semi = next(d for d in duelos if d["fase"] == "SEMIFINAL")

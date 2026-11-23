@@ -22,6 +22,7 @@ from competicoes.modelos.disputa import DueloEliminatorio, VagaDuelo
 from competicoes.modelos.operacao import RequisicaoPartida
 from competicoes.modelos.organizacao import EdicaoCompeticao
 from competicoes.modelos.partidas import OcorrenciaPartida, Partida
+from competicoes.servicos.numeracao import mapa_numeros_jogos
 from competicoes.servicos.motores.avanco import propagar_avanco_grafo, resolver_duelo
 from competicoes.servicos.disciplina import _executar_reconciliacao_interna
 from competicoes.servicos.motores.sumula import validar_ajuste_resultado_simples
@@ -66,7 +67,7 @@ def bloquear_partida(db: Session, id_partida: int) -> Partida:
         consulta = consulta.with_for_update()
     partida = db.execute(consulta).scalar_one_or_none()
     if partida is None:
-        raise NaoEncontrado("Partida nao encontrada.", campos=["id_partida"])
+        raise NaoEncontrado("Partida não encontrada.", campos=["id_partida"])
     return partida
 
 
@@ -83,7 +84,7 @@ def _carregar_partida_completa(db: Session, id_partida: int) -> Partida:
     )
     partida = db.execute(consulta).scalar_one_or_none()
     if partida is None:
-        raise NaoEncontrado("Partida nao encontrada.", campos=["id_partida"])
+        raise NaoEncontrado("Partida não encontrada.", campos=["id_partida"])
     return partida
 
 
@@ -187,9 +188,18 @@ def _validar_penaltis(
 
 
 def _construir_partida_detalhe(
-    db: Session, partida: Partida, placar: PlacarPartida | None = None
+    db: Session,
+    partida: Partida,
+    placar: PlacarPartida | None = None,
+    numeros: dict[int, int] | None = None,
 ) -> PartidaDetalhe:
-    """Serializa Partida em PartidaDetalhe."""
+    """Serializa Partida em PartidaDetalhe.
+
+    ``numeros`` (id_partida → numero_jogo) evita recalcular a numeração da edição a cada
+    partida quando a lista inteira é serializada.
+    """
+    if numeros is None:
+        numeros = mapa_numeros_jogos(db, partida.id_edicao_competicao)
     if placar is None:
         placar = _calcular_placar(db, partida)
 
@@ -211,10 +221,13 @@ def _construir_partida_detalhe(
         id_duelo=partida.id_duelo,
         rodada=partida.rodada,
         ordem_jogo=partida.ordem_jogo,
+        numero_jogo=numeros.get(partida.id_partida, 1),
         id_equipe_mandante=partida.id_equipe_mandante,
         nome_mandante=nome_m,
+        sigla_mandante=partida.equipe_mandante.sigla if partida.equipe_mandante else None,
         id_equipe_visitante=partida.id_equipe_visitante,
         nome_visitante=nome_v,
+        sigla_visitante=partida.equipe_visitante.sigla if partida.equipe_visitante else None,
         data=partida.data,
         hora=partida.hora,
         data_hora=data_hora,
@@ -260,7 +273,9 @@ def listar_partidas(
         Partida.rodada.asc(), Partida.ordem_jogo.asc(), Partida.id_partida.asc()
     )
     partidas = db.execute(stmt).scalars().unique().all()
-    return [_construir_partida_detalhe(db, p) for p in partidas]
+    numeros = mapa_numeros_jogos(db, id_edicao)
+    partidas = sorted(partidas, key=lambda p: numeros.get(p.id_partida, 0))
+    return [_construir_partida_detalhe(db, p, numeros=numeros) for p in partidas]
 
 
 def agendar_partida(
@@ -269,6 +284,24 @@ def agendar_partida(
     """Atualiza agendamento (data/hora/local/campo) de uma partida."""
     with transacao(db):
         partida = bloquear_partida(db, id_partida)
+        edicao = db.get(EdicaoCompeticao, partida.id_edicao_competicao)
+        if edicao.estado not in ("RASCUNHO", "EM_ANDAMENTO"):
+            raise ConflitoEstado(
+                "A edição precisa estar em rascunho ou em andamento para agendar jogos.",
+                campos=["estado"],
+            )
+        if partida.estado == "FINALIZADA":
+            raise ConflitoEstado("Jogo finalizado não pode ser reagendado.", campos=["estado"])
+        if partida.estado == "CANCELADA":
+            raise ConflitoEstado("Jogo cancelado não pode ser reagendado.", campos=["estado"])
+
+        nova_data = dados.data_hora.date() if dados.data_hora is not None else dados.data
+        if nova_data is not None and not (edicao.data_inicio <= nova_data <= edicao.data_fim):
+            raise ConfiguracaoInvalida(
+                f"A data precisa estar entre {edicao.data_inicio.strftime('%d/%m/%Y')} "
+                f"e {edicao.data_fim.strftime('%d/%m/%Y')}.",
+                campos=["data"],
+            )
 
         antes = {
             "data": str(partida.data) if partida.data else None,
@@ -518,7 +551,7 @@ def registrar_resultado_simples(
     ).scalar_one_or_none()
     if edicao is None or edicao.estado != "EM_ANDAMENTO":
         raise ConflitoEstado(
-            "A edição deve estar EM_ANDAMENTO para registrar resultado.",
+            "A edição precisa estar em andamento para registrar resultado.",
             campos=["estado"],
         )
 
@@ -597,7 +630,7 @@ def registrar_resultado_simples(
                     id_partida=id_partida,
                     tipo="GOL",
                     id_equipe_beneficiada=partida.id_equipe_mandante,
-                    minuto=0,
+                    minuto=None,  # placar simples não tem minuto (DF-RT14-08)
                     observacao=obs,
                     id_usuario_autor=responsavel.id_usuario,
                 )
@@ -608,7 +641,7 @@ def registrar_resultado_simples(
                     id_partida=id_partida,
                     tipo="GOL",
                     id_equipe_beneficiada=partida.id_equipe_visitante,
-                    minuto=0,
+                    minuto=None,  # placar simples não tem minuto (DF-RT14-08)
                     observacao=obs,
                     id_usuario_autor=responsavel.id_usuario,
                 )

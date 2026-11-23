@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import Field, StringConstraints
 
-from .comuns import Contrato
+from .comuns import Contrato, PlacarDuelo
 
 Nome = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
@@ -39,6 +39,8 @@ class VagaDueloDetalhe(Contrato):
     posicao_duelo_origem: int | None = None
     fase_origem: str | None = None
     id_equipe_resolvida: int | None = None
+    # Texto legível da origem: "1º do Grupo A", "Vencedor da Semifinal 1".
+    descricao_origem: str | None = None
 
 
 class DueloDetalhe(Contrato):
@@ -50,6 +52,8 @@ class DueloDetalhe(Contrato):
     id_equipe_vencedora: int | None = None
     ida_volta: bool = False
     vagas: list[VagaDueloDetalhe] = Field(default_factory=list)
+    # None enquanto nenhum jogo do duelo começou.
+    placar: PlacarDuelo | None = None
 
 
 class PartidaSimples(Contrato):
