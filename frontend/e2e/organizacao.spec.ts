@@ -138,7 +138,7 @@ test.describe('Organização de Eventos, Competições e Edições', () => {
     await page.getByText(nomeEvento).click();
 
     // 2. Tenta adicionar competição ao evento com datas fora do período do evento
-    await page.getByRole('button', { name: /adicionar competição/i }).click();
+    await page.getByRole('button', { name: /nova competição/i }).click();
     await page.getByLabel('Nome da Competição').fill(`Futebol da Primavera ${Date.now()}`);
     await page.getByLabel('Identificação da Edição').fill('2026');
     await page.getByLabel('Modalidade').selectOption({ label: 'Futebol' });
@@ -148,7 +148,7 @@ test.describe('Organização de Eventos, Competições e Edições', () => {
     await page.getByRole('button', { name: /salvar|criar competição/i }).click();
 
     // Espera a mensagem de erro do backend exibida na interface
-    await expect(page.getByText(/deve estar contido no periodo/i)).toBeVisible();
+    await expect(page.getByText(/deve estar contido no per[ií]odo|per[ií]odo do evento/i)).toBeVisible();
   });
 
   test('visão geral mostra jogos realizados e pendência de jogos sem data', async ({ page, request }) => {

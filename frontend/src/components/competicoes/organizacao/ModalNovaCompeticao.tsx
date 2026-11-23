@@ -19,6 +19,8 @@ import {
   isErroApi,
 } from '@/services/competicoes';
 import { modalidadeService } from '@/services';
+import { useNotification } from '@/context/NotificationContext';
+import { extrairErro } from '@/lib/erros';
 import type {
   CompeticaoDetalhe,
   FormatoCompeticao,
@@ -47,6 +49,7 @@ export default function ModalNovaCompeticao({
   onSuccess,
   idEdicaoEventoInicial = null,
 }: ModalNovaCompeticaoProps) {
+  const { toast } = useNotification();
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [idModalidade, setIdModalidade] = useState<number | ''>('');
@@ -70,9 +73,24 @@ export default function ModalNovaCompeticao({
 
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroNome, setErroNome] = useState<string | null>(null);
+  const [erroDataFim, setErroDataFim] = useState<string | null>(null);
 
   useEffect(() => {
     if (aberto) {
+      setNome('');
+      setDescricao('');
+      setIdentificacao('1ª Edição');
+      setCategoria('');
+      setDataInicio('');
+      setDataFim('');
+      setFormato('GRUPOS_MATA_MATA');
+      setConfiguracao(criarConfiguracaoPadrao('GRUPOS_MATA_MATA'));
+      setIdEdicaoEvento(idEdicaoEventoInicial ?? null);
+      setErro(null);
+      setErroNome(null);
+      setErroDataFim(null);
+
       modalidadeService
         .getAll()
         .then((res: unknown) => {
@@ -90,7 +108,7 @@ export default function ModalNovaCompeticao({
         })
         .catch(() => {});
     }
-  }, [aberto]);
+  }, [aberto, idEdicaoEventoInicial]);
 
   useEffect(() => {
     if (idEdicaoEventoInicial !== undefined) {
@@ -101,6 +119,7 @@ export default function ModalNovaCompeticao({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro(null);
+    setErroDataFim(null);
 
     if (!nome.trim()) {
       setErro('O nome da competição é obrigatório.');
@@ -116,6 +135,10 @@ export default function ModalNovaCompeticao({
     }
     if (!dataInicio || !dataFim) {
       setErro('As datas de início e término são obrigatórias.');
+      return;
+    }
+    if (dataFim < dataInicio) {
+      setErroDataFim('A data de término não pode ser anterior à data de início.');
       return;
     }
 
@@ -135,15 +158,26 @@ export default function ModalNovaCompeticao({
           id_edicao_evento: idEdicaoEvento || null,
         },
       });
+      toast('Competição criada com sucesso.', 'success');
       onSuccess(novaCompeticao);
       onClose();
     } catch (err: unknown) {
-      if (isErroApi(err)) {
-        setErro(err.mensagem);
-      } else if (err instanceof Error) {
-        setErro(err.message);
-      } else {
-        setErro('Ocorreu um erro ao criar a competição.');
+      const parsed = extrairErro(err, {
+        camposConhecidos: ['nome', 'edicao.data_fim', 'data_fim'],
+        padrao: 'Ocorreu um erro ao criar a competição.',
+      });
+      const camposLista = isErroApi(err) ? (err.campos ?? []) : [];
+      const msgNome = parsed.campos['nome'] ?? (camposLista.includes('nome') ? parsed.mensagem : null);
+      const msgDataFim =
+        parsed.campos['edicao.data_fim'] ??
+        parsed.campos['data_fim'] ??
+        (camposLista.includes('edicao.data_fim') || camposLista.includes('data_fim')
+          ? parsed.mensagem
+          : null);
+      if (msgNome) setErroNome(msgNome);
+      if (msgDataFim) setErroDataFim(msgDataFim);
+      if (!msgNome && !msgDataFim) {
+        setErro(parsed.mensagem);
       }
     } finally {
       setCarregando(false);
@@ -168,14 +202,23 @@ export default function ModalNovaCompeticao({
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-fg">Competição</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Nome da Competição" htmlFor="nome-competicao" required>
+              <Field
+                label="Nome da Competição"
+                htmlFor="nome-competicao"
+                required
+                error={erroNome ?? undefined}
+              >
                 <Input
                   id="nome-competicao"
                   type="text"
                   required
                   placeholder="Ex: Campeonato Municipal"
                   value={nome}
-                  onChange={(e) => setNome(e.target.value)}
+                  onChange={(e) => {
+                    setNome(e.target.value);
+                    setErroNome(null);
+                    setErro(null);
+                  }}
                 />
               </Field>
 
@@ -264,17 +307,30 @@ export default function ModalNovaCompeticao({
                   type="date"
                   required
                   value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
+                  onChange={(e) => {
+                    setDataInicio(e.target.value);
+                    setErroDataFim(null);
+                    setErro(null);
+                  }}
                 />
               </Field>
 
-              <Field label="Data de Término" htmlFor="data-fim-edicao" required>
+              <Field
+                label="Data de Término"
+                htmlFor="data-fim-edicao"
+                required
+                error={erroDataFim ?? undefined}
+              >
                 <Input
                   id="data-fim-edicao"
                   type="date"
                   required
                   value={dataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
+                  onChange={(e) => {
+                    setDataFim(e.target.value);
+                    setErroDataFim(null);
+                    setErro(null);
+                  }}
                 />
               </Field>
             </div>

@@ -7,8 +7,25 @@ import { CartaoPlacar, placarDePartidaPublica } from '@/components/competicoes/v
 import { EmptyState } from '@/components/ui';
 import { rotuloFase } from '@/lib/rotulos';
 
+const FASES_NAO_ELIMINATORIAS = new Set(['FASE_DE_GRUPOS', 'PONTOS_CORRIDOS']);
+
+export function ehFaseEliminatoria(fase: string | null | undefined): fase is string {
+  return Boolean(fase && !FASES_NAO_ELIMINATORIAS.has(fase));
+}
+
+/**
+ * Ordena partidas públicas pela numeração sequencial da API (`numero_jogo`),
+ * que já garante grupos → Oitavas → Quartas → Semifinal → 3º lugar → Final.
+ */
+export function ordenarPartidasPublicas(partidas: PartidaPublica[]): PartidaPublica[] {
+  return [...partidas].sort((a, b) => {
+    if (a.numero_jogo !== b.numero_jogo) return a.numero_jogo - b.numero_jogo;
+    return a.id_partida - b.id_partida;
+  });
+}
+
 function contexto(partida: PartidaPublica): string {
-  if (partida.fase) {
+  if (ehFaseEliminatoria(partida.fase)) {
     const jogo = partida.ordem_jogo === 2 ? ' · volta' : '';
     return `${rotuloFase(partida.fase)}${jogo}`;
   }
@@ -16,11 +33,18 @@ function contexto(partida: PartidaPublica): string {
   return partes.filter(Boolean).join(' · ');
 }
 
-/** Agrupa por rodada (e grupo) ou fase, mantendo a ordem em que a API devolve os jogos. */
+/** Agrupa por rodada ou fase eliminatória, já na ordem cronológica da competição. */
 function agrupar(partidas: PartidaPublica[]): { titulo: string; partidas: PartidaPublica[] }[] {
+  const ordenadas = ordenarPartidasPublicas(partidas);
   const grupos = new Map<string, PartidaPublica[]>();
-  for (const p of partidas) {
-    const chave = p.fase ? rotuloFase(p.fase) : p.rodada ? `Rodada ${p.rodada}` : 'Jogos';
+  for (const p of ordenadas) {
+    const chave = ehFaseEliminatoria(p.fase)
+      ? rotuloFase(p.fase)
+      : p.rodada
+        ? `Rodada ${p.rodada}`
+        : p.fase
+          ? rotuloFase(p.fase)
+          : 'Jogos';
     grupos.set(chave, [...(grupos.get(chave) ?? []), p]);
   }
   return [...grupos].map(([titulo, lista]) => ({ titulo, partidas: lista }));
@@ -65,7 +89,7 @@ export default function JogosPublicos({ partidas }: { partidas: PartidaPublica[]
     );
   }
 
-  const aoVivo = partidas.filter((p) => p.estado === 'EM_ANDAMENTO');
+  const aoVivo = ordenarPartidasPublicas(partidas.filter((p) => p.estado === 'EM_ANDAMENTO'));
   const demais = partidas.filter((p) => p.estado !== 'EM_ANDAMENTO');
 
   return (

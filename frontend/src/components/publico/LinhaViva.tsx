@@ -4,25 +4,43 @@ import React from 'react';
 import type { PartidaPublica } from '@/types/publico';
 import { SinalAoVivo } from '@/components/competicoes/visual';
 import { rotuloFase } from '@/lib/rotulos';
+import { ehFaseEliminatoria, ordenarPartidasPublicas } from './JogosPublicos';
 import { usarPublico } from './usarPublico';
 import { servicoPublico } from '@/services/publico';
 
-const ENCERRADA = ['FINALIZADA', 'CANCELADA'];
-
-/** "Rodada 3 de 7" ou "Semifinal"; null quando não há o que dizer. */
+/**
+ * Descreve o andamento real da competição:
+ * - Com mata-mata: "Mata-mata concluído" se todos os jogos eliminatórios terminaram,
+ *   ou o rótulo da fase eliminatória em aberto mais cedo (ex.: "Semifinal", "Final").
+ * - Apenas grupos / pontos corridos: "X de Y jogos" assim que há jogos finalizados,
+ *   ou "Rodada 1 de N" antes do primeiro resultado.
+ */
 export function descreverAndamento(partidas: PartidaPublica[]): string | null {
-  if (partidas.length === 0) return null;
-  const abertas = partidas.filter((p) => !ENCERRADA.includes(p.estado));
-  const ref = abertas[0] ?? partidas[partidas.length - 1];
-  const rodadas = partidas.map((p) => p.rodada).filter((r): r is number => r !== null);
-  if (ref.fase && rodadas.length === 0) return rotuloFase(ref.fase);
-  if (rodadas.length === 0) return null;
-  const total = Math.max(...rodadas);
-  const atual = abertas.length
-    ? Math.min(...abertas.map((p) => p.rodada).filter((r): r is number => r !== null))
-    : total;
-  if (!Number.isFinite(atual)) return ref.fase ? rotuloFase(ref.fase) : null;
-  return `Rodada ${atual} de ${total}`;
+  const validas = partidas.filter((p) => p.estado !== 'CANCELADA');
+  if (validas.length === 0) return null;
+
+  const mataMata = ordenarPartidasPublicas(validas.filter((p) => ehFaseEliminatoria(p.fase)));
+  if (mataMata.length > 0) {
+    const abertasMataMata = mataMata.filter((p) => p.estado !== 'FINALIZADA');
+    if (abertasMataMata.length === 0) return 'Mata-mata concluído';
+    return rotuloFase(abertasMataMata[0].fase);
+  }
+
+  const finalizadas = validas.filter((p) => p.estado === 'FINALIZADA');
+  if (finalizadas.length > 0) {
+    const rotuloJogos = validas.length === 1 ? 'jogo' : 'jogos';
+    return `${finalizadas.length} de ${validas.length} ${rotuloJogos}`;
+  }
+
+  const rodadas = validas.map((p) => p.rodada).filter((r): r is number => r !== null);
+  if (rodadas.length > 0) {
+    const total = Math.max(...rodadas);
+    const primeira = Math.min(...rodadas);
+    return `Rodada ${primeira} de ${total}`;
+  }
+
+  const rotuloJogos = validas.length === 1 ? 'jogo' : 'jogos';
+  return `0 de ${validas.length} ${rotuloJogos}`;
 }
 
 /** Falha ao buscar os jogos oculta a linha, sem erro no cartão. */

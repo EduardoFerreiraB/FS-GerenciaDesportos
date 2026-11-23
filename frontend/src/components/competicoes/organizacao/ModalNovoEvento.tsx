@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   Button,
@@ -11,6 +11,8 @@ import {
   Input,
   Textarea,
 } from '@/components/ui';
+import { useNotification } from '@/context/NotificationContext';
+import { extrairErro } from '@/lib/erros';
 import { criarEventoComEdicao, isErroApi } from '@/services/competicoes';
 import type { EventoDetalhe } from '@/types/competicoes';
 
@@ -25,6 +27,7 @@ export default function ModalNovoEvento({
   onClose,
   onSuccess,
 }: ModalNovoEventoProps) {
+  const { toast } = useNotification();
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [identificacao, setIdentificacao] = useState('1ª Edição');
@@ -32,13 +35,34 @@ export default function ModalNovoEvento({
   const [dataFim, setDataFim] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroNome, setErroNome] = useState<string | null>(null);
+  const [erroDataFim, setErroDataFim] = useState<string | null>(null);
+
+  const limparFormulario = () => {
+    setNome('');
+    setDescricao('');
+    setIdentificacao('1ª Edição');
+    setDataInicio('');
+    setDataFim('');
+    setErro(null);
+    setErroNome(null);
+    setErroDataFim(null);
+  };
+
+  useEffect(() => {
+    if (aberto) {
+      limparFormulario();
+    }
+  }, [aberto]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro(null);
+    setErroNome(null);
+    setErroDataFim(null);
 
     if (!nome.trim()) {
-      setErro('O nome do evento é obrigatório.');
+      setErroNome('O nome do evento é obrigatório.');
       return;
     }
     if (!identificacao.trim()) {
@@ -47,6 +71,10 @@ export default function ModalNovoEvento({
     }
     if (!dataInicio || !dataFim) {
       setErro('As datas de início e término são obrigatórias.');
+      return;
+    }
+    if (dataFim < dataInicio) {
+      setErroDataFim('A data de término deve ser igual ou posterior à data de início.');
       return;
     }
 
@@ -61,15 +89,27 @@ export default function ModalNovoEvento({
           data_fim: dataFim,
         },
       });
+      toast('Evento criado com sucesso.', 'success');
+      limparFormulario();
       onSuccess(novoEvento);
       onClose();
     } catch (err: unknown) {
-      if (isErroApi(err)) {
-        setErro(err.mensagem);
-      } else if (err instanceof Error) {
-        setErro(err.message);
-      } else {
-        setErro('Ocorreu um erro ao criar o evento.');
+      const parsed = extrairErro(err, {
+        camposConhecidos: ['nome', 'edicao.data_fim', 'data_fim'],
+        padrao: 'Ocorreu um erro ao criar o evento.',
+      });
+      const camposLista = isErroApi(err) ? (err.campos ?? []) : [];
+      const msgNome = parsed.campos['nome'] ?? (camposLista.includes('nome') ? parsed.mensagem : null);
+      const msgDataFim =
+        parsed.campos['edicao.data_fim'] ??
+        parsed.campos['data_fim'] ??
+        (camposLista.includes('edicao.data_fim') || camposLista.includes('data_fim')
+          ? parsed.mensagem
+          : null);
+      if (msgNome) setErroNome(msgNome);
+      if (msgDataFim) setErroDataFim(msgDataFim);
+      if (!msgNome && !msgDataFim) {
+        setErro(parsed.mensagem);
       }
     } finally {
       setCarregando(false);
@@ -93,14 +133,23 @@ export default function ModalNovoEvento({
 
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-fg">Evento</h3>
-            <Field label="Nome do Evento" htmlFor="nome-evento" required>
+            <Field
+              label="Nome do Evento"
+              htmlFor="nome-evento"
+              required
+              error={erroNome ?? undefined}
+            >
               <Input
                 id="nome-evento"
                 type="text"
                 required
                 placeholder="Ex: Jogos da Primavera 2026"
                 value={nome}
-                onChange={(e) => setNome(e.target.value)}
+                onChange={(e) => {
+                  setNome(e.target.value);
+                  setErroNome(null);
+                  setErro(null);
+                }}
               />
             </Field>
 
@@ -135,16 +184,29 @@ export default function ModalNovoEvento({
                   type="date"
                   required
                   value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
+                  onChange={(e) => {
+                    setDataInicio(e.target.value);
+                    setErroDataFim(null);
+                    setErro(null);
+                  }}
                 />
               </Field>
-              <Field label="Data de Término" htmlFor="data-fim-edicao" required>
+              <Field
+                label="Data de Término"
+                htmlFor="data-fim-edicao"
+                required
+                error={erroDataFim ?? undefined}
+              >
                 <Input
                   id="data-fim-edicao"
                   type="date"
                   required
                   value={dataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
+                  onChange={(e) => {
+                    setDataFim(e.target.value);
+                    setErroDataFim(null);
+                    setErro(null);
+                  }}
                 />
               </Field>
             </div>
