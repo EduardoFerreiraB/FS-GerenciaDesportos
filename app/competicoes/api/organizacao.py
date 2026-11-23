@@ -16,12 +16,16 @@ from competicoes.contratos.organizacao import (
     EdicaoEventoAtualizar,
     EdicaoEventoCriar,
     EdicaoEventoDetalhe,
+    EdicaoEventoExcluir,
     EventoAtualizar,
     EventoComEdicaoCriar,
     EventoDetalhe,
+    EventoExcluir,
     PaginaCompeticoes,
     PaginaEventos,
+    PreviaExclusaoEvento,
     PublicacaoAtualizar,
+    VinculoEdicaoCriar,
 )
 from competicoes.contratos.sumula import MotivoOperacao
 from competicoes.servicos import organizacao as servico_organizacao
@@ -95,6 +99,34 @@ def atualizar_evento(
     return servico_organizacao.atualizar_evento(db, id_evento, dados, autor)
 
 
+@router.get(
+    "/eventos/{id_evento}/exclusao/previa",
+    response_model=PreviaExclusaoEvento,
+    summary="Impacto da exclusão do evento (para o diálogo de confirmação)",
+)
+def previa_exclusao_evento(
+    id_evento: int,
+    db: Session = Depends(get_db),
+    _autor: models.Usuario = Depends(check_coordenador_role),
+) -> PreviaExclusaoEvento:
+    return servico_organizacao.previa_exclusao_evento(db, id_evento)
+
+
+@router.delete(
+    "/eventos/{id_evento}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Excluir evento em cascata (exige o nome exato)",
+)
+def excluir_evento(
+    id_evento: int,
+    dados: EventoExcluir,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> Response:
+    servico_organizacao.excluir_evento(db, id_evento, dados.confirmacao_nome, autor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/eventos/{id_evento}/edicoes",
     response_model=EdicaoEventoDetalhe,
@@ -124,6 +156,55 @@ def atualizar_edicao_evento(
 ) -> EdicaoEventoDetalhe:
     return servico_organizacao.atualizar_edicao_evento(
         db, id_edicao_evento, dados, autor
+    )
+
+
+@router.delete(
+    "/edicoes-evento/{id_edicao_evento}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Excluir edição de evento em cascata (exige a identificação exata)",
+)
+def excluir_edicao_evento(
+    id_edicao_evento: int,
+    dados: EdicaoEventoExcluir,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> Response:
+    servico_organizacao.excluir_edicao_evento(
+        db, id_edicao_evento, dados.confirmacao_identificacao, autor
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/edicoes-evento/{id_edicao_evento}/vinculos",
+    response_model=EdicaoEventoDetalhe,
+    summary="Vincular edição de competição existente à edição do evento",
+)
+def vincular_edicao_competicao(
+    id_edicao_evento: int,
+    dados: VinculoEdicaoCriar,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> EdicaoEventoDetalhe:
+    return servico_organizacao.vincular_edicao_competicao(
+        db, id_edicao_evento, dados.id_edicao_competicao, autor
+    )
+
+
+@router.delete(
+    "/edicoes-evento/{id_edicao_evento}/vinculos/{id_edicao_competicao}",
+    response_model=EdicaoEventoDetalhe,
+    summary="Desvincular edição de competição da edição do evento",
+)
+def desvincular_edicao_competicao(
+    id_edicao_evento: int,
+    id_edicao_competicao: int,
+    db: Session = Depends(get_db),
+    autor: models.Usuario = Depends(check_coordenador_role),
+) -> EdicaoEventoDetalhe:
+    return servico_organizacao.desvincular_edicao_competicao(
+        db, id_edicao_evento, id_edicao_competicao, autor
     )
 
 

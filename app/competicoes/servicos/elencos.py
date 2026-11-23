@@ -11,11 +11,13 @@ from competicoes.contratos.elencos import (
     CompetidorAtualizar,
     CompetidorCriar,
     CompetidorDetalhe,
+    EquipeAtualizar,
     EquipeCriar,
     EquipeDetalhe,
     IntegranteAtualizar,
     IntegranteCriar,
     IntegranteDetalhe,
+    OrigemCopiaEquipes,
     PaginaCompetidores,
 )
 from competicoes.erros import ConflitoEstado, Duplicidade, NaoEncontrado
@@ -26,6 +28,7 @@ from competicoes.infra import (
 )
 from competicoes.servicos.exclusao import apagar_integrantes_de_equipes
 from competicoes.modelos import (
+    Competicao,
     Competidor,
     EdicaoCompeticao,
     Equipe,
@@ -109,7 +112,7 @@ def _importar_aluno(
     with transacao(db):
         aluno = db.get(models.Aluno, id_aluno)
         if aluno is None:
-            raise NaoEncontrado("Aluno nao encontrado.", campos=["id_aluno"])
+            raise NaoEncontrado("Aluno não encontrado.", campos=["id_aluno"])
 
         criado = False
         competidor = None
@@ -184,7 +187,7 @@ def atualizar_competidor(
     with transacao(db):
         competidor = db.get(Competidor, id_competidor)
         if competidor is None:
-            raise NaoEncontrado("Competidor nao encontrado.", campos=["id_competidor"])
+            raise NaoEncontrado("Competidor não encontrado.", campos=["id_competidor"])
 
         antes = _competidor_para_detalhe(competidor).model_dump(mode="json")
         valores = dados.model_dump(exclude_unset=True)
@@ -213,6 +216,22 @@ def renomear_competidor(
     return atualizar_competidor(db, id_competidor, CompetidorAtualizar(nome=nome), responsavel)
 
 
+def _garantir_sigla_unica(
+    db: Session, id_edicao_competicao: int, sigla: str | None, id_equipe_atual: int | None = None
+) -> None:
+    """Sigla única dentro da edição, sem diferenciar maiúsculas."""
+    if not sigla:
+        return
+    consulta = select(Equipe.id_equipe).where(
+        Equipe.id_edicao_competicao == id_edicao_competicao,
+        func.upper(Equipe.sigla) == sigla.strip().upper(),
+    )
+    if id_equipe_atual is not None:
+        consulta = consulta.where(Equipe.id_equipe != id_equipe_atual)
+    if db.execute(consulta).first() is not None:
+        raise Duplicidade(f"Já existe uma equipe com a sigla '{sigla}' nesta edição.", campos=["sigla"])
+
+
 def criar_equipe(
     db: Session, id_edicao_competicao: int, dados: EquipeCriar, responsavel: models.Usuario
 ) -> EquipeDetalhe:
@@ -220,7 +239,7 @@ def criar_equipe(
     with transacao(db):
         edicao = bloquear_edicao(db, id_edicao_competicao)
         if edicao.estado != "RASCUNHO":
-            raise ConflitoEstado("Apenas edicoes em rascunho aceitam novas equipes.", campos=["estado"])
+            raise ConflitoEstado("Apenas edições em rascunho aceitam novas equipes.", campos=["estado"])
 
         existente = db.execute(
             select(Equipe).where(
@@ -229,7 +248,8 @@ def criar_equipe(
             )
         ).scalar_one_or_none()
         if existente is not None:
-            raise Duplicidade(f"Ja existe uma equipe chamada '{dados.nome}' nesta edicao.", campos=["nome"])
+            raise Duplicidade(f"Já existe uma equipe chamada '{dados.nome}' nesta edição.", campos=["nome"])
+        _garantir_sigla_unica(db, id_edicao_competicao, dados.sigla)
 
         equipe = Equipe(
             id_edicao_competicao=id_edicao_competicao,
@@ -241,7 +261,7 @@ def criar_equipe(
             db.add(equipe)
             db.flush()
         except IntegrityError:
-            raise Duplicidade(f"Ja existe uma equipe chamada '{dados.nome}' nesta edicao.", campos=["nome"])
+            raise Duplicidade(f"Já existe uma equipe chamada '{dados.nome}' nesta edição.", campos=["nome"])
 
         detalhe = _equipe_para_detalhe(equipe)
         registrar_auditoria(
@@ -262,7 +282,7 @@ def listar_equipes(db: Session, id_edicao_competicao: int) -> list[EquipeDetalhe
     with transacao(db):
         edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
         if edicao is None:
-            raise NaoEncontrado("Edicao de competicao nao encontrada.", campos=["id_edicao_competicao"])
+            raise NaoEncontrado("Edição de competição não encontrada.", campos=["id_edicao_competicao"])
 
         consulta = (
             select(Equipe)
@@ -281,17 +301,17 @@ def inscrever_integrante(
     with transacao(db):
         equipe = db.get(Equipe, id_equipe)
         if equipe is None:
-            raise NaoEncontrado("Equipe nao encontrada.", campos=["id_equipe"])
+            raise NaoEncontrado("Equipe não encontrada.", campos=["id_equipe"])
         if equipe.situacao != "ATIVA":
             raise ConflitoEstado("Apenas equipes ativas aceitam novos integrantes.", campos=["situacao"])
 
         edicao = bloquear_edicao(db, equipe.id_edicao_competicao)
         if edicao.estado != "RASCUNHO":
-            raise ConflitoEstado("Apenas edicoes em rascunho aceitam novas inscricoes.", campos=["estado"])
+            raise ConflitoEstado("Apenas edições em rascunho aceitam novas inscrições.", campos=["estado"])
 
         competidor = db.get(Competidor, dados.id_competidor)
         if competidor is None:
-            raise NaoEncontrado("Competidor nao encontrado.", campos=["id_competidor"])
+            raise NaoEncontrado("Competidor não encontrado.", campos=["id_competidor"])
 
         ja_inscrito = db.execute(
             select(IntegranteEquipe).where(
@@ -301,7 +321,7 @@ def inscrever_integrante(
         ).scalar_one_or_none()
         if ja_inscrito is not None:
             raise Duplicidade(
-                "Competidor ja esta inscrito em uma equipe nesta edicao.",
+                "Competidor já está inscrito em uma equipe nesta edição.",
                 campos=["id_competidor"],
             )
 
@@ -319,7 +339,7 @@ def inscrever_integrante(
             db.flush()
         except IntegrityError:
             raise Duplicidade(
-                "Competidor ja esta inscrito em uma equipe nesta edicao.",
+                "Competidor já está inscrito em uma equipe nesta edição.",
                 campos=["id_competidor"],
             )
 
@@ -346,7 +366,7 @@ def excluir_equipe(db: Session, id_equipe: int, responsavel: models.Usuario) -> 
     with transacao(db):
         equipe = db.get(Equipe, id_equipe)
         if equipe is None:
-            raise NaoEncontrado("Equipe nao encontrada.", campos=["id_equipe"])
+            raise NaoEncontrado("Equipe não encontrada.", campos=["id_equipe"])
         edicao = bloquear_edicao(db, equipe.id_edicao_competicao)
         if edicao.estado != "RASCUNHO":
             raise ConflitoEstado(
@@ -382,14 +402,20 @@ def inativar_integrante(
 def atualizar_integrante(
     db: Session, id_integrante: int, dados: IntegranteAtualizar, responsavel: models.Usuario
 ) -> IntegranteDetalhe:
-    """Atualiza situação do integrante de equipe."""
+    """Atualização parcial do integrante: situação, nome esportivo, camisa e posição.
+
+    Só os campos enviados mudam (``model_fields_set``); ``null`` limpa camisa e posição.
+    Nenhum desses campos é estrutural, então valem em qualquer estado da edição.
+    """
     with transacao(db):
         integrante = db.get(IntegranteEquipe, id_integrante)
         if integrante is None:
-            raise NaoEncontrado("Integrante nao encontrado.", campos=["id_integrante"])
+            raise NaoEncontrado("Integrante não encontrado.", campos=["id_integrante"])
 
         antes = _integrante_para_detalhe(integrante).model_dump(mode="json")
-        integrante.situacao = dados.situacao
+        for campo in ("situacao", "nome_esportivo", "numero_camisa", "posicao"):
+            if campo in dados.model_fields_set:
+                setattr(integrante, campo, getattr(dados, campo))
         db.flush()
         depois = _integrante_para_detalhe(integrante).model_dump(mode="json")
 
@@ -406,6 +432,92 @@ def atualizar_integrante(
         return _integrante_para_detalhe(integrante)
 
 
+def atualizar_equipe(
+    db: Session, id_equipe: int, dados: EquipeAtualizar, responsavel: models.Usuario
+) -> EquipeDetalhe:
+    """Renomeia a equipe ou troca a sigla em qualquer estado da edição (PD-RT11-03)."""
+    with transacao(db):
+        equipe = db.get(Equipe, id_equipe)
+        if equipe is None:
+            raise NaoEncontrado("Equipe não encontrada.", campos=["id_equipe"])
+        db.refresh(equipe, attribute_names=["integrantes"])
+        antes = _equipe_para_detalhe(equipe).model_dump(mode="json")
+
+        if "nome" in dados.model_fields_set and dados.nome != equipe.nome:
+            repetida = db.execute(
+                select(Equipe.id_equipe).where(
+                    Equipe.id_edicao_competicao == equipe.id_edicao_competicao,
+                    Equipe.nome == dados.nome,
+                    Equipe.id_equipe != equipe.id_equipe,
+                )
+            ).first()
+            if repetida is not None:
+                raise Duplicidade(f"Já existe uma equipe chamada '{dados.nome}' nesta edição.", campos=["nome"])
+            equipe.nome = dados.nome
+        if "sigla" in dados.model_fields_set:
+            _garantir_sigla_unica(db, equipe.id_edicao_competicao, dados.sigla, equipe.id_equipe)
+            equipe.sigla = dados.sigla
+        try:
+            db.flush()
+        except IntegrityError:
+            raise Duplicidade(f"Já existe uma equipe chamada '{dados.nome}' nesta edição.", campos=["nome"])
+
+        detalhe = _equipe_para_detalhe(equipe)
+        registrar_auditoria(
+            db,
+            entidade="equipes",
+            id_entidade=equipe.id_equipe,
+            acao="ATUALIZAR",
+            antes=antes,
+            depois=detalhe.model_dump(mode="json"),
+            id_edicao_competicao=equipe.id_edicao_competicao,
+            responsavel=responsavel,
+        )
+        return detalhe
+
+
+def listar_origens_copia(db: Session, id_edicao_destino: int) -> list[OrigemCopiaEquipes]:
+    """Edições com equipes que podem servir de origem para a cópia (DF-RT11-02).
+
+    Edições da mesma competição vêm primeiro (a mais recente antes); depois as demais,
+    por nome da competição. A própria edição de destino nunca aparece.
+    """
+    destino = db.get(EdicaoCompeticao, id_edicao_destino)
+    if destino is None:
+        raise NaoEncontrado("Edição de competição não encontrada.", campos=["id_edicao_competicao"])
+
+    linhas = db.execute(
+        select(
+            EdicaoCompeticao.id_edicao_competicao,
+            EdicaoCompeticao.id_competicao,
+            EdicaoCompeticao.identificacao,
+            EdicaoCompeticao.data_inicio,
+            Competicao.nome,
+            func.count(Equipe.id_equipe),
+        )
+        .join(Competicao, Competicao.id_competicao == EdicaoCompeticao.id_competicao)
+        .join(Equipe, Equipe.id_edicao_competicao == EdicaoCompeticao.id_edicao_competicao)
+        .where(EdicaoCompeticao.id_edicao_competicao != id_edicao_destino)
+        .group_by(
+            EdicaoCompeticao.id_edicao_competicao,
+            EdicaoCompeticao.id_competicao,
+            EdicaoCompeticao.identificacao,
+            EdicaoCompeticao.data_inicio,
+            Competicao.nome,
+        )
+    ).all()
+
+    def ordem(linha) -> tuple:
+        mesma = linha[1] == destino.id_competicao
+        return (0 if mesma else 1, linha[4].casefold() if not mesma else "",
+                -(linha[3].toordinal() if linha[3] else 0), linha[0])
+
+    return [
+        OrigemCopiaEquipes(id_edicao_competicao=l[0], rotulo=f"{l[4]} · {l[2]}", equipes=l[5])
+        for l in sorted(linhas, key=ordem)
+    ]
+
+
 def copiar_equipes(
     db: Session, id_edicao_origem: int, id_edicao_destino: int, responsavel: models.Usuario
 ) -> list[EquipeDetalhe]:
@@ -414,13 +526,13 @@ def copiar_equipes(
         edicao_destino = bloquear_edicao(db, id_edicao_destino)
         if edicao_destino.estado != "RASCUNHO":
             raise ConflitoEstado(
-                "Apenas edicoes em rascunho podem receber equipes copiadas.",
+                "Apenas edições em rascunho podem receber equipes copiadas.",
                 campos=["estado"],
             )
 
         edicao_origem = db.get(EdicaoCompeticao, id_edicao_origem)
         if edicao_origem is None:
-            raise NaoEncontrado("Edicao de origem nao encontrada.", campos=["id_edicao_origem"])
+            raise NaoEncontrado("Edição de origem não encontrada.", campos=["id_edicao_origem"])
 
         equipes_origem = db.execute(
             select(Equipe)
@@ -440,7 +552,7 @@ def copiar_equipes(
                 ).scalar_one_or_none()
                 if existente is not None:
                     raise Duplicidade(
-                        f"Ja existe uma equipe chamada '{eq_origem.nome}' na edicao de destino.",
+                        f"Já existe uma equipe chamada '{eq_origem.nome}' na edição de destino.",
                         campos=["nome"],
                     )
 
@@ -465,6 +577,8 @@ def copiar_equipes(
                 )
 
                 for int_origem in eq_origem.integrantes:
+                    if int_origem.situacao != "ATIVO":
+                        continue  # PD-RT11-02: inativo na origem não entra no destino
                     novo_integrante = IntegranteEquipe(
                         id_edicao_competicao=id_edicao_destino,
                         equipe=nova_equipe,

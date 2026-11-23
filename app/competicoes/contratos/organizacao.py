@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, StrictBool, model_validator
+from pydantic import AliasChoices, AliasPath, Field, StrictBool, ValidationInfo, field_validator, model_validator
 
 from .comuns import Contrato, Id, Identificacao, InteiroPositivo, Nome, Pagina
 from .configuracao import Configuracao, FormatoCompeticao
@@ -27,12 +27,14 @@ class _PeriodoEdicao(Contrato):
     data_inicio: date | None = None
     data_fim: date | None = None
 
-    @model_validator(mode="after")
-    def periodo_ordenado(self) -> Self:
-        if self.data_inicio is not None and self.data_fim is not None:
-            if self.data_inicio > self.data_fim:
-                raise ValueError("A data de inicio deve ser anterior ou igual a data de fim.")
-        return self
+    @field_validator("data_fim")
+    @classmethod
+    def periodo_ordenado(cls, data_fim: date | None, info: ValidationInfo) -> date | None:
+        # Validador de campo (e não de modelo) para o erro 422 apontar "data_fim".
+        data_inicio = info.data.get("data_inicio")
+        if data_inicio is not None and data_fim is not None and data_inicio > data_fim:
+            raise ValueError("A data de término deve ser igual ou posterior à data de início.")
+        return data_fim
 
 
 class EdicaoEventoCriar(_PeriodoEdicao):
@@ -45,10 +47,54 @@ class EdicaoEventoAtualizar(_PeriodoEdicao):
     identificacao: Identificacao | None = None
 
 
+class CompeticaoVinculada(Contrato):
+    """Edição de competição ligada a uma edição de evento (DF-RT15-01)."""
+
+    id_competicao: Id
+    nome: str = Field(validation_alias=AliasChoices("nome", AliasPath("competicao", "nome")))
+    id_edicao_competicao: Id
+    identificacao: str
+    estado: EstadoEdicao
+    publicada: bool
+
+
 class EdicaoEventoDetalhe(EdicaoEventoCriar):
     id_edicao_evento: Id
     id_evento: Id
     criado_em: datetime
+    competicoes: list[CompeticaoVinculada] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("competicoes", "edicoes_competicao"),
+    )
+
+    @field_validator("competicoes")
+    @classmethod
+    def ordenar_competicoes(cls, competicoes: list[CompeticaoVinculada]) -> list[CompeticaoVinculada]:
+        return sorted(competicoes, key=lambda c: (c.nome.casefold(), c.identificacao))
+
+
+class EventoExcluir(Contrato):
+    """Confirmação reforçada: o nome do evento exatamente como cadastrado."""
+
+    confirmacao_nome: str
+
+
+class EdicaoEventoExcluir(Contrato):
+    confirmacao_identificacao: str
+
+
+class PreviaExclusaoEvento(Contrato):
+    """Impacto da exclusão, para o diálogo de confirmação."""
+
+    edicoes_evento: int
+    edicoes_competicao: int
+    partidas: int
+    equipes: int
+    publicadas: int
+
+
+class VinculoEdicaoCriar(Contrato):
+    id_edicao_competicao: Id
 
 
 class EventoComEdicaoCriar(EventoCriar):
@@ -82,12 +128,20 @@ class EdicaoCompeticaoCriar(EdicaoEventoCriar):
     @model_validator(mode="after")
     def formato_compativel(self) -> Self:
         if self.formato != self.configuracao.formato:
-            raise ValueError("O formato deve corresponder ao da configuracao.")
+            raise ValueError("O formato deve corresponder ao da configuração.")
         return self
 
 
 class EdicaoCompeticaoAtualizar(EdicaoCompeticaoCriar):
     revisao: InteiroPositivo
+
+
+class EventoResumo(Contrato):
+    """Evento ao qual a edição está vinculada (selo no cabeçalho, DF-RT15-03)."""
+
+    id_evento: Id
+    nome: str
+    identificacao_edicao: str
 
 
 class EdicaoCompeticaoDetalhe(EdicaoCompeticaoCriar):
@@ -97,6 +151,7 @@ class EdicaoCompeticaoDetalhe(EdicaoCompeticaoCriar):
     publicada: bool
     revisao: InteiroPositivo
     criado_em: datetime
+    evento: EventoResumo | None = None
 
 
 class CompeticaoComEdicaoCriar(CompeticaoCriar):

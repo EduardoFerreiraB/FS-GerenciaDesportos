@@ -13,12 +13,14 @@ from competicoes.contratos.elencos import (
     CompetidorAtualizar,
     CompetidorCriar,
     CompetidorDetalhe,
+    EquipeAtualizar,
     EquipeCriar,
     EquipeDetalhe,
     EquipesCopiar,
     IntegranteAtualizar,
     IntegranteCriar,
     IntegranteDetalhe,
+    OrigemCopiaEquipes,
     PaginaCompetidores,
 )
 from competicoes.servicos import elencos as servico_elencos
@@ -117,6 +119,17 @@ def inscrever_integrante(
     return servico_elencos.inscrever_integrante(db, id_equipe, dados, current_user)
 
 
+@router.patch("/equipes/{id_equipe}", response_model=EquipeDetalhe)
+def atualizar_equipe(
+    id_equipe: int,
+    dados: EquipeAtualizar,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role),
+) -> EquipeDetalhe:
+    """Renomeia a equipe ou troca a sigla (qualquer estado da edição)."""
+    return servico_elencos.atualizar_equipe(db, id_equipe, dados, current_user)
+
+
 @router.delete("/equipes/{id_equipe}", status_code=status.HTTP_204_NO_CONTENT)
 def excluir_equipe(
     id_equipe: int,
@@ -135,8 +148,21 @@ def atualizar_integrante(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role),
 ) -> IntegranteDetalhe:
-    """Atualiza a situação do integrante na equipe."""
+    """Atualiza situação, nome esportivo, camisa ou posição do integrante (parcial)."""
     return servico_elencos.atualizar_integrante(db, id_integrante, dados, current_user)
+
+
+@router.get(
+    "/edicoes/{id_edicao_competicao}/copiar-equipes/origens",
+    response_model=list[OrigemCopiaEquipes],
+)
+def listar_origens_copia(
+    id_edicao_competicao: int,
+    db: Session = Depends(get_db),
+    _current_user: models.Usuario = Depends(check_coordenador_role),
+) -> list[OrigemCopiaEquipes]:
+    """Edições que podem servir de origem para copiar equipes, com rótulo legível."""
+    return servico_elencos.listar_origens_copia(db, id_edicao_competicao)
 
 
 @router.post(
@@ -150,7 +176,7 @@ def copiar_equipes(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(check_coordenador_role),
 ) -> list[EquipeDetalhe]:
-    """Copia todas as equipes e inscrições de uma edição para a edição atual (em rascunho)."""
+    """Copia as equipes e os integrantes ativos de uma edição para a atual (em rascunho)."""
     return servico_elencos.copiar_equipes(
         db,
         id_edicao_origem=dados.id_edicao_origem,
