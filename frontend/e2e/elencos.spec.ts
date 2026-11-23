@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 import { authenticateDirectly } from './helpers/auth';
-import { API_E2E } from './helpers/ambiente';
+import { API_E2E, BANCO_E2E_URL } from './helpers/ambiente';
 
 test.describe('Gestão de Elencos e Equipes', () => {
   let token: string;
@@ -100,7 +100,7 @@ with SessionLocal() as db:
     db.add(aluno); db.commit()
 "`,
       // Sempre o banco E2E: sem DATABASE_URL o backend carregaria o .env (banco de desenvolvimento).
-      { cwd: '..', env: { ...process.env, DATABASE_URL: 'sqlite:///./frontend/e2e.db' } }
+      { cwd: '..', env: { ...process.env, DATABASE_URL: BANCO_E2E_URL } }
     );
 
     const res2 = await request.get(`${API_E2E}/alunos/`, {
@@ -251,15 +251,11 @@ with SessionLocal() as db:
     await page.getByText('Equipe Vermelha').click();
     await page.getByRole('button', { name: /adicionar integrante na equipe equipe vermelha/i }).click();
 
-    // Busca o competidor já inscrito
+    // Busca o competidor já inscrito: com PD-RT11-01 o botão fica marcado e desabilitado como "Já inscrito"
     await page.getByPlaceholder(/buscar competidor/i).fill(competidor.nome);
-    await page.getByRole('button', { name: /selecionar/i }).click();
-
-    await page.getByLabel(/número da camisa/i).fill('8');
-    await page.getByRole('button', { name: 'Salvar' }).click();
-
-    // Deve exibir mensagem amigável de erro/conflito
-    await expect(page.getByText(/j[aá]\s+(?:est[aá]\s+)?inscrito|conflito|duplicidade/i)).toBeVisible();
+    const btnJaInscrito = page.getByRole('button', { name: new RegExp(`${competidor.nome} já inscrito`, 'i') });
+    await expect(btnJaInscrito).toBeVisible();
+    await expect(btnJaInscrito).toBeDisabled();
   });
 
   test('copiar elenco da edição anterior cria inscrições novas', async ({ page, request }) => {
@@ -347,14 +343,14 @@ with SessionLocal() as db:
     await page.goto(`/test-elencos?idEdicao=${idEdicao2026}`);
     await page.getByRole('button', { name: /copiar elenco/i }).click();
 
-    // Modal de cópia de elenco
+    // Modal de cópia de elenco (DF-RT11-02 / PD-RT11-02: seleção por nome e só ativos)
     await expect(page.getByRole('dialog', { name: /copiar elenco/i })).toBeVisible();
     await expect(
-      page.getByText(/apenas equipes e inscrições|partidas e punições não são copiadas/i)
+      page.getByText(/apenas equipes e integrantes ativos|partidas e punições não são copiados/i)
     ).toBeVisible();
 
-    // Seleciona a edição de origem (2025)
-    await page.getByLabel(/edição de origem/i).fill(String(idEdicao2025));
+    // Seleciona a edição de origem (2025) pelo seletor de nome
+    await page.getByTestId('select-origem-copia').selectOption(String(idEdicao2025));
     await page.getByRole('button', { name: /confirmar cópia/i }).click();
 
     // A equipe copiada deve aparecer na lista

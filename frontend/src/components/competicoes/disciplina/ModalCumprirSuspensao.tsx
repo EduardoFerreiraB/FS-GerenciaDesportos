@@ -1,75 +1,73 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CircleCheck } from 'lucide-react';
 import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Select } from '@/components/ui';
-import { rotuloDoEstado } from '@/lib/rotulos';
-import { cumprirSuspensao, isErroApi } from '@/services/competicoes';
-import type { SuspensaoDetalhe, PartidaDetalhe } from '@/types/competicoes';
+import { useNotification } from '@/context/NotificationContext';
+import { extrairErro } from '@/lib/erros';
+import {
+  cumprirSuspensao,
+  listarPartidasElegiveisCumprimento,
+} from '@/services/competicoes';
+import type {
+  SuspensaoDetalhe,
+  PartidaDetalhe,
+  PartidaElegivelCumprimento,
+} from '@/types/competicoes';
 import { ResumoSuspensao } from './ResumoSuspensao';
 
 interface ModalCumprirSuspensaoProps {
   suspensao: SuspensaoDetalhe | null;
-  partidas: PartidaDetalhe[];
+  partidas?: PartidaDetalhe[];
   isOpen: boolean;
   onClose: () => void;
   onSucesso: () => void;
 }
 
-function rotuloPartida(p: PartidaDetalhe): string {
-  const mandante = p.nome_mandante || 'Mandante';
-  const visitante = p.nome_visitante || 'Visitante';
-  const rodada = p.rodada ? ` (Rodada ${p.rodada})` : '';
-  return `Jogo ${p.numero_partida}${rodada}: ${mandante} × ${visitante} · ${rotuloDoEstado('partida', p.status)}`;
-}
-
 export default function ModalCumprirSuspensao({
   suspensao,
-  partidas,
   isOpen,
   onClose,
   onSucesso,
 }: ModalCumprirSuspensaoProps) {
+  const { toast } = useNotification();
+  const [partidasElegiveis, setPartidasElegiveis] = useState<PartidaElegivelCumprimento[]>([]);
+  const [carregandoPartidas, setCarregandoPartidas] = useState<boolean>(false);
   const [idPartida, setIdPartida] = useState<number | ''>('');
   const [salvando, setSalvando] = useState<boolean>(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Filtra partidas da equipe do atleta
-  const { partidasEquipe, outrasPartidas } = useMemo(() => {
-    if (!suspensao?.id_equipe) {
-      return { partidasEquipe: partidas, outrasPartidas: [] };
-    }
-    const equipe = partidas.filter(
-      (p) =>
-        p.id_equipe_mandante === suspensao.id_equipe ||
-        p.id_equipe_visitante === suspensao.id_equipe
-    );
-    const outras = partidas.filter(
-      (p) =>
-        p.id_equipe_mandante !== suspensao.id_equipe &&
-        p.id_equipe_visitante !== suspensao.id_equipe
-    );
-    return { partidasEquipe: equipe, outrasPartidas: outras };
-  }, [suspensao?.id_equipe, partidas]);
-
   useEffect(() => {
     if (!isOpen || !suspensao) return;
 
+    let ativo = true;
     setErro(null);
     setSalvando(false);
+    setPartidasElegiveis([]);
+    setIdPartida('');
+    setCarregandoPartidas(true);
 
-    // Seleciona preferencialmente uma partida finalizada da equipe
-    const candidata =
-      partidasEquipe.find((p) => p.status === 'FINALIZADA') ||
-      partidasEquipe[0] ||
-      partidas[0];
+    listarPartidasElegiveisCumprimento(suspensao.id_suspensao)
+      .then((lista) => {
+        if (!ativo) return;
+        setPartidasElegiveis(lista);
+        if (lista.length > 0) {
+          setIdPartida(lista[0].id_partida);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!ativo) return;
+        setErro(
+          extrairErro(err, { padrao: 'Não foi possível carregar as partidas elegíveis.' }).mensagem,
+        );
+      })
+      .finally(() => {
+        if (ativo) setCarregandoPartidas(false);
+      });
 
-    if (candidata) {
-      setIdPartida(candidata.id_partida);
-    } else {
-      setIdPartida('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      ativo = false;
+    };
   }, [isOpen, suspensao?.id_suspensao]);
 
   const handleConfirmar = async (e: React.FormEvent) => {
@@ -87,16 +85,13 @@ export default function ModalCumprirSuspensao({
       await cumprirSuspensao(suspensao.id_suspensao, {
         id_partida: Number(idPartida),
       });
+      toast('Cumprimento registrado com sucesso.', 'success');
       onSucesso();
       onClose();
     } catch (err: unknown) {
-      if (isErroApi(err)) {
-        setErro(err.mensagem);
-      } else if (err instanceof Error) {
-        setErro(err.message);
-      } else {
-        setErro('Falha ao registrar o cumprimento da suspensão.');
-      }
+      setErro(
+        extrairErro(err, { padrao: 'Falha ao registrar o cumprimento da suspensão.' }).mensagem,
+      );
     } finally {
       setSalvando(false);
     }
@@ -137,7 +132,11 @@ export default function ModalCumprirSuspensao({
             <Field
               label="Partida em que cumpriu a suspensão"
               htmlFor="select-partida-cumprimento"
-              hint="O cumprimento deve ser registrado em uma partida finalizada posterior da equipe do atleta."
+              hint={
+                carregandoPartidas
+                  ? 'Buscando partidas elegíveis…'
+                  : 'Apenas partidas finalizadas da equipe, posteriores à origem e sem participação do atleta.'
+              }
               required
             >
               <Select
@@ -145,31 +144,21 @@ export default function ModalCumprirSuspensao({
                 data-testid="select-partida-cumprimento"
                 value={idPartida}
                 onChange={(e) => setIdPartida(e.target.value ? Number(e.target.value) : '')}
+                disabled={carregandoPartidas || partidasElegiveis.length === 0}
               >
-                <option value="">Selecione a partida…</option>
-                {partidasEquipe.length > 0 && outrasPartidas.length > 0 ? (
-                  <>
-                    <optgroup label={`Partidas de ${suspensao.nome_equipe || 'Equipe'}`}>
-                      {partidasEquipe.map((p) => (
-                        <option key={p.id_partida} value={p.id_partida}>
-                          {rotuloPartida(p)}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Outras partidas da edição">
-                      {outrasPartidas.map((p) => (
-                        <option key={p.id_partida} value={p.id_partida}>
-                          {rotuloPartida(p)}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </>
+                {carregandoPartidas ? (
+                  <option value="">Carregando partidas…</option>
+                ) : partidasElegiveis.length === 0 ? (
+                  <option value="">Nenhuma partida elegível disponível para esta suspensão</option>
                 ) : (
-                  (partidasEquipe.length > 0 ? partidasEquipe : partidas).map((p) => (
-                    <option key={p.id_partida} value={p.id_partida}>
-                      {rotuloPartida(p)}
-                    </option>
-                  ))
+                  <>
+                    <option value="">Selecione a partida…</option>
+                    {partidasElegiveis.map((p) => (
+                      <option key={p.id_partida} value={p.id_partida}>
+                        {p.rotulo}
+                      </option>
+                    ))}
+                  </>
                 )}
               </Select>
             </Field>
@@ -187,7 +176,7 @@ export default function ModalCumprirSuspensao({
               type="submit"
               form="form-cumprir-suspensao"
               loading={salvando}
-              disabled={!idPartida}
+              disabled={!idPartida || carregandoPartidas}
               data-testid="btn-confirmar-cumprimento"
               leftIcon={<CircleCheck className="size-4" />}
             >

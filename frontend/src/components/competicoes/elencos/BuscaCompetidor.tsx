@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, PlusCircle, UserCheck } from 'lucide-react';
-import { Alert, Badge, Button, EmptyState, Field, Input, Spinner } from '@/components/ui';
+import { Check, Pencil, PlusCircle, Search, UserCheck, X } from 'lucide-react';
+import { Alert, Badge, Button, EmptyState, Field, IconButton, Input, Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { Avatar } from './Avatar';
 import { competicoesService, isErroApi } from '@/services/competicoes';
@@ -11,11 +11,13 @@ import type { CompetidorDetalhe, PaginaCompetidores } from '@/types/competicoes'
 interface BuscaCompetidorProps {
   onSelectCompetidor: (competidor: CompetidorDetalhe) => void;
   competidorSelecionado?: CompetidorDetalhe | null;
+  idsCompetidoresInscritos?: Set<number>;
 }
 
 export default function BuscaCompetidor({
   onSelectCompetidor,
   competidorSelecionado,
+  idsCompetidoresInscritos,
 }: BuscaCompetidorProps) {
   const [modo, setModo] = useState<'busca' | 'novo'>('busca');
 
@@ -32,6 +34,12 @@ export default function BuscaCompetidor({
   const [nascNovo, setNascNovo] = useState('');
   const [criando, setCriando] = useState(false);
   const [erroCriacao, setErroCriacao] = useState<string | null>(null);
+
+  // Estado de edição inline do nome do competidor
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [nomeEdicao, setNomeEdicao] = useState('');
+  const [salvandoNome, setSalvandoNome] = useState(false);
+  const [erroEdicao, setErroEdicao] = useState<string | null>(null);
 
   const executarBusca = useCallback(async (termo: string, pag: number) => {
     setCarregando(true);
@@ -98,6 +106,52 @@ export default function BuscaCompetidor({
     }
   };
 
+  const iniciarEdicaoNome = (c: CompetidorDetalhe) => {
+    setEditandoId(c.id_competidor);
+    setNomeEdicao(c.nome);
+    setErroEdicao(null);
+  };
+
+  const cancelarEdicaoNome = () => {
+    setEditandoId(null);
+    setNomeEdicao('');
+    setErroEdicao(null);
+  };
+
+  const handleSalvarNome = async (idCompetidor: number) => {
+    const novoNome = nomeEdicao.trim();
+    if (!novoNome) {
+      setErroEdicao('O nome do competidor é obrigatório.');
+      return;
+    }
+
+    setSalvandoNome(true);
+    setErroEdicao(null);
+    try {
+      const atualizado = await competicoesService.renomearCompetidor(idCompetidor, novoNome);
+      setResultado((prev) =>
+        prev
+          ? {
+              ...prev,
+              itens: prev.itens.map((item) =>
+                item.id_competidor === idCompetidor ? atualizado : item,
+              ),
+            }
+          : prev,
+      );
+      setEditandoId(null);
+      setNomeEdicao('');
+    } catch (err) {
+      if (isErroApi(err)) {
+        setErroEdicao(err.mensagem);
+      } else {
+        setErroEdicao('Erro ao atualizar o nome do competidor.');
+      }
+    } finally {
+      setSalvandoNome(false);
+    }
+  };
+
   const classeModo = (ativo: boolean) =>
     cn(
       '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-4 focus-visible:ring-focus',
@@ -151,6 +205,7 @@ export default function BuscaCompetidor({
           </div>
 
           {erroBusca && <Alert tone="danger">{erroBusca}</Alert>}
+          {erroEdicao && <Alert tone="danger">{erroEdicao}</Alert>}
 
           <div className="max-h-56 divide-y divide-line overflow-y-auto rounded-xl border border-line bg-surface">
             {carregando && (
@@ -176,6 +231,52 @@ export default function BuscaCompetidor({
             {!carregando &&
               resultado?.itens.map((c) => {
                 const isSelected = competidorSelecionado?.id_competidor === c.id_competidor;
+                const jaInscrito = idsCompetidoresInscritos?.has(c.id_competidor) ?? false;
+                const emEdicao = editandoId === c.id_competidor;
+
+                if (emEdicao) {
+                  return (
+                    <div key={c.id_competidor} className="flex items-center gap-2 bg-surface-muted/60 p-3">
+                      <Input
+                        type="text"
+                        value={nomeEdicao}
+                        onChange={(e) => setNomeEdicao(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleSalvarNome(c.id_competidor);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            cancelarEdicaoNome();
+                          }
+                        }}
+                        aria-label={`Novo nome de ${c.nome}`}
+                        placeholder="Nome do competidor"
+                        autoFocus
+                        className="h-8 flex-1 text-sm"
+                      />
+                      <IconButton
+                        aria-label="Salvar nome do competidor"
+                        variant="ghost"
+                        size="sm"
+                        disabled={salvandoNome || !nomeEdicao.trim()}
+                        onClick={() => void handleSalvarNome(c.id_competidor)}
+                      >
+                        <Check aria-hidden="true" className="size-4 text-success" />
+                      </IconButton>
+                      <IconButton
+                        aria-label="Cancelar edição do nome"
+                        variant="ghost"
+                        size="sm"
+                        disabled={salvandoNome}
+                        onClick={cancelarEdicaoNome}
+                      >
+                        <X aria-hidden="true" className="size-4" />
+                      </IconButton>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={c.id_competidor}
@@ -194,18 +295,40 @@ export default function BuscaCompetidor({
                           ) : (
                             <Badge tone="warning">Terceiro</Badge>
                           )}
+                          {jaInscrito && <Badge tone="neutral">Já inscrito</Badge>}
                         </div>
                         {c.documento && <div className="text-xs text-fg-muted">Doc: {c.documento}</div>}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant={isSelected ? 'secondary' : 'primary'}
-                      leftIcon={isSelected ? <UserCheck className="size-3.5" /> : undefined}
-                      onClick={() => onSelectCompetidor(c)}
-                    >
-                      {isSelected ? 'Selecionado' : 'Selecionar'}
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <IconButton
+                        aria-label={`Renomear competidor ${c.nome}`}
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => iniciarEdicaoNome(c)}
+                      >
+                        <Pencil aria-hidden="true" className="size-3.5" />
+                      </IconButton>
+                      {jaInscrito ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled
+                          aria-label={`${c.nome} já inscrito nesta edição`}
+                        >
+                          Já inscrito
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant={isSelected ? 'secondary' : 'primary'}
+                          leftIcon={isSelected ? <UserCheck className="size-3.5" /> : undefined}
+                          onClick={() => onSelectCompetidor(c)}
+                        >
+                          {isSelected ? 'Selecionado' : 'Selecionar'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

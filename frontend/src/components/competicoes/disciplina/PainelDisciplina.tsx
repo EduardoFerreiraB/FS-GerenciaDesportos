@@ -20,6 +20,7 @@ import {
   Award,
   CircleCheck,
   ClipboardCheck,
+  History,
   MoreHorizontal,
   Plus,
   RectangleVertical,
@@ -33,6 +34,9 @@ import {
   Alert,
   Badge,
   Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -133,6 +137,9 @@ export default function PainelDisciplina({
 
   const [modalAjustarAberto, setModalAjustarAberto] = useState<boolean>(false);
   const [suspensaoParaAjustar, setSuspensaoParaAjustar] =
+    useState<SuspensaoDetalhe | null>(null);
+
+  const [suspensaoHistorico, setSuspensaoHistorico] =
     useState<SuspensaoDetalhe | null>(null);
 
   const carregarDados = useCallback(async () => {
@@ -386,6 +393,13 @@ export default function PainelDisciplina({
                                   )}
                                   {ehEmRevisao ? 'Revisar' : 'Ajustar'}
                                 </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  data-testid={`btn-historico-${s.id_suspensao}`}
+                                  onSelect={() => setSuspensaoHistorico(s)}
+                                >
+                                  <History aria-hidden="true" className="size-4" />
+                                  Histórico
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TD>
@@ -502,12 +516,13 @@ export default function PainelDisciplina({
                     </tr>
                   </THead>
                   <TBody>
-                    {artilheiros.map((a, index) => {
-                      const posicao = index + 1;
+                    {artilheiros.map((a) => {
+                      const posicao = a.posicao;
                       return (
                         <TR key={a.id_integrante} data-testid={`linha-artilheiro-${a.id_integrante}`}>
                           <TD className="text-center">
                             <span
+                              data-testid={`posicao-artilheiro-${a.id_integrante}`}
                               className={cn(
                                 'inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums',
                                 posicao === 1 && 'bg-warning-soft text-warning',
@@ -570,6 +585,83 @@ export default function PainelDisciplina({
         }}
         onSucesso={carregarDados}
       />
+
+      {/* Modal Histórico da Suspensão (DF-RT14-05) */}
+      <Dialog
+        open={suspensaoHistorico !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setSuspensaoHistorico(null);
+        }}
+      >
+        {suspensaoHistorico && (
+          <DialogContent
+            size="md"
+            title="Histórico da suspensão"
+            description={`${suspensaoHistorico.nome_esportivo || `Integrante #${suspensaoHistorico.id_integrante}`}${suspensaoHistorico.nome_equipe ? ` · ${suspensaoHistorico.nome_equipe}` : ''}`}
+          >
+            <div className="space-y-4" data-testid="modal-historico-suspensao">
+              {suspensaoHistorico.responsavel_nome && (
+                <p className="text-sm text-fg-muted">
+                  Responsável pelo registro:{' '}
+                  <strong className="font-semibold text-fg">
+                    {suspensaoHistorico.responsavel_nome}
+                  </strong>
+                </p>
+              )}
+
+              {(suspensaoHistorico.historico ?? []).length === 0 ? (
+                <p className="text-sm text-fg-muted">
+                  Nenhum evento registrado no histórico desta suspensão.
+                </p>
+              ) : (
+                <ol className="space-y-3 border-l-2 border-line pl-4">
+                  {(suspensaoHistorico.historico ?? []).map((item, idx) => (
+                    <li key={`${item.em}-${idx}`} className="space-y-1 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-fg">{item.acao}</span>
+                        {item.em ? (
+                          <span className="text-xs tabular-nums text-fg-subtle">
+                            {new Date(item.em).toLocaleString('pt-BR')}
+                          </span>
+                        ) : null}
+                      </div>
+                      {item.responsavel_nome ? (
+                        <p className="text-xs text-fg-muted">
+                          Responsável: <span className="font-medium text-fg">{item.responsavel_nome}</span>
+                        </p>
+                      ) : null}
+                      {item.situacao_anterior || item.situacao_nova ? (
+                        <p className="text-xs text-fg-muted">
+                          Situação:{' '}
+                          {item.situacao_anterior
+                            ? rotuloDoEstado('suspensao', item.situacao_anterior)
+                            : '—'}{' '}
+                          →{' '}
+                          <span className="font-medium text-fg">
+                            {item.situacao_nova
+                              ? rotuloDoEstado('suspensao', item.situacao_nova)
+                              : '—'}
+                          </span>
+                        </p>
+                      ) : null}
+                      {item.justificativa ? (
+                        <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-fg">
+                          {item.justificativa}
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setSuspensaoHistorico(null)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }

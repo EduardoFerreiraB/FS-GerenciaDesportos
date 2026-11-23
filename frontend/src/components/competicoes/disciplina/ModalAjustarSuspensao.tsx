@@ -14,6 +14,8 @@ import {
   Textarea,
 } from '@/components/ui';
 import { ROTULO_ORIGEM_SUSPENSAO, ROTULO_SITUACAO_SUSPENSAO } from '@/lib/rotulos';
+import { useNotification } from '@/context/NotificationContext';
+import { extrairErro } from '@/lib/erros';
 import {
   criarSuspensaoManual,
   ajustarSuspensao,
@@ -45,6 +47,7 @@ export default function ModalAjustarSuspensao({
   onClose,
   onSucesso,
 }: ModalAjustarSuspensaoProps) {
+  const { toast } = useNotification();
   const modoAjustar = suspensao !== null;
 
   // Estados do formulário
@@ -55,11 +58,13 @@ export default function ModalAjustarSuspensao({
 
   const [salvando, setSalvando] = useState<boolean>(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroSituacao, setErroSituacao] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
 
     setErro(null);
+    setErroSituacao(null);
     setSalvando(false);
 
     if (suspensao) {
@@ -78,6 +83,7 @@ export default function ModalAjustarSuspensao({
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro(null);
+    setErroSituacao(null);
 
     const motivoTrim = motivo.trim();
     if (motivoTrim.length < 3) {
@@ -112,15 +118,27 @@ export default function ModalAjustarSuspensao({
         });
       }
 
+      toast(
+        modoAjustar
+          ? 'Suspensão atualizada com sucesso.'
+          : 'Suspensão manual criada com sucesso.',
+        'success',
+      );
       onSucesso();
       onClose();
     } catch (err: unknown) {
-      if (isErroApi(err)) {
-        setErro(err.mensagem);
-      } else if (err instanceof Error) {
-        setErro(err.message);
+      const parsed = extrairErro(err, {
+        camposConhecidos: ['situacao'],
+        padrao: 'Falha ao processar suspensão.',
+      });
+      const camposLista = isErroApi(err) ? (err.campos ?? []) : [];
+      const msgSituacao =
+        parsed.campos['situacao'] ??
+        (camposLista.includes('situacao') ? parsed.mensagem : null);
+      if (msgSituacao) {
+        setErroSituacao(msgSituacao);
       } else {
-        setErro('Falha ao processar suspensão.');
+        setErro(parsed.mensagem);
       }
     } finally {
       setSalvando(false);
@@ -218,12 +236,21 @@ export default function ModalAjustarSuspensao({
 
             {/* Situação da suspensão (apenas em modo Ajustar) */}
             {modoAjustar && (
-              <Field label="Situação" htmlFor="select-situacao-suspensao" required>
+              <Field
+                label="Situação"
+                htmlFor="select-situacao-suspensao"
+                required
+                error={erroSituacao ?? undefined}
+              >
                 <Select
                   id="select-situacao-suspensao"
                   data-testid="select-situacao-suspensao"
                   value={situacao}
-                  onChange={(e) => setSituacao(e.target.value as SituacaoSuspensao)}
+                  onChange={(e) => {
+                    setSituacao(e.target.value as SituacaoSuspensao);
+                    setErroSituacao(null);
+                    setErro(null);
+                  }}
                 >
                   {SITUACOES.map((s) => (
                     <option key={s} value={s}>
