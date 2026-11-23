@@ -135,7 +135,7 @@ class TestGerarTabelaEdicao:
 
         with pytest.raises(ConflitoEstado) as exc_info:
             gerar_tabela_edicao(db, edicao.id_edicao_competicao, TabelaGerar(), usuario_coord)
-        assert "RASCUNHO" in exc_info.value.mensagem
+        assert "rascunho" in exc_info.value.mensagem
 
     def test_gerar_tabela_recusa_menos_de_2_equipes(self, db, usuario_coord):
         edicao = criar_edicao_competicao(

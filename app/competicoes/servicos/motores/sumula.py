@@ -223,10 +223,13 @@ def calcular_artilharia(
 
     candidatos.sort(key=lambda item: (item[0], item[1], item[2]))
 
-    artilheiros = [
-        ArtilheiroDetalhe(posicao=idx, **item[3])
-        for idx, item in enumerate(candidatos, start=1)
-    ]
+    # Mesmo número de gols, mesma posição (padrão "1, 1, 3"); exibição por gols e nome.
+    artilheiros = []
+    posicao = 0
+    for idx, item in enumerate(candidatos, start=1):
+        if idx == 1 or item[0] != candidatos[idx - 2][0]:
+            posicao = idx
+        artilheiros.append(ArtilheiroDetalhe(posicao=posicao, **item[3]))
 
     return TabelaArtilhariaDetalhe(
         id_edicao_competicao=id_edicao_competicao,

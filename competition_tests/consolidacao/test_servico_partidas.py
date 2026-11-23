@@ -184,21 +184,21 @@ def test_listar_partidas_com_filtros_e_placar_agregado(
 def test_agendar_partida_data_hora_local_e_limpeza(db: Session, partida_grupo, usuario):
     """Testa agendamento de data/hora/local e posterior limpeza para None, com auditoria."""
     dados_agendamento = PartidaAgendar(
-        data_hora=datetime(2026, 11, 10, 15, 30),
+        data_hora=datetime(2026, 5, 10, 15, 30),
         local="Arena Central",
         campo="Campo Principal",
     )
 
     detalhe = agendar_partida(db, partida_grupo.id_partida, dados_agendamento, usuario)
 
-    assert detalhe.data == date(2026, 11, 10)
+    assert detalhe.data == date(2026, 5, 10)
     assert detalhe.hora == time(15, 30)
     assert detalhe.local == "Arena Central"
     assert detalhe.campo == "Campo Principal"
 
     # Confere persistência no banco
     db.refresh(partida_grupo)
-    assert partida_grupo.data == date(2026, 11, 10)
+    assert partida_grupo.data == date(2026, 5, 10)
     assert partida_grupo.hora == time(15, 30)
     assert partida_grupo.id_local is not None
 
@@ -577,7 +577,7 @@ def test_api_agendar_partida_como_coordenador(client, cabecalhos_por_papel, part
     """PATCH /competicoes/partidas/{id}/agendamento deve atualizar dados com 200."""
     headers = cabecalhos_por_papel("coordenador")
     payload = {
-        "data_hora": "2026-10-25T14:00:00",
+        "data_hora": "2026-04-25T14:00:00",
         "local": "Campo Sul",
         "campo": "Campo 1",
     }
@@ -588,7 +588,7 @@ def test_api_agendar_partida_como_coordenador(client, cabecalhos_por_papel, part
     )
     assert resp.status_code == 200
     res = resp.json()
-    assert res["data"] == "2026-10-25"
+    assert res["data"] == "2026-04-25"
     assert res["hora"] == "14:00:00"
     assert res["local"] == "Campo Sul"
 

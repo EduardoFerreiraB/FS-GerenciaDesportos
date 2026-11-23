@@ -35,6 +35,8 @@ from competicoes.contratos.publico import (
     VagaPublica,
 )
 from competicoes.erros import NaoEncontrado
+from competicoes.servicos.chave import descrever_origem, placares_dos_duelos
+from competicoes.servicos.numeracao import numerar_jogos
 from competicoes.modelos import (
     Competicao,
     DueloEliminatorio,
@@ -48,7 +50,7 @@ from competicoes.modelos import (
 
 
 def _nao_encontrado(recurso: str, campo: str) -> NaoEncontrado:
-    return NaoEncontrado(f"{recurso} nao encontrada.", campos=[campo])
+    return NaoEncontrado(f"{recurso} não encontrada.", campos=[campo])
 
 
 def _resumo(edicao: EdicaoCompeticao) -> dict:
@@ -243,6 +245,17 @@ def listar_partidas_publicas(db: Session, id_edicao: int) -> list[PartidaPublica
         ).scalars()
     }
 
+    numeros = numerar_jogos(
+        partidas,
+        {
+            d.id_duelo: (d.fase, d.posicao_chave)
+            for d in db.execute(
+                select(DueloEliminatorio).where(DueloEliminatorio.id_edicao_competicao == id_edicao)
+            ).scalars()
+        },
+    )
+    partidas = sorted(partidas, key=lambda p: numeros[p.id_partida])
+
     resultado: list[PartidaPublica] = []
     for p in partidas:
         com_placar = p.estado in ("EM_ANDAMENTO", "FINALIZADA")
@@ -254,10 +267,13 @@ def listar_partidas_publicas(db: Session, id_edicao: int) -> list[PartidaPublica
             fase=fases.get(p.id_duelo),
             rodada=p.rodada,
             ordem_jogo=p.ordem_jogo,
+            numero_jogo=numeros[p.id_partida],
             id_equipe_mandante=p.id_equipe_mandante,
             nome_mandante=equipes[p.id_equipe_mandante].nome,
+            sigla_mandante=equipes[p.id_equipe_mandante].sigla,
             id_equipe_visitante=p.id_equipe_visitante,
             nome_visitante=equipes[p.id_equipe_visitante].nome,
+            sigla_visitante=equipes[p.id_equipe_visitante].sigla,
             data=p.data,
             hora=p.hora,
             local=p.local.loca_nome if p.local is not None else None,
@@ -338,17 +354,7 @@ def obter_chaveamento_publico(db: Session, id_edicao: int) -> ChaveamentoPublico
         ).scalars()
     }
     por_id = {d.id_duelo: d for d in duelos}
-
-    def descrever(vaga) -> str | None:
-        if vaga.origem == "POSICAO_GRUPO":
-            return f"{vaga.posicao_grupo}º do {grupos.get(vaga.id_grupo, 'grupo')}"
-        if vaga.origem in ("VENCEDOR_DUELO", "PERDEDOR_DUELO"):
-            origem = por_id.get(vaga.id_duelo_origem)
-            papel = "Vencedor" if vaga.origem == "VENCEDOR_DUELO" else "Perdedor"
-            return f"{papel} de {origem.fase} {origem.posicao_chave}" if origem else papel
-        if vaga.origem == "FOLGA":
-            return "Folga"
-        return None
+    placares = placares_dos_duelos(db, duelos)
 
     resultado: list[DueloPublico] = []
     for d in duelos:
@@ -360,11 +366,13 @@ def obter_chaveamento_publico(db: Session, id_edicao: int) -> ChaveamentoPublico
                 origem=v.origem,
                 id_equipe=id_equipe,
                 nome_equipe=equipes[id_equipe].nome if id_equipe in equipes else None,
-                descricao_origem=descrever(v),
+                nome_grupo=grupos.get(v.id_grupo),
+                descricao_origem=descrever_origem(v, grupos, por_id),
             ))
         resultado.append(DueloPublico(
             id_duelo=d.id_duelo, fase=d.fase, posicao_chave=d.posicao_chave, estado=d.estado,
             ida_volta=d.ida_volta, id_equipe_vencedora=d.id_equipe_vencedora, vagas=vagas,
+            placar=placares.get(d.id_duelo),
         ))
     return ChaveamentoPublico(duelos=resultado)
 

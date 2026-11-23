@@ -321,7 +321,8 @@ def calcular_classificacao(
     current_pos = 1
 
     for b in buckets:
-        is_tied = len(b) > 1
+        # Sem jogo disputado não há empate a resolver (DF-RT12-11).
+        is_tied = len(b) > 1 and all(stats[tid]["jogos"] > 0 for tid in b)
         for tid in b:
             s = stats[tid]
             linhas.append(

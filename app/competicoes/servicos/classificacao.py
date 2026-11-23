@@ -139,6 +139,48 @@ def _computar_cartoes_por_equipe(
     return dict(cartoes_por_equipe)
 
 
+# Marca gravada em ``revisao_resultados`` quando a decisão perde a validade (PD-RT13-01):
+# uma decisão invalidada nunca volta a valer, mesmo que o resultado volte ao original.
+DECISAO_INVALIDADA = "INVALIDADA"
+
+
+def _nome_responsavel(decisao: DecisaoClassificacao) -> str | None:
+    usuario = decisao.usuario_responsavel
+    return usuario.username if usuario is not None else None
+
+
+def _hashes_por_escopo(db: Session, id_edicao: int) -> dict[int | None, str]:
+    """Hash dos resultados por escopo de decisão (grupo, ou ``None`` para a edição)."""
+    partidas = db.query(Partida).filter(Partida.id_edicao_competicao == id_edicao).all()
+    gols_map = _computar_placares_por_ocorrencias(db, partidas)
+    partidas_convertidas = _converter_partidas_para_motor(partidas, gols_map)
+    por_escopo: dict[int | None, list[dict[str, Any]]] = defaultdict(list)
+    for p_orm, p_dict in zip(partidas, partidas_convertidas):
+        if p_orm.id_duelo is None:
+            por_escopo[p_orm.id_grupo].append(p_dict)
+    escopos = set(por_escopo) | {None}
+    return {escopo: calcular_hash_resultados(por_escopo.get(escopo, [])) for escopo in escopos}
+
+
+def invalidar_decisoes_desatualizadas(db: Session, id_edicao: int) -> None:
+    """Grava a invalidação das decisões cujo resultado mudou desde o registro.
+
+    Chamada a cada alteração de resultado (reconciliação disciplinar), para que um
+    estado intermediário (1×0 → 2×0 → 1×0) já invalide a decisão de forma definitiva.
+    """
+    decisoes = db.query(DecisaoClassificacao).filter(
+        DecisaoClassificacao.id_edicao_competicao == id_edicao,
+        DecisaoClassificacao.revisao_resultados != DECISAO_INVALIDADA,
+    ).all()
+    if not decisoes:
+        return
+    hashes = _hashes_por_escopo(db, id_edicao)
+    for decisao in decisoes:
+        if decisao.revisao_resultados != hashes.get(decisao.id_grupo):
+            decisao.revisao_resultados = DECISAO_INVALIDADA
+    db.flush()
+
+
 def _obter_decisoes_avaliadas(
     db: Session,
     id_edicao: int,
@@ -167,6 +209,7 @@ def _obter_decisoes_avaliadas(
             revisao_resultados=d.revisao_resultados,
             valida=(d.revisao_resultados == hash_atual),
             criado_em=d.criado_em,
+            responsavel_nome=_nome_responsavel(d),
         )
         for d in decisoes
     ]
@@ -507,6 +550,7 @@ def registrar_decisao_classificacao(
             revisao_resultados=nova.revisao_resultados,
             valida=True,
             criado_em=nova.criado_em,
+            responsavel_nome=responsavel.username,
         )
 
 
@@ -563,6 +607,7 @@ def listar_decisoes_classificacao(
                 revisao_resultados=d.revisao_resultados,
                 valida=(d.revisao_resultados == hash_atual),
                 criado_em=d.criado_em,
+                responsavel_nome=_nome_responsavel(d),
             )
         )
     return resultado
