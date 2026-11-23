@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Download, UserX } from 'lucide-react';
-import { Alert, Button, EmptyState, Input, Spinner } from '@/components/ui';
+import { Alert, Badge, Button, EmptyState, Input, Spinner } from '@/components/ui';
 import { formatarData } from '@/lib/formatos';
 import { useAuth } from '@/context/AuthContext';
 import { alunoService } from '@/services';
@@ -18,11 +18,17 @@ interface AlunoEscolarMinimo {
 interface ImportarAlunoProps {
   onAlunoImportado: (competidor: CompetidorDetalhe) => void;
   onCancel?: () => void;
+  idsCompetidoresInscritos?: Set<number>;
 }
 
-export default function ImportarAluno({ onAlunoImportado, onCancel }: ImportarAlunoProps) {
+export default function ImportarAluno({
+  onAlunoImportado,
+  onCancel,
+  idsCompetidoresInscritos,
+}: ImportarAlunoProps) {
   const { user } = useAuth();
   const [alunos, setAlunos] = useState<AlunoEscolarMinimo[]>([]);
+  const [mapaAlunoCompetidor, setMapaAlunoCompetidor] = useState<Map<number, number>>(new Map());
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [importandoId, setImportandoId] = useState<number | null>(null);
@@ -39,7 +45,10 @@ export default function ImportarAluno({ onAlunoImportado, onCancel }: ImportarAl
       setCarregando(true);
       setErro(null);
       try {
-        const dados = await alunoService.getAll();
+        const [dados, paginaCompetidores] = await Promise.all([
+          alunoService.getAll(),
+          competicoesService.listarCompetidores({ pagina: 1, tamanho: 200 }).catch(() => null),
+        ]);
         if (ativo && Array.isArray(dados)) {
           // Extrai estritamente apenas dados públicos esportivos: ID, Nome, Nascimento
           const minimos: AlunoEscolarMinimo[] = dados.map((a: any) => ({
@@ -48,6 +57,34 @@ export default function ImportarAluno({ onAlunoImportado, onCancel }: ImportarAl
             data_nascimento: a.data_nascimento,
           }));
           setAlunos(minimos);
+        }
+        if (ativo && paginaCompetidores) {
+          const mapa = new Map<number, number>();
+          for (const c of paginaCompetidores.itens) {
+            if (c.id_aluno_origem != null) {
+              mapa.set(c.id_aluno_origem, c.id_competidor);
+            }
+          }
+          // Caso existam mais páginas, busca as páginas restantes (até um limite seguro)
+          const totalPaginas = Math.min(Math.ceil(paginaCompetidores.total / paginaCompetidores.tamanho), 10);
+          if (totalPaginas > 1) {
+            const paginasExtras = await Promise.all(
+              Array.from({ length: totalPaginas - 1 }, (_, idx) =>
+                competicoesService.listarCompetidores({ pagina: idx + 2, tamanho: 200 }).catch(() => null),
+              ),
+            );
+            for (const p of paginasExtras) {
+              if (!p) continue;
+              for (const c of p.itens) {
+                if (c.id_aluno_origem != null) {
+                  mapa.set(c.id_aluno_origem, c.id_competidor);
+                }
+              }
+            }
+          }
+          if (ativo) {
+            setMapaAlunoCompetidor(mapa);
+          }
         }
       } catch (err) {
         if (ativo) {
@@ -135,27 +172,49 @@ export default function ImportarAluno({ onAlunoImportado, onCancel }: ImportarAl
         )}
 
         {!carregando &&
-          alunosFiltrados.map((aluno) => (
-            <div
-              key={aluno.id_aluno}
-              className="flex items-center justify-between gap-3 p-3 transition-colors duration-150 hover:bg-surface-muted/60"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-fg">{aluno.nome_completo}</div>
-                {aluno.data_nascimento && (
-                  <div className="text-xs text-fg-muted">Nascimento: {formatarData(aluno.data_nascimento)}</div>
+          alunosFiltrados.map((aluno) => {
+            const idCompetidor = mapaAlunoCompetidor.get(aluno.id_aluno);
+            const jaInscrito =
+              idCompetidor !== undefined && (idsCompetidoresInscritos?.has(idCompetidor) ?? false);
+            const jaImportado = idCompetidor !== undefined && !jaInscrito;
+
+            return (
+              <div
+                key={aluno.id_aluno}
+                className="flex items-center justify-between gap-3 p-3 transition-colors duration-150 hover:bg-surface-muted/60"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
+                    <span className="truncate">{aluno.nome_completo}</span>
+                    {jaInscrito && <Badge tone="neutral">Já inscrito</Badge>}
+                    {jaImportado && <Badge tone="primary">Já importado</Badge>}
+                  </div>
+                  {aluno.data_nascimento && (
+                    <div className="text-xs text-fg-muted">Nascimento: {formatarData(aluno.data_nascimento)}</div>
+                  )}
+                </div>
+                {jaInscrito ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled
+                    aria-label={`${aluno.nome_completo} já inscrito nesta edição`}
+                  >
+                    Já inscrito
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    loading={importandoId === aluno.id_aluno}
+                    leftIcon={<Download className="size-3.5" />}
+                    onClick={() => handleImportar(aluno)}
+                  >
+                    Importar como Competidor
+                  </Button>
                 )}
               </div>
-              <Button
-                size="sm"
-                loading={importandoId === aluno.id_aluno}
-                leftIcon={<Download className="size-3.5" />}
-                onClick={() => handleImportar(aluno)}
-              >
-                Importar como Competidor
-              </Button>
-            </div>
-          ))}
+            );
+          })}
       </div>
 
       {onCancel && (

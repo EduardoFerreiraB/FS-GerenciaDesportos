@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Copy, MoreHorizontal, Plus, Shield, Trash2, UserPlus, Users } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Copy, MoreHorizontal, Pencil, Plus, Shield, Trash2, UserPlus, Users } from 'lucide-react';
 import {
   Alert,
   Button,
@@ -21,6 +21,8 @@ import {
   Input,
   Skeleton,
 } from '@/components/ui';
+import { useNotification } from '@/context/NotificationContext';
+import { extrairErro } from '@/lib/erros';
 import GavetaIntegrante from './GavetaIntegrante';
 import GavetaElenco from './GavetaElenco';
 import CopiarElenco from './CopiarElenco';
@@ -39,6 +41,7 @@ interface GavetaAberta {
 }
 
 export default function GestaoEquipes({ idEdicaoCompeticao }: GestaoEquipesProps) {
+  const { toast } = useNotification();
   const [equipes, setEquipes] = useState<EquipeDetalhe[]>([]);
   const [estadoEdicao, setEstadoEdicao] = useState<EstadoEdicao>('RASCUNHO');
   const [carregando, setCarregando] = useState(true);
@@ -53,6 +56,14 @@ export default function GestaoEquipes({ idEdicaoCompeticao }: GestaoEquipesProps
   const [siglaNovaEquipe, setSiglaNovaEquipe] = useState('');
   const [criandoEquipe, setCriandoEquipe] = useState(false);
   const [erroNovaEquipe, setErroNovaEquipe] = useState<string | null>(null);
+
+  // Modal de Editar Equipe
+  const [equipeParaEditar, setEquipeParaEditar] = useState<EquipeDetalhe | null>(null);
+  const [nomeEditarEquipe, setNomeEditarEquipe] = useState('');
+  const [siglaEditarEquipe, setSiglaEditarEquipe] = useState('');
+  const [salvandoEquipe, setSalvandoEquipe] = useState(false);
+  const [erroEditarEquipe, setErroEditarEquipe] = useState<string | null>(null);
+  const [erroCamposEditarEquipe, setErroCamposEditarEquipe] = useState<Record<string, string>>({});
 
   // Gaveta de Integrante (inscrição / detalhes)
   const [gaveta, setGaveta] = useState<GavetaAberta | null>(null);
@@ -97,9 +108,56 @@ export default function GestaoEquipes({ idEdicaoCompeticao }: GestaoEquipesProps
 
   const equipeElenco = equipes.find((e) => e.id_equipe === idEquipeElenco) ?? null;
 
+  const idsCompetidoresInscritos = useMemo(
+    () => new Set(equipes.flatMap((eq) => (eq.integrantes ?? []).map((i) => i.id_competidor))),
+    [equipes],
+  );
+
   const abrirNovaEquipe = () => {
     setErroNovaEquipe(null);
     setModalNovaEquipeAberta(true);
+  };
+
+  const abrirEditarEquipe = (equipe: EquipeDetalhe) => {
+    setEquipeParaEditar(equipe);
+    setNomeEditarEquipe(equipe.nome);
+    setSiglaEditarEquipe(equipe.sigla ?? '');
+    setErroEditarEquipe(null);
+    setErroCamposEditarEquipe({});
+  };
+
+  const handleEditarEquipe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!equipeParaEditar) return;
+    if (!nomeEditarEquipe.trim()) {
+      setErroCamposEditarEquipe({ nome: 'O nome da equipe é obrigatório.' });
+      return;
+    }
+
+    setSalvandoEquipe(true);
+    setErroEditarEquipe(null);
+    setErroCamposEditarEquipe({});
+
+    try {
+      await competicoesService.atualizarEquipe(equipeParaEditar.id_equipe, {
+        nome: nomeEditarEquipe.trim(),
+        sigla: siglaEditarEquipe.trim() || null,
+      });
+      toast('Equipe atualizada com sucesso.', 'success');
+      setEquipeParaEditar(null);
+      await carregarDados();
+    } catch (err) {
+      const parsed = extrairErro(err, {
+        camposConhecidos: ['nome', 'sigla'],
+        padrao: 'Erro ao atualizar equipe.',
+      });
+      setErroCamposEditarEquipe(parsed.campos);
+      if (!parsed.campos.nome && !parsed.campos.sigla) {
+        setErroEditarEquipe(parsed.mensagem);
+      }
+    } finally {
+      setSalvandoEquipe(false);
+    }
   };
 
   const abrirGavetaNovoIntegrante = (equipe: EquipeDetalhe, voltarAoElenco = false) => {
@@ -295,6 +353,12 @@ export default function GestaoEquipes({ idEdicaoCompeticao }: GestaoEquipesProps
                         <DropdownMenuItem onSelect={() => setIdEquipeElenco(equipe.id_equipe)}>
                           <Users aria-hidden="true" className="size-4" /> Ver elenco
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          data-testid={`btn-editar-equipe-${equipe.id_equipe}`}
+                          onSelect={() => abrirEditarEquipe(equipe)}
+                        >
+                          <Pencil aria-hidden="true" className="size-4" /> Editar equipe
+                        </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => abrirGavetaNovoIntegrante(equipe)}>
                           <UserPlus aria-hidden="true" className="size-4" /> Adicionar integrante
                         </DropdownMenuItem>
@@ -393,6 +457,75 @@ export default function GestaoEquipes({ idEdicaoCompeticao }: GestaoEquipesProps
         </DialogContent>
       </Dialog>
 
+      {/* Modal: Editar Equipe */}
+      <Dialog
+        open={equipeParaEditar !== null}
+        onOpenChange={(aberto) => (!aberto && !salvandoEquipe ? setEquipeParaEditar(null) : undefined)}
+      >
+        <DialogContent
+          title="Editar equipe"
+          description="Atualize o nome ou a sigla da equipe nesta edição."
+          size="sm"
+        >
+          <form id="form-editar-equipe" onSubmit={handleEditarEquipe} className="space-y-4">
+            {erroEditarEquipe && <Alert tone="danger">{erroEditarEquipe}</Alert>}
+
+            <Field
+              label="Nome da equipe"
+              htmlFor="editar-nome-equipe"
+              required
+              error={erroCamposEditarEquipe.nome}
+            >
+              <Input
+                id="editar-nome-equipe"
+                type="text"
+                required
+                value={nomeEditarEquipe}
+                onChange={(e) => {
+                  setNomeEditarEquipe(e.target.value);
+                  setErroCamposEditarEquipe((prev) => ({ ...prev, nome: '' }));
+                }}
+              />
+            </Field>
+
+            <Field
+              label="Sigla"
+              htmlFor="editar-sigla-equipe"
+              hint="Opcional, até 10 caracteres."
+              error={erroCamposEditarEquipe.sigla}
+            >
+              <Input
+                id="editar-sigla-equipe"
+                type="text"
+                maxLength={10}
+                value={siglaEditarEquipe}
+                onChange={(e) => {
+                  setSiglaEditarEquipe(e.target.value.toUpperCase());
+                  setErroCamposEditarEquipe((prev) => ({ ...prev, sigla: '' }));
+                }}
+              />
+            </Field>
+          </form>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setEquipeParaEditar(null)}
+              disabled={salvandoEquipe}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="form-editar-equipe"
+              loading={salvandoEquipe}
+              disabled={!nomeEditarEquipe.trim()}
+            >
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Gaveta lateral: elenco da equipe */}
       <GavetaElenco
         equipe={equipeElenco}
@@ -407,6 +540,7 @@ export default function GestaoEquipes({ idEdicaoCompeticao }: GestaoEquipesProps
           equipe={gaveta.equipe}
           isOpen
           integranteParaEditar={gaveta.integrante}
+          idsCompetidoresInscritos={idsCompetidoresInscritos}
           onClose={fecharGaveta}
           onSalvo={() => {
             salvouNaGaveta.current = true;

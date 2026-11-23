@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { Copy } from 'lucide-react';
-import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Input, Select } from '@/components/ui';
+import { Alert, Button, Dialog, DialogContent, DialogFooter, Field, Select } from '@/components/ui';
+import { useNotification } from '@/context/NotificationContext';
+import { extrairErro } from '@/lib/erros';
 import { rotuloDoEstado } from '@/lib/rotulos';
-import { competicoesService, isErroApi } from '@/services/competicoes';
-import type { EstadoEdicao, EdicaoCompeticaoDetalhe } from '@/types/competicoes';
+import { competicoesService } from '@/services/competicoes';
+import type { EstadoEdicao, OrigemCopiaEquipes } from '@/types/competicoes';
 
 interface CopiarElencoProps {
   idEdicaoCompeticao: number;
@@ -22,9 +24,10 @@ export default function CopiarElenco({
   onCopiado,
   estadoEdicao = 'RASCUNHO',
 }: CopiarElencoProps) {
-  const [idOrigemInput, setIdOrigemInput] = useState<string>('');
-  const [edicoesDisponiveis, setEdicoesDisponiveis] = useState<EdicaoCompeticaoDetalhe[]>([]);
-  const [carregandoEdicoes, setCarregandoEdicoes] = useState(false);
+  const { toast } = useNotification();
+  const [idOrigemSelecionada, setIdOrigemSelecionada] = useState<string>('');
+  const [origens, setOrigens] = useState<OrigemCopiaEquipes[]>([]);
+  const [carregandoOrigens, setCarregandoOrigens] = useState(false);
   const [copiando, setCopiando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -33,34 +36,32 @@ export default function CopiarElenco({
   useEffect(() => {
     if (!isOpen) return;
 
-    setIdOrigemInput('');
+    setIdOrigemSelecionada('');
+    setOrigens([]);
     setErro(null);
 
     let ativo = true;
-    async function carregarHistoricoEdicoes() {
-      setCarregandoEdicoes(true);
+    async function carregarOrigens() {
+      setCarregandoOrigens(true);
       try {
-        const edicaoAtual = await competicoesService.obterEdicao(idEdicaoCompeticao);
-        if (!ativo || !edicaoAtual) return;
-
-        const comp = await competicoesService.obterCompeticao(edicaoAtual.id_competicao);
-        if (ativo && comp?.edicoes) {
-          const outras = comp.edicoes.filter(
-            (e) => e.id_edicao_competicao !== idEdicaoCompeticao
-          );
-          setEdicoesDisponiveis(outras);
-          if (outras.length > 0) {
-            setIdOrigemInput(String(outras[0].id_edicao_competicao));
-          }
+        const lista = await competicoesService.listarOrigensCopiaEquipes(idEdicaoCompeticao);
+        if (!ativo) return;
+        setOrigens(lista);
+        if (lista.length > 0) {
+          setIdOrigemSelecionada(String(lista[0].id_edicao_competicao));
         }
       } catch (err) {
-        // Falha não crítica se for ambiente mock ou sem edição pai
+        if (!ativo) return;
+        setErro(
+          extrairErro(err, { padrao: 'Não foi possível carregar as edições disponíveis para cópia.' })
+            .mensagem,
+        );
       } finally {
-        if (ativo) setCarregandoEdicoes(false);
+        if (ativo) setCarregandoOrigens(false);
       }
     }
 
-    carregarHistoricoEdicoes();
+    carregarOrigens();
     return () => {
       ativo = false;
     };
@@ -68,9 +69,9 @@ export default function CopiarElenco({
 
   const handleCopiar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const idOrigem = parseInt(idOrigemInput, 10);
+    const idOrigem = parseInt(idOrigemSelecionada, 10);
     if (!idOrigem || isNaN(idOrigem)) {
-      setErro('Informe ou selecione uma edição de origem válida.');
+      setErro('Selecione uma edição de origem válida.');
       return;
     }
 
@@ -84,14 +85,13 @@ export default function CopiarElenco({
 
     try {
       await competicoesService.copiarEquipes(idEdicaoCompeticao, idOrigem);
+      toast('Elencos copiados com sucesso.', 'success');
       onCopiado();
       onClose();
     } catch (err) {
-      if (isErroApi(err)) {
-        setErro(err.mensagem);
-      } else {
-        setErro('Erro ao copiar elencos da edição de origem.');
-      }
+      setErro(
+        extrairErro(err, { padrao: 'Erro ao copiar elencos da edição de origem.' }).mensagem,
+      );
     } finally {
       setCopiando(false);
     }
@@ -101,7 +101,7 @@ export default function CopiarElenco({
     <Dialog open={isOpen} onOpenChange={(aberto) => (!aberto && !copiando ? onClose() : undefined)}>
       <DialogContent
         title="Copiar Elenco"
-        description="Replica as equipes e as inscrições de atletas de uma edição anterior para a edição atual."
+        description="Replica as equipes e os integrantes ativos de uma edição anterior para a edição atual."
         size="md"
       >
         <form id="form-copiar-elenco" onSubmit={handleCopiar} className="space-y-4">
@@ -113,48 +113,43 @@ export default function CopiarElenco({
           )}
 
           <Alert tone="warning" title="Escopo da cópia">
-            Apenas equipes e inscrições de competidores são copiadas; partidas e punições não são copiadas.
+            Apenas equipes e integrantes ativos são copiados; integrantes inativos, partidas e punições não são copiados.
           </Alert>
 
           {erro && <Alert tone="danger">{erro}</Alert>}
 
-          {edicoesDisponiveis.length > 0 && (
-            <Field label="Edições desta competição" htmlFor="edicao-origem-select">
-              <Select
-                id="edicao-origem-select"
-                value={idOrigemInput}
-                onChange={(e) => setIdOrigemInput(e.target.value)}
-                disabled={!isRascunho || copiando}
-              >
-                {edicoesDisponiveis.map((ed) => (
-                  <option key={ed.id_edicao_competicao} value={ed.id_edicao_competicao}>
-                    Edição {ed.identificacao} ({rotuloDoEstado('edicao', ed.estado)})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-
           <Field
             label="Edição de origem"
-            htmlFor="edicao-origem"
+            htmlFor="edicao-origem-select"
             required
             hint={
-              carregandoEdicoes
-                ? 'Buscando edições da competição...'
-                : edicoesDisponiveis.length > 0
-                  ? 'Ou digite o ID da edição de origem.'
-                  : 'Informe o ID da edição de origem.'
+              carregandoOrigens
+                ? 'Buscando edições disponíveis...'
+                : origens.length === 0
+                  ? 'Nenhuma outra edição com equipes cadastradas está disponível para cópia.'
+                  : 'Escolha a edição de onde deseja copiar as equipes e integrantes ativos.'
             }
           >
-            <Input
-              id="edicao-origem"
-              type="number"
-              value={idOrigemInput}
-              onChange={(e) => setIdOrigemInput(e.target.value)}
-              placeholder="Ex: 1"
-              disabled={!isRascunho || copiando}
-            />
+            <Select
+              id="edicao-origem-select"
+              data-testid="select-origem-copia"
+              value={idOrigemSelecionada}
+              onChange={(e) => setIdOrigemSelecionada(e.target.value)}
+              disabled={!isRascunho || copiando || carregandoOrigens || origens.length === 0}
+            >
+              {origens.length === 0 ? (
+                <option value="">
+                  {carregandoOrigens ? 'Carregando edições…' : 'Nenhuma edição disponível'}
+                </option>
+              ) : (
+                origens.map((origem) => (
+                  <option key={origem.id_edicao_competicao} value={origem.id_edicao_competicao}>
+                    {origem.rotulo} ({origem.equipes}{' '}
+                    {origem.equipes === 1 ? 'equipe' : 'equipes'})
+                  </option>
+                ))
+              )}
+            </Select>
           </Field>
         </form>
         <DialogFooter>
@@ -165,7 +160,7 @@ export default function CopiarElenco({
             type="submit"
             form="form-copiar-elenco"
             loading={copiando}
-            disabled={!isRascunho || !idOrigemInput.trim()}
+            disabled={!isRascunho || !idOrigemSelecionada.trim() || origens.length === 0}
             leftIcon={<Copy className="size-4" />}
           >
             Confirmar Cópia
