@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import useSWR, { mutate } from 'swr';
+import useSWR from 'swr';
 import { Users, Search, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 import { formatarData } from '@/lib/formatos';
+import { formatarTelefone, montarUrlArquivo } from './util';
 import { useNotification } from '@/context/NotificationContext';
 import {
   Alert,
@@ -31,9 +32,45 @@ import {
 
 const fetcher = (url: string) => api.get(url).then((res) => res.data);
 
+interface PreviaExclusao {
+  matriculas: number;
+  presencas: number;
+}
+
 function iniciais(nome: string) {
-  const partes = (nome || '?').trim().split(/\s+/);
+  const todas = (nome || '?').trim().split(/\s+/);
+  const alfabeticas = todas.filter((p) => /[A-Za-zÀ-ÿ]/.test(p[0] ?? ''));
+  const partes = alfabeticas.length > 0 ? alfabeticas : todas;
   return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
+function AvatarAluno({ nome, foto }: { nome: string; foto?: string | null }) {
+  const [erroImagem, setErroImagem] = useState(false);
+  const urlFoto = montarUrlArquivo(foto);
+
+  useEffect(() => {
+    setErroImagem(false);
+  }, [urlFoto]);
+
+  if (urlFoto && !erroImagem) {
+    return (
+      <img
+        src={urlFoto}
+        alt={`Foto de ${nome}`}
+        onError={() => setErroImagem(true)}
+        className="size-9 shrink-0 rounded-full border border-line object-cover"
+      />
+    );
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary"
+    >
+      {iniciais(nome)}
+    </div>
+  );
 }
 
 export default function AlunosPage() {
@@ -41,18 +78,57 @@ export default function AlunosPage() {
   const { data: alunos, error, isLoading, mutate: recarregar } = useSWR('/alunos/', fetcher);
   const { toast } = useNotification();
   const [alunoToDelete, setAlunoToDelete] = useState<any>(null);
+  const [previaExclusao, setPreviaExclusao] = useState<PreviaExclusao | null>(null);
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false);
+
+  useEffect(() => {
+    if (!alunoToDelete?.id_aluno) {
+      setPreviaExclusao(null);
+      setCarregandoPrevia(false);
+      return;
+    }
+
+    let ativo = true;
+    setCarregandoPrevia(true);
+    setPreviaExclusao(null);
+
+    api
+      .get<PreviaExclusao>(`/alunos/${alunoToDelete.id_aluno}/exclusao/previa`)
+      .then((res) => {
+        if (ativo) setPreviaExclusao(res.data);
+      })
+      .catch(() => {
+        if (ativo) setPreviaExclusao(null);
+      })
+      .finally(() => {
+        if (ativo) setCarregandoPrevia(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [alunoToDelete?.id_aluno]);
 
   const filteredAlunos =
     alunos?.filter((aluno: any) => aluno.nome_completo.toLowerCase().includes(searchTerm.toLowerCase())) || [];
 
   const confirmDelete = async () => {
     if (!alunoToDelete) return;
+    const idExcluido = alunoToDelete.id_aluno;
     try {
-      await api.delete(`/alunos/${alunoToDelete.id_aluno}`);
-      mutate('/alunos/', filteredAlunos.filter((a: any) => a.id_aluno !== alunoToDelete.id_aluno), false);
+      await api.delete(`/alunos/${idExcluido}`);
+      await recarregar(
+        (atuais: any[] | undefined) => (atuais ?? []).filter((a: any) => a.id_aluno !== idExcluido),
+        { revalidate: true },
+      );
       toast('Aluno excluído com sucesso.', 'success');
-    } catch {
-      throw new Error('Erro ao excluir aluno. Verifique se ele não possui matrículas ativas.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      throw new Error(
+        typeof detail === 'string' && detail
+          ? detail
+          : 'Erro ao excluir aluno. Verifique se ele não possui registros vinculados.',
+      );
     }
   };
 
@@ -63,7 +139,7 @@ export default function AlunosPage() {
         description="Gerencie as matrículas e dados dos alunos."
         actions={
           <Button asChild leftIcon={<Plus className="size-4" />}>
-            <Link href="/dashboard/alunos/novo">Nova matrícula</Link>
+            <Link href="/dashboard/alunos/novo">Novo aluno</Link>
           </Button>
         }
       />
@@ -106,7 +182,7 @@ export default function AlunosPage() {
           action={
             searchTerm ? undefined : (
               <Button asChild leftIcon={<Plus className="size-4" />}>
-                <Link href="/dashboard/alunos/novo">Nova matrícula</Link>
+                <Link href="/dashboard/alunos/novo">Novo aluno</Link>
               </Button>
             )
           }
@@ -130,12 +206,7 @@ export default function AlunosPage() {
                 <TR key={aluno.id_aluno}>
                   <TD>
                     <div className="flex items-center gap-3">
-                      <div
-                        aria-hidden="true"
-                        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary"
-                      >
-                        {iniciais(aluno.nome_completo)}
-                      </div>
+                      <AvatarAluno nome={aluno.nome_completo} foto={aluno.foto} />
                       <Link
                         href={`/dashboard/alunos/${aluno.id_aluno}`}
                         className="font-medium text-fg hover:text-primary"
@@ -146,7 +217,9 @@ export default function AlunosPage() {
                   </TD>
                   <TD className="tabular-nums">{formatarData(aluno.data_nascimento) ?? '—'}</TD>
                   <TD className="text-fg-muted">{aluno.nome_mae || aluno.nome_pai || '—'}</TD>
-                  <TD className="tabular-nums text-fg-muted">{aluno.telefone_1 || '—'}</TD>
+                  <TD className="tabular-nums text-fg-muted">
+                    {aluno.telefone_1 ? formatarTelefone(aluno.telefone_1) : '—'}
+                  </TD>
                   <TD className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -182,9 +255,28 @@ export default function AlunosPage() {
         onOpenChange={(v) => !v && setAlunoToDelete(null)}
         title="Excluir aluno?"
         description={
-          <>
-            Essa ação não poderá ser desfeita. O aluno <strong>{alunoToDelete?.nome_completo}</strong> será removido.
-          </>
+          <div className="space-y-2">
+            <p>
+              Essa ação não poderá ser desfeita. O aluno <strong>{alunoToDelete?.nome_completo}</strong> será removido.
+            </p>
+            {carregandoPrevia ? (
+              <p className="text-xs text-fg-subtle">Verificando registros vinculados...</p>
+            ) : previaExclusao ? (
+              <p className="text-sm text-fg-muted">
+                Também serão apagadas{' '}
+                <strong>
+                  {previaExclusao.matriculas}{' '}
+                  {previaExclusao.matriculas === 1 ? 'matrícula' : 'matrículas'}
+                </strong>{' '}
+                e{' '}
+                <strong>
+                  {previaExclusao.presencas}{' '}
+                  {previaExclusao.presencas === 1 ? 'presença' : 'presenças'}
+                </strong>{' '}
+                vinculadas a este aluno.
+              </p>
+            ) : null}
+          </div>
         }
         confirmText={alunoToDelete?.nome_completo}
         confirmLabel="Excluir aluno"

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import {
   Calendar,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { useAuth } from '@/context/AuthContext';
 import { useBreadcrumb } from '@/context/BreadcrumbContext';
 import { useNotification } from '@/context/NotificationContext';
 import { formatarData, formatarHora } from '@/lib/formatos';
@@ -62,11 +63,47 @@ function descreverDias(dias: unknown): string | null {
 }
 
 export default function DetalhesTurmaPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-8 w-72" />
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <Skeleton className="h-72 w-full" />
+            <Skeleton className="h-72 w-full lg:col-span-2" />
+          </div>
+        </div>
+      }
+    >
+      <DetalhesTurmaConteudo />
+    </Suspense>
+  );
+}
+
+function DetalhesTurmaConteudo() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params.id;
+  const { user } = useAuth();
   const { toast } = useNotification();
-  const [activeTab, setActiveTab] = useState<'alunos' | 'frequencia'>('alunos');
+  const abaParam = searchParams.get('aba');
+  const [activeTab, setActiveTab] = useState<'alunos' | 'frequencia'>(
+    abaParam === 'frequencia' || abaParam === 'chamada' ? 'frequencia' : 'alunos',
+  );
+
+  useEffect(() => {
+    if (abaParam === 'frequencia' || abaParam === 'chamada') {
+      setActiveTab('frequencia');
+    } else if (abaParam === 'alunos') {
+      setActiveTab('alunos');
+    }
+  }, [abaParam]);
+
+  const podeGerenciar = user?.role !== 'professor';
 
   const { data: turma, error: errorTurma, isLoading: loadingTurma, mutate: recarregarTurma } = useSWR(id ? `/turmas/${id}` : null, fetcher);
   const { data: matriculas, error: errorMatriculas, isLoading: loadingMatriculas, mutate: recarregarMatriculas } = useSWR(id ? `/matriculas/?turma_id=${id}` : null, fetcher);
@@ -77,7 +114,11 @@ export default function DetalhesTurmaPage() {
   const [salvandoChamada, setSalvandoChamada] = useState(false);
 
   const nomeTurma = turma?.descricao || (id ? `Turma #${id}` : 'Turma');
-  useBreadcrumb([{ label: 'Turmas', href: '/dashboard/turmas' }, { label: nomeTurma }]);
+  useBreadcrumb([
+    { label: 'Dashboard', href: '/dashboard' },
+    { label: 'Turmas', href: '/dashboard/turmas' },
+    { label: nomeTurma },
+  ]);
 
   const alunos = matriculas?.map((m: any) => m.aluno) || [];
 
@@ -234,8 +275,18 @@ export default function DetalhesTurmaPage() {
                     <EmptyState
                       icon={<Users />}
                       title="Nenhum aluno matriculado"
-                      description="Matricule alunos nesta turma pela tela de Matrículas."
-                      action={<Button asChild variant="secondary"><Link href="/dashboard/matriculas">Nova matrícula</Link></Button>}
+                      description={
+                        podeGerenciar
+                          ? 'Matricule alunos nesta turma pela tela de Matrículas.'
+                          : 'Esta turma ainda não possui alunos matriculados.'
+                      }
+                      action={
+                        podeGerenciar ? (
+                          <Button asChild variant="secondary">
+                            <Link href="/dashboard/matriculas">Nova matrícula</Link>
+                          </Button>
+                        ) : undefined
+                      }
                     />
                   </CardBody>
                 ) : (

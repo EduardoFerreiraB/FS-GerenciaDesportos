@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   GraduationCap,
@@ -21,6 +22,7 @@ import useSWR from 'swr';
 import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { formatarData, formatarHora } from '@/lib/formatos';
+import ModalNovaCompeticao from '@/components/competicoes/organizacao/ModalNovaCompeticao';
 import {
   Alert,
   Badge,
@@ -69,13 +71,32 @@ function Rosca({ dados, altura = 220 }: { dados: { name: string; value: number; 
   const [montado, setMontado] = useState(false);
   useEffect(() => setMontado(true), []);
   const total = dados.reduce((acc, d) => acc + d.value, 0);
+  const resumoGrafico = dados
+    .map((d) => `${d.name}: ${d.value} (${Math.round((d.value / total) * 100)}%)`)
+    .join(', ');
   return (
     <div className="flex flex-col gap-4">
-      <div className="w-full" style={{ height: altura }}>
+      <div
+        role="img"
+        aria-label={`Gráfico de alunos por modalidade: ${resumoGrafico}`}
+        className="w-full"
+        style={{ height: altura }}
+      >
         {montado ? (
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={dados} cx="50%" cy="50%" innerRadius="62%" outerRadius="88%" paddingAngle={2} dataKey="value" stroke="var(--surface)" strokeWidth={2}>
+            <PieChart accessibilityLayer={false}>
+              <Pie
+                data={dados}
+                cx="50%"
+                cy="50%"
+                innerRadius="62%"
+                outerRadius="88%"
+                paddingAngle={2}
+                dataKey="value"
+                stroke="var(--surface)"
+                strokeWidth={2}
+                rootTabIndex={-1}
+              >
                 {dados.map((d, i) => <Cell key={`c-${i}`} fill={d.color} />)}
               </Pie>
               <Tooltip
@@ -139,7 +160,9 @@ function montarDadosGrafico(matriculas: any[] | undefined, turmas: any[] | undef
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
+  const [modalCompeticaoAberto, setModalCompeticaoAberto] = useState(false);
 
   const shouldFetch = !authLoading && !!user;
 
@@ -183,11 +206,14 @@ export default function DashboardPage() {
   const valor = (n: number) => (carregando ? '—' : n);
   const dica = (n: number | null, texto: string) => (n === null || carregando ? undefined : n > 0 ? texto : undefined);
 
-  const acoes = [
-    { href: '/dashboard/matriculas', titulo: 'Nova matrícula', desc: 'Inscrever um aluno em uma turma', icone: PlusCircle },
-    { href: '/dashboard/alunos/novo', titulo: 'Novo aluno', desc: 'Cadastrar um aluno', icone: UserPlus },
-    { href: '/dashboard/turmas/novo', titulo: 'Nova turma', desc: 'Criar uma turma de aulas', icone: GraduationCap },
-    { href: '/dashboard/competicoes', titulo: 'Nova competição', desc: 'Organizar um campeonato', icone: Trophy },
+  const acoes: Array<
+    | { tipo: 'link'; href: string; titulo: string; desc: string; icone: React.ElementType }
+    | { tipo: 'botao'; id: string; onClick: () => void; titulo: string; desc: string; icone: React.ElementType }
+  > = [
+    { tipo: 'link', href: '/dashboard/matriculas', titulo: 'Nova matrícula', desc: 'Inscrever um aluno em uma turma', icone: PlusCircle },
+    { tipo: 'link', href: '/dashboard/alunos/novo', titulo: 'Novo aluno', desc: 'Cadastrar um aluno', icone: UserPlus },
+    { tipo: 'link', href: '/dashboard/turmas/novo', titulo: 'Nova turma', desc: 'Criar uma turma de aulas', icone: GraduationCap },
+    { tipo: 'botao', id: 'nova-competicao', onClick: () => setModalCompeticaoAberto(true), titulo: 'Nova competição', desc: 'Organizar um campeonato', icone: Trophy },
   ];
 
   return (
@@ -204,7 +230,7 @@ export default function DashboardPage() {
         <StatCard label="Total de alunos" value={valor(totalAlunos)} icon={<Users />} hint={dica(alunosSemTurma, `${alunosSemTurma} sem turma`)} />
         <StatCard label="Turmas ativas" value={valor(totalTurmas)} icon={<GraduationCap />} hint={dica(turmasSemProfessor, `${turmasSemProfessor} sem professor`)} />
         <StatCard label="Professores" value={valor(totalProfessores)} icon={<UserPlus />} hint={dica(professoresSemTurma, `${professoresSemTurma} sem turma`)} />
-        <StatCard label="Modalidades ativas" value={valor(totalModalidades)} icon={<Dumbbell />} hint={dica(modalidadesSemTurma, `${modalidadesSemTurma} sem turma`)} />
+        <StatCard label="Modalidades" value={valor(totalModalidades)} icon={<Dumbbell />} hint={dica(modalidadesSemTurma, `${modalidadesSemTurma} sem turma`)} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -214,18 +240,33 @@ export default function DashboardPage() {
         <Card>
           <CardHeader title="Ações rápidas" />
           <ul className="divide-y divide-line">
-            {acoes.map(({ href, titulo, desc, icone: Icone }) => (
-              <li key={href}>
-                <Link href={href} className="group flex items-center gap-3 px-5 py-3 outline-none transition-colors duration-150 hover:bg-surface-muted focus-visible:ring-4 focus-visible:ring-focus">
+            {acoes.map((acao) => {
+              const Icone = acao.icone;
+              const conteudo = (
+                <>
                   <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icone className="size-4" /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-fg">{titulo}</span>
-                    <span className="block truncate text-xs text-fg-muted">{desc}</span>
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block text-sm font-medium text-fg">{acao.titulo}</span>
+                    <span className="block truncate text-xs text-fg-muted">{acao.desc}</span>
                   </span>
                   <ArrowRight aria-hidden="true" className="size-4 text-fg-subtle" />
-                </Link>
-              </li>
-            ))}
+                </>
+              );
+              const classes = "group flex w-full items-center gap-3 px-5 py-3 outline-none transition-colors duration-150 hover:bg-surface-muted focus-visible:ring-4 focus-visible:ring-focus";
+              return (
+                <li key={acao.tipo === 'link' ? acao.href : acao.id}>
+                  {acao.tipo === 'link' ? (
+                    <Link href={acao.href} className={classes}>
+                      {conteudo}
+                    </Link>
+                  ) : (
+                    <button type="button" onClick={acao.onClick} className={classes}>
+                      {conteudo}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Card>
       </div>
@@ -269,7 +310,12 @@ export default function DashboardPage() {
                         ) : (
                           <Avatar nome={aluno.nome_completo} />
                         )}
-                        <span className="font-medium text-fg">{aluno.nome_completo}</span>
+                        <Link
+                          href={`/dashboard/alunos/${aluno.id_aluno}`}
+                          className="font-medium text-fg hover:text-primary"
+                        >
+                          {aluno.nome_completo}
+                        </Link>
                       </div>
                     </TD>
                     <TD>{turmaNome ? <Badge tone="primary">{turmaNome}</Badge> : <span className="text-fg-muted">Sem turma</span>}</TD>
@@ -283,6 +329,15 @@ export default function DashboardPage() {
           </Table>
         )}
       </section>
+
+      <ModalNovaCompeticao
+        aberto={modalCompeticaoAberto}
+        onClose={() => setModalCompeticaoAberto(false)}
+        onSuccess={(comp) => {
+          setModalCompeticaoAberto(false);
+          router.push(`/dashboard/competicoes/${comp.id_competicao}`);
+        }}
+      />
     </div>
   );
 }
@@ -451,7 +506,7 @@ function DashboardProfessor({ turmas, alunos, modalidades, matriculas }: any) {
                   </div>
                 </div>
                 <Button asChild leftIcon={<ClipboardList className="size-4" />}>
-                  <Link href={`/dashboard/turmas/${proximaAula.id_turma}`}>Fazer chamada</Link>
+                  <Link href={`/dashboard/turmas/${proximaAula.id_turma}?aba=frequencia`}>Fazer chamada</Link>
                 </Button>
               </CardBody>
             </Card>
