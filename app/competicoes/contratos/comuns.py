@@ -15,10 +15,25 @@ class Contrato(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
+class DetalheCampo(Contrato):
+    """Mensagem legível associada a um campo da requisição (caminho com pontos)."""
+
+    campo: str
+    mensagem: str
+
+
+class PlacarDuelo(Contrato):
+    """Placar agregado de um duelo na ordem das vagas (ida e volta somadas)."""
+
+    gols: list[int | None]
+    penaltis: list[int | None]
+
+
 class ErroResposta(Contrato):
     codigo: str
     mensagem: str
     campos: list[str] = Field(default_factory=list)
+    detalhes: list[DetalheCampo] = Field(default_factory=list)
 
 
 T = TypeVar("T")

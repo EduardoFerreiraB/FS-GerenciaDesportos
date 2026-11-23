@@ -43,7 +43,7 @@ class _ConfiguracaoPontuada(Contrato):
     @classmethod
     def sem_repeticao(cls, criterios: list[CriterioDesempate]) -> list[CriterioDesempate]:
         if len(criterios) != len(set(criterios)):
-            raise ValueError("Os criterios de desempate nao podem se repetir.")
+            raise ValueError("Os critérios de desempate não podem se repetir.")
         return criterios
 
 
@@ -81,7 +81,7 @@ _FORMATOS = {"PONTOS_CORRIDOS", "GRUPOS_MATA_MATA", "MATA_MATA"}
 
 def validar_configuracao(formato: str, dados: dict[str, JsonValue]) -> Configuracao:
     if formato not in _FORMATOS or ("formato" in dados and dados["formato"] != formato):
-        raise ConfiguracaoInvalida("Formato de competicao invalido ou divergente.", campos=["formato"])
+        raise ConfiguracaoInvalida("Formato de competição inválido ou divergente.", campos=["formato"])
     try:
         return _ADAPTADOR.validate_python(dados | {"formato": formato})
     except ValidationError as erro:
@@ -90,4 +90,4 @@ def validar_configuracao(formato: str, dados: dict[str, JsonValue]) -> Configura
             ".".join(str(parte) for parte in item["loc"][1:]) or "configuracao"
             for item in erro.errors()
         ))
-        raise ConfiguracaoInvalida("Configuracao de competicao invalida.", campos=campos) from None
+        raise ConfiguracaoInvalida("Configuração de competição inválida.", campos=campos) from None

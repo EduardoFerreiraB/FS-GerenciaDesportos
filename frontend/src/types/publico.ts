@@ -93,10 +93,14 @@ export interface PartidaPublica {
   fase: string | null;
   rodada: number | null;
   ordem_jogo: number;
+  /** Número exibido ao usuário ("Jogo 7"); a lista já vem ordenada por ele. */
+  numero_jogo: number;
   id_equipe_mandante: number;
   nome_mandante: string;
+  sigla_mandante: string | null;
   id_equipe_visitante: number;
   nome_visitante: string;
+  sigla_visitante: string | null;
   data: string | null;
   hora: string | null;
   local: string | null;
@@ -141,7 +145,16 @@ export interface VagaPublica {
   origem: string;
   id_equipe: number | null;
   nome_equipe: string | null;
+  /** "Grupo A" nas vagas vindas de posição de grupo. */
+  nome_grupo: string | null;
+  /** Texto legível: "1º do Grupo A", "Vencedor da Semifinal 1". */
   descricao_origem: string | null;
+}
+
+/** Placar agregado do duelo na ordem das vagas (ida e volta somadas). */
+export interface PlacarDueloPublico {
+  gols: [number | null, number | null];
+  penaltis: [number | null, number | null];
 }
 
 export interface DueloPublico {
@@ -152,6 +165,8 @@ export interface DueloPublico {
   ida_volta: boolean;
   id_equipe_vencedora: number | null;
   vagas: VagaPublica[];
+  /** null enquanto nenhum jogo do duelo começou. */
+  placar: PlacarDueloPublico | null;
 }
 
 export interface ChaveamentoPublico {

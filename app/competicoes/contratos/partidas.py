@@ -42,10 +42,14 @@ class PartidaDetalhe(Contrato):
     id_duelo: int | None = None
     rodada: int | None = None
     ordem_jogo: int = 1
+    # Número exibido ao usuário ("Jogo 7"): 1..N por edição, grupos antes do mata-mata.
+    numero_jogo: int = 1
     id_equipe_mandante: int | None = None
     nome_mandante: str | None = None
+    sigla_mandante: str | None = None
     id_equipe_visitante: int | None = None
     nome_visitante: str | None = None
+    sigla_visitante: str | None = None
     data: date | None = None
     hora: time | None = None
     data_hora: datetime | None = None

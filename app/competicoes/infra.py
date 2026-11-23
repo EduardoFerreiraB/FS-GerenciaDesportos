@@ -37,7 +37,7 @@ def bloquear_edicao(db: Session, id_edicao_competicao: int) -> EdicaoCompeticao:
         consulta = consulta.with_for_update()
     edicao = db.execute(consulta).scalar_one_or_none()
     if edicao is None:
-        raise NaoEncontrado("Edicao de competicao nao encontrada.", campos=["id_edicao_competicao"])
+        raise NaoEncontrado("Edição de competição não encontrada.", campos=["id_edicao_competicao"])
     return edicao
 
 
