@@ -120,6 +120,31 @@ def atualizar_turma(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.get("/{id_turma}/exclusao/previa", summary="Prévia de exclusão de uma turma", response_model=schemas.PreviaExclusao, status_code=status.HTTP_200_OK)
+def previa_exclusao_turma(
+    id_turma: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(check_coordenador_role)
+):
+    db_turma = servico_turmas.listar_turma_id(db=db, id_turma=id_turma)
+    if not db_turma:
+        raise HTTPException(status_code=404, detail="Turma não encontrada.")
+
+    ids_matriculas = [
+        m.id_matricula
+        for m in db.query(models.Matricula.id_matricula)
+        .filter(models.Matricula.id_turma == id_turma)
+        .all()
+    ]
+    total_presencas = (
+        db.query(models.Presenca)
+        .filter(models.Presenca.id_matricula.in_(ids_matriculas))
+        .count()
+        if ids_matriculas
+        else 0
+    )
+    return schemas.PreviaExclusao(matriculas=len(ids_matriculas), presencas=total_presencas)
+
 @router.delete("/{id_turma}", summary="Excluir uma turma", status_code=status.HTTP_204_NO_CONTENT)
 def excluir_turma(
     id_turma: int, 

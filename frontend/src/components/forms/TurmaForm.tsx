@@ -3,18 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { 
-  GraduationCap, 
-  Save, 
-  X, 
-  Clock, 
-  AlignLeft,
-  Calendar,
-  AlertCircle
-} from 'lucide-react';
-import { clsx } from 'clsx';
-import api from '@/lib/api';
+import { CircleAlert, Save } from 'lucide-react';
 import useSWR from 'swr';
+import api from '@/lib/api';
+import { cn } from '@/lib/cn';
+import { useBreadcrumb } from '@/context/BreadcrumbContext';
+import { useNotification } from '@/context/NotificationContext';
+import { Button, Card, CardBody, CardHeader, Field, Input, PageHeader, Select } from '@/components/ui';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
@@ -35,10 +30,37 @@ interface TurmaFormProps {
 
 export default function TurmaForm({ initialData, isEditing = false }: TurmaFormProps) {
   const router = useRouter();
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
+  const { toast } = useNotification();
+  const { register, handleSubmit, setValue, getValues, watch, trigger, formState: { errors, isSubmitting } } = useForm({
     mode: 'onChange'
   });
   const [selectedDias, setSelectedDias] = useState<string[]>([]);
+  const [tentouEnviar, setTentouEnviar] = useState(false);
+
+  const horarioInicio = watch('horario_inicio');
+  const horarioFim = watch('horario_fim');
+
+  useEffect(() => {
+    if (horarioInicio && horarioFim) {
+      trigger('horario_fim');
+    }
+  }, [horarioInicio, horarioFim, trigger]);
+
+  const nomeTurma = initialData?.descricao || (initialData?.id_turma ? `Turma #${initialData.id_turma}` : 'Turma');
+  useBreadcrumb(
+    isEditing && initialData
+      ? [
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Turmas', href: '/dashboard/turmas' },
+          { label: nomeTurma, href: `/dashboard/turmas/${initialData.id_turma}` },
+          { label: 'Editar' },
+        ]
+      : [
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Turmas', href: '/dashboard/turmas' },
+          { label: 'Nova turma' },
+        ],
+  );
 
   // Buscar dados reais para os selects
   const { data: modalidades } = useSWR('/modalidades/', fetcher);
@@ -54,7 +76,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
           else setValue(key, initialData[key]);
         }
       });
-      
+
       // Ajuste: A API provavelmente retorna string "SEG,QUA" ou JSON. O form usa array.
       if (initialData.dias_semana) {
         if (Array.isArray(initialData.dias_semana)) {
@@ -77,15 +99,25 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
     }
   }, [initialData, setValue]);
 
+  // Os <select> só têm as opções depois que as listas chegam; reaplica o valor
+  // inicial para o navegador não ficar preso em "Selecione...".
+  useEffect(() => {
+    if (initialData?.id_modalidade != null && modalidades) setValue('modalidade_id', initialData.id_modalidade.toString());
+  }, [initialData, modalidades, setValue]);
+  useEffect(() => {
+    if (initialData?.id_professor != null && professores) setValue('professor_id', initialData.id_professor.toString());
+  }, [initialData, professores, setValue]);
+
   const toggleDia = (id: string) => {
-    setSelectedDias(prev => 
+    setSelectedDias(prev =>
       prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
     );
   };
 
   const onSubmit = async (data: any) => {
+    setTentouEnviar(true);
     if (selectedDias.length === 0) {
-      alert('Selecione pelo menos um dia da semana.');
+      toast('Selecione pelo menos um dia da semana.', 'warning');
       return;
     }
 
@@ -99,7 +131,7 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
         categoria_idade: data.categoria_idade,
         horario_inicio: inicio,
         horario_fim: fim,
-        dias_semana: selectedDias, 
+        dias_semana: selectedDias,
         id_modalidade: parseInt(data.modalidade_id),
         id_professor: parseInt(data.professor_id)
       };
@@ -107,15 +139,15 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
       if (isEditing) {
         // Ao atualizar, usamos o ID da URL ou do initialData
         await api.put(`/turmas/${initialData.id_turma}`, payload);
-        alert('Turma atualizada com sucesso!');
+        toast('Turma atualizada com sucesso!', 'success');
       } else {
         await api.post('/turmas/', payload);
-        alert('Turma criada com sucesso!');
+        toast('Turma criada com sucesso!', 'success');
       }
       router.push('/dashboard/turmas');
     } catch (error: any) {
-      console.error("Erro detalhado:", error.response?.data); 
-      
+      console.error("Erro detalhado:", error.response?.data);
+
       // Tratamento melhorado para exibir o erro real do Pydantic (422) ou lógica (400)
       let errorMessage = 'Erro ao salvar turma.';
       if (error.response?.data?.detail) {
@@ -128,208 +160,142 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
               errorMessage = detail;
           }
       }
-      
-      alert(errorMessage);
+
+      toast(errorMessage, 'error');
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 pb-12">
-      
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <GraduationCap className="text-indigo-600" size={28} />
-          {isEditing ? 'Editar Turma' : 'Nova Turma'}
-        </h1>
-        <p className="text-slate-500 mt-1">
-          {isEditing ? 'Altere os dados da turma abaixo.' : 'Preencha os dados para criar uma nova turma.'}
-        </p>
-      </div>
+  const erroDias = tentouEnviar && selectedDias.length === 0;
 
-      <div className="grid grid-cols-1 gap-8">
-        
-        {/* 1. Informações da Turma */}
-        <CardSection title="Informações da Turma" icon={AlignLeft} theme="indigo">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Modalidade */}
-            <div className="w-full space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700 ml-1">
-                Modalidade <span className="text-red-500">*</span>
-              </label>
-              <select 
-                {...register('modalidade_id', { required: 'Selecione uma modalidade' })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
-              >
+  return (
+    <div>
+      <PageHeader
+        title={isEditing ? 'Editar Turma' : 'Nova Turma'}
+        description={isEditing ? 'Altere os dados da turma abaixo.' : 'Preencha os dados para criar uma nova turma.'}
+      />
+
+      <form
+        onSubmit={(e) => { setTentouEnviar(true); return handleSubmit(onSubmit)(e); }}
+        className="space-y-6"
+        noValidate
+      >
+        <Card>
+          <CardHeader title="Informações da Turma" description="Modalidade, responsável e identificação da turma." />
+          <CardBody className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <Field label="Modalidade" htmlFor="modalidade_id" required error={errors.modalidade_id?.message as string}>
+              <Select id="modalidade_id" {...register('modalidade_id', { required: 'Selecione uma modalidade' })}>
                 <option value="">Selecione...</option>
                 {modalidades?.map((m: any) => (
                   <option key={m.id_modalidade} value={m.id_modalidade}>{m.nome}</option>
                 ))}
-              </select>
-              {errors.modalidade_id && <span className="text-xs text-red-500 ml-1">{errors.modalidade_id.message as string}</span>}
-            </div>
+              </Select>
+            </Field>
 
-            {/* Professor */}
-            <div className="w-full space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700 ml-1">
-                Professor Responsável <span className="text-red-500">*</span>
-              </label>
-              <select 
-                {...register('professor_id', { required: 'Selecione um professor' })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
-              >
+            <Field label="Professor Responsável" htmlFor="professor_id" required error={errors.professor_id?.message as string}>
+              <Select id="professor_id" {...register('professor_id', { required: 'Selecione um professor' })}>
                 <option value="">Selecione...</option>
                 {professores?.map((p: any) => (
                   <option key={p.id_professor} value={p.id_professor}>{p.nome}</option>
                 ))}
-              </select>
-              {errors.professor_id && <span className="text-xs text-red-500 ml-1">{errors.professor_id.message as string}</span>}
-            </div>
+              </Select>
+            </Field>
 
-            {/* Categoria */}
-            <Input 
-              label="Categoria / Idade" 
-              placeholder="Ex: Sub-11, Adulto..." 
-              register={register('categoria_idade', { required: 'A categoria é obrigatória' })}
-              error={errors.categoria_idade}
-              theme="indigo"
-              required
-            />
+            <Field label="Categoria / Idade" htmlFor="categoria_idade" required error={errors.categoria_idade?.message as string}>
+              <Input
+                id="categoria_idade"
+                placeholder="Ex: Sub-11, Adulto..."
+                {...register('categoria_idade', { required: 'A categoria é obrigatória' })}
+              />
+            </Field>
 
-            {/* Descrição */}
-            <Input 
-              label="Descrição / Nome da Turma" 
-              placeholder="Ex: Futebol Manhã Iniciante" 
-              register={register('descricao', { required: 'O nome/descrição é obrigatório' })}
-              error={errors.descricao}
-              theme="indigo"
-              required
-            />
-          </div>
-        </CardSection>
+            <Field label="Descrição / Nome da Turma" htmlFor="descricao" required error={errors.descricao?.message as string}>
+              <Input
+                id="descricao"
+                placeholder="Ex: Futebol Manhã Iniciante"
+                {...register('descricao', { required: 'O nome/descrição é obrigatório' })}
+              />
+            </Field>
+          </CardBody>
+        </Card>
 
-        {/* 2. Horários e Dias */}
-        <CardSection title="Horários e Dias" icon={Calendar} theme="indigo">
-          <div className="space-y-6">
-            
-            {/* Dias da Semana */}
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-3 ml-1">
-                Dias da Semana <span className="text-red-500">*</span>
-              </label>
+        <Card>
+          <CardHeader title="Horários e Dias" description="Quando as aulas acontecem." />
+          <CardBody className="space-y-5">
+            <fieldset aria-describedby={selectedDias.length === 0 ? "dias-semana-ajuda" : undefined}>
+              <legend className="mb-2 text-sm font-medium text-fg">
+                Dias da Semana
+                <span aria-hidden="true" className="ml-0.5 text-danger">*</span>
+              </legend>
               <div className="flex flex-wrap gap-2">
-                {diasSemana.map((dia) => (
-                  <button
-                    key={dia.id}
-                    type="button"
-                    onClick={() => toggleDia(dia.id)}
-                    className={clsx(
-                      "px-4 py-2 rounded-lg text-sm font-semibold transition-all border",
-                      selectedDias.includes(dia.id)
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    )}
-                  >
-                    {dia.label}
-                  </button>
-                ))}
+                {diasSemana.map((dia) => {
+                  const ativo = selectedDias.includes(dia.id);
+                  return (
+                    <button
+                      key={dia.id}
+                      type="button"
+                      aria-pressed={ativo}
+                      onClick={() => toggleDia(dia.id)}
+                      className={cn(
+                        'h-10 rounded-lg border px-4 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-4 focus-visible:ring-focus',
+                        ativo
+                          ? 'border-primary bg-primary-soft text-primary'
+                          : 'border-line-strong bg-surface text-fg-muted hover:bg-surface-muted hover:text-fg',
+                      )}
+                    >
+                      {dia.label}
+                    </button>
+                  );
+                })}
               </div>
-              {selectedDias.length === 0 && <p className="text-xs text-slate-400 mt-2 ml-1">Selecione pelo menos um dia.</p>}
-            </div>
+              {erroDias ? (
+                <p id="dias-semana-ajuda" role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs text-danger">
+                  <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+                  Selecione pelo menos um dia.
+                </p>
+              ) : selectedDias.length === 0 ? (
+                <p id="dias-semana-ajuda" className="mt-1.5 text-xs text-fg-subtle">Selecione pelo menos um dia.</p>
+              ) : null}
+            </fieldset>
 
-            {/* Horários */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="w-full space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 ml-1 flex items-center gap-2">
-                  <Clock size={16} className="text-indigo-500" /> Horário de Início <span className="text-red-500">*</span>
-                </label>
-                <input
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <Field label="Horário de Início" htmlFor="horario_inicio" required error={errors.horario_inicio?.message as string | undefined}>
+                <Input
+                  id="horario_inicio"
                   type="time"
-                  {...register('horario_inicio', { required: 'Obrigatório' })}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                  className="tabular-nums"
+                  {...register('horario_inicio', { required: 'Campo obrigatório' })}
                 />
-                {errors.horario_inicio && <span className="text-xs text-red-500 ml-1">Campo obrigatório</span>}
-              </div>
-
-              <div className="w-full space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 ml-1 flex items-center gap-2">
-                  <Clock size={16} className="text-indigo-500" /> Horário de Fim <span className="text-red-500">*</span>
-                </label>
-                <input
+              </Field>
+              <Field label="Horário de Fim" htmlFor="horario_fim" required error={errors.horario_fim?.message as string | undefined}>
+                <Input
+                  id="horario_fim"
                   type="time"
-                  {...register('horario_fim', { required: 'Obrigatório' })}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                  className="tabular-nums"
+                  {...register('horario_fim', {
+                    required: 'Campo obrigatório',
+                    validate: (value) => {
+                      const inicio = getValues('horario_inicio');
+                      if (inicio && value && value <= inicio) {
+                        return 'O horário de término deve ser posterior ao horário de início.';
+                      }
+                      return true;
+                    },
+                  })}
                 />
-                {errors.horario_fim && <span className="text-xs text-red-500 ml-1">Campo obrigatório</span>}
-              </div>
+              </Field>
             </div>
+          </CardBody>
+        </Card>
 
-          </div>
-        </CardSection>
-
-      </div>
-
-      {/* Botões de Ação */}
-      <div className="flex items-center justify-end gap-4 pt-4 border-t border-slate-200">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-6 py-3 rounded-xl border border-red-200 text-red-600 font-semibold hover:bg-red-50 transition-colors flex items-center gap-2"
-        >
-          <X size={20} />
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-8 py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70"
-        >
-          {isSubmitting ? 'Salvando...' : <><Save size={20} /> {isEditing ? 'Salvar Alterações' : 'Criar Turma'}</>}
-        </button>
-      </div>
-
-    </form>
-  );
-}
-
-// --- Componentes Locais --- 
-
-function CardSection({ title, icon: Icon, children, theme }: any) {
-  const themeClasses = theme === 'indigo' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600';
-  
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow duration-300 h-full">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/30">
-        <div className={clsx("p-2 rounded-lg", themeClasses)}>
-          <Icon size={20} />
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-col-reverse gap-2 border-t border-line bg-canvas px-1 py-4 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={() => router.back()}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={isSubmitting} leftIcon={<Save className="size-4" />}>
+            {isEditing ? 'Salvar Alterações' : 'Criar Turma'}
+          </Button>
         </div>
-        <h3 className="font-bold text-slate-800 text-lg">{title}</h3>
-      </div>
-      <div className="p-6">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Input({ label, type = "text", placeholder, register, error, theme, required }: any) {
-  const focusClasses = theme === 'indigo' ? 'focus:ring-indigo-500/20 focus:border-indigo-500' : 'focus:ring-primary/20 focus:border-primary';
-  
-  return (
-    <div className="w-full space-y-1.5">
-      <label className="text-sm font-semibold text-slate-700 ml-1">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        type={type}
-        className={clsx(
-          "w-full px-4 py-3 bg-slate-50 border rounded-xl focus:ring-2 outline-none transition-all placeholder:text-slate-400",
-          error ? "border-red-300 focus:ring-red-200 focus:border-red-400" : `border-slate-200 ${focusClasses}`
-        )}
-        placeholder={placeholder}
-        {...register}
-      />
-      {error && <p className="text-xs text-red-500 flex items-center gap-1 ml-1"><AlertCircle size={12} />{error.message}</p>}
+      </form>
     </div>
   );
 }

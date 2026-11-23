@@ -2,195 +2,236 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import useSWR, { mutate } from 'swr';
-import { 
-  UserCheck, 
-  Search, 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  AlertTriangle,
-  Phone,
-  Loader2
-} from 'lucide-react';
+import useSWR from 'swr';
+import { Users, Search, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
+import { useNotification } from '@/context/NotificationContext';
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  EmptyState,
+  IconButton,
+  Input,
+  PageHeader,
+  Skeleton,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '@/components/ui';
 
-const fetcher = (url: string) => api.get(url).then(res => res.data);
+const fetcher = (url: string) => api.get(url).then((res) => res.data);
+
+function iniciais(nome: string) {
+  const partes = (nome || '?').trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
+function formatarCpf(valor: string | null | undefined): string {
+  const d = (valor || '').replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function formatarTelefone(valor: string | null | undefined): string {
+  const d = (valor || '').replace(/\D/g, '').slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
 
 export default function ProfessoresPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: professores, error, isLoading } = useSWR('/professores/', fetcher);
-  
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const { data: professores, error, isLoading, mutate: recarregar } = useSWR('/professores/', fetcher);
+  const { toast } = useNotification();
   const [professorToDelete, setProfessorToDelete] = useState<any>(null);
 
-  const filteredProfessores = professores?.filter((p: any) => 
-    p.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const termo = searchTerm.trim().toLowerCase();
+  const termoDigitos = searchTerm.replace(/\D/g, '');
 
-  const handleDeleteClick = (professor: any) => {
-    setProfessorToDelete(professor);
-    setIsDeleteModalOpen(true);
-  };
+  const filteredProfessores =
+    professores?.filter((prof: any) => {
+      if (!termo) return true;
+      const nomeMatch = (prof.nome || '').toLowerCase().includes(termo);
+      const usuarioMatch = (prof.usuario?.username || '').toLowerCase().includes(termo);
+      const cpfDigitos = (prof.cpf || '').replace(/\D/g, '');
+      const cpfFormatado = formatarCpf(prof.cpf).toLowerCase();
+      const cpfMatch =
+        cpfFormatado.includes(termo) ||
+        (termoDigitos.length > 0 && cpfDigitos.includes(termoDigitos));
+      return nomeMatch || usuarioMatch || cpfMatch;
+    }) || [];
 
   const confirmDelete = async () => {
-    if (professorToDelete) {
-      try {
-        await api.delete(`/professores/${professorToDelete.id_professor}`);
-        mutate('/professores/', filteredProfessores.filter((p: any) => p.id_professor !== professorToDelete.id_professor), false);
-        setIsDeleteModalOpen(false);
-        setProfessorToDelete(null);
-      } catch (error) {
-        alert('Erro ao excluir professor. Verifique se ele não possui turmas vinculadas.');
-      }
+    if (!professorToDelete) return;
+    try {
+      await api.delete(`/professores/${professorToDelete.id_professor}`);
+      await recarregar(
+        (atual: any[] | undefined) =>
+          (atual ?? []).filter((a: any) => a.id_professor !== professorToDelete.id_professor),
+        { revalidate: true },
+      );
+      toast('Professor excluído com sucesso.', 'success');
+      setProfessorToDelete(null);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = Array.isArray(detail) ? detail[0]?.msg : detail;
+      throw new Error(msg || 'Erro ao excluir professor. Verifique se ele não possui turmas vinculadas.');
     }
   };
 
   return (
-    <>
-      {/* Cabeçalho */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <UserCheck className="text-emerald-600" size={28} />
-            Gestão de Professores
-          </h1>
-          <p className="text-slate-500 mt-1">Gerencie a equipe docente e seus acessos.</p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Professores"
+        description="Gerencie a equipe docente e seus acessos."
+        actions={
+          <Button asChild leftIcon={<Plus className="size-4" />}>
+            <Link href="/dashboard/professores/novo">Novo professor</Link>
+          </Button>
+        }
+      />
 
-        <Link href="/dashboard/professores/novo">
-          <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-semibold shadow-lg shadow-emerald-100 transition-all flex items-center gap-2 active:scale-95">
-            <Plus size={20} />
-            Cadastrar Professor
-          </button>
-        </Link>
+      <div className="relative max-w-md">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" />
+        <Input
+          type="search"
+          aria-label="Buscar professor por nome, CPF ou usuário"
+          placeholder="Buscar professor por nome, CPF ou usuário..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
-      {/* Busca */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-            <Search size={22} />
-          </span>
-          <input 
-            type="text" 
-            placeholder="Buscar professor por nome..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-slate-700"
-          />
+      {isLoading ? (
+        <div className="space-y-2" aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full" />
+          ))}
         </div>
-      </div>
-
-      {/* Lista (Tabela) */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden min-h-[300px]">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-            <Loader2 size={40} className="animate-spin mb-4 text-emerald-600" />
-            <p>Carregando professores...</p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-64 text-red-400">
-            <AlertTriangle size={40} className="mb-4" />
-            <p>Erro ao carregar professores.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-semibold uppercase tracking-wider">
-                  <th className="px-6 py-5">Professor</th>
-                  <th className="px-6 py-5">CPF</th>
-                  <th className="px-6 py-5">Contato</th>
-                  <th className="px-6 py-5">Usuário Sistema</th>
-                  <th className="px-6 py-5 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredProfessores.map((prof: any) => (
-                  <tr key={prof.id_professor} className="hover:bg-emerald-50/20 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
-                          {prof.nome.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-800">{prof.nome}</p>
-                        </div>
+      ) : error ? (
+        <Alert
+          tone="danger"
+          title="Erro ao carregar professores"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => recarregar()}>
+              Tentar novamente
+            </Button>
+          }
+        >
+          Verifique sua conexão.
+        </Alert>
+      ) : filteredProfessores.length === 0 ? (
+        <EmptyState
+          icon={<Users />}
+          title={searchTerm ? 'Nenhum professor encontrado' : 'Nenhum professor cadastrado'}
+          description={searchTerm ? `Nada encontrado para "${searchTerm}".` : 'Cadastre o primeiro professor para começar.'}
+          action={
+            searchTerm ? undefined : (
+              <Button asChild leftIcon={<Plus className="size-4" />}>
+                <Link href="/dashboard/professores/novo">Novo professor</Link>
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <>
+          <Table>
+            <THead>
+              <TR className="hover:bg-transparent">
+                <TH>Professor</TH>
+                <TH>CPF</TH>
+                <TH>Contato</TH>
+                <TH>Acesso ao sistema</TH>
+                <TH className="text-right">
+                  <span className="sr-only">Ações</span>
+                </TH>
+              </TR>
+            </THead>
+            <TBody>
+              {filteredProfessores.map((prof: any) => (
+                <TR key={prof.id_professor}>
+                  <TD>
+                    <div className="flex items-center gap-3">
+                      <div
+                        aria-hidden="true"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary"
+                      >
+                        {iniciais(prof.nome)}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-medium">{prof.cpf}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col text-sm">
-                        <span className="text-slate-700 flex items-center gap-1.5">
-                          <Phone size={14} className="text-slate-400" />
-                          {prof.contato}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {prof.usuario ? (
-                        <span className="text-slate-500 font-mono text-xs bg-slate-100 px-2 py-1 rounded">
-                          @{prof.usuario.username}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-xs italic">Sem usuário</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link href={`/dashboard/professores/${prof.id_professor}`}>
-                          <button className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
-                            <Pencil size={18} />
-                          </button>
-                        </Link>
-                        <button 
-                          onClick={() => handleDeleteClick(prof)}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Modal Delete */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in-95 border border-slate-100">
-            <div className="text-center">
-              <div className="w-14 h-14 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle size={30} />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Remover Professor?</h3>
-              <p className="text-slate-500 text-sm mb-6">
-                Tem certeza que deseja remover <span className="font-bold">{professorToDelete?.nome}</span>? <br/>
-                Isso também desativará o acesso ao sistema.
-              </p>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={confirmDelete}
-                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 shadow-lg shadow-red-100"
-                >
-                  Sim, remover
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+                      <Link
+                        href={`/dashboard/professores/${prof.id_professor}`}
+                        className="font-medium text-fg hover:text-primary"
+                      >
+                        {prof.nome}
+                      </Link>
+                    </div>
+                  </TD>
+                  <TD className="tabular-nums text-fg-muted">{prof.cpf ? formatarCpf(prof.cpf) : '—'}</TD>
+                  <TD className="tabular-nums text-fg-muted">{prof.contato ? formatarTelefone(prof.contato) : '—'}</TD>
+                  <TD>
+                    {prof.usuario ? (
+                      <span className="text-fg-muted">@{prof.usuario.username}</span>
+                    ) : (
+                      <span className="text-fg-subtle">Sem usuário</span>
+                    )}
+                  </TD>
+                  <TD className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <IconButton aria-label={`Mais ações para ${prof.nome}`} variant="ghost" size="sm">
+                          <MoreHorizontal className="size-4" />
+                        </IconButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/dashboard/professores/${prof.id_professor}`}>
+                            <Pencil className="size-4" /> Editar
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem tone="danger" onSelect={() => setProfessorToDelete(prof)}>
+                          <Trash2 className="size-4" /> Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          <p className="text-sm text-fg-muted">
+            {filteredProfessores.length} {filteredProfessores.length === 1 ? 'professor' : 'professores'}
+          </p>
+        </>
       )}
-    </>
+
+      <ConfirmDialog
+        open={!!professorToDelete}
+        onOpenChange={(v) => !v && setProfessorToDelete(null)}
+        title="Excluir professor?"
+        description={
+          <>
+            Essa ação não poderá ser desfeita. O professor <strong>{professorToDelete?.nome}</strong> será removido.
+          </>
+        }
+        confirmText={professorToDelete?.nome}
+        confirmLabel="Excluir professor"
+        onConfirm={confirmDelete}
+      />
+    </div>
   );
 }

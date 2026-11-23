@@ -1,3 +1,4 @@
+import io
 import pytest
 from security import get_password_hash
 import models
@@ -94,7 +95,11 @@ def test_cadastro_aluno_conflito_horario_rollback(client, db):
     }
 
     # Fazer requisição multipart/form-data
-    response = client.post("/alunos/", data=form_data, headers=headers)
+    files = {
+        "documento": ("doc.pdf", io.BytesIO(b"%PDF-1.4 doc"), "application/pdf"),
+        "atestado": ("atestado.pdf", io.BytesIO(b"%PDF-1.4 ate"), "application/pdf"),
+    }
+    response = client.post("/alunos/", data=form_data, files=files, headers=headers)
     assert response.status_code == 400
     assert "Conflito" in response.json()["detail"]
 

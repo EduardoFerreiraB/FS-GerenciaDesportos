@@ -85,6 +85,20 @@ da de 28/09:
    informativo opcional, sem unicidade; o cadastro foca nome e demais dados do
    competidor. Ver seção 5.5.
 
+7. **Decisões de 2026-10-19, após a revisão das fatias 0–3:**
+   - Gerar a tabela já leva a edição para `EM_ANDAMENTO`; "iniciar edição" sobre tabela gerada é
+     idempotente. Substitui as linhas "Gerar tabela" e "Desfazer tabela" da seção 7.5 quanto ao estado.
+   - A consulta do painel disciplinar pode reconciliar e gravar as sanções automáticas.
+   - **Exclusão em cascata.** Excluir uma edição apaga, em qualquer estado, tudo o que pertence a ela
+     (equipes, elencos, grupos, chaveamento, partidas, súmulas, disciplina, decisões); competidores e
+     auditoria permanecem. Excluir uma equipe apaga seus atletas (inscrições), com a edição em rascunho.
+     Substitui "Exclusão física somente de rascunho…" e "Não configurar cascata…" da seção 7.5.
+   - **Competição é o principal; edição é secundária.** Excluir uma competição apaga, em cascata,
+     todas as suas edições. Excluir ou cancelar uma edição mantém a competição, que pode receber
+     novas edições. Exclusões pedem confirmação digitando o nome.
+   - Páginas de harness de teste não entram no build de produção.
+   - Paginação das listas públicas fica para a etapa de refinamento do frontend.
+
 Decisões de domínio preservadas da especificação de 28/09: competidores
 independentes dos alunos com importação opcional sem sincronização; equipes e
 elencos pertencem à edição; cópia de elenco entre edições; ocorrências como fonte
@@ -258,6 +272,11 @@ Cadastros sem regra esportiva e sem datas.
 Não permitir alterar a modalidade de uma competição que já tenha edições; criar
 outro cadastro. Preferir arquivamento à exclusão quando houver histórico.
 
+**Unicidade de nomes (decisão de 2026-11-23 — PD-RT09-03, PD-RT15-02):** nomes de
+eventos e nomes de competições são **únicos globalmente**, comparados ignorando
+maiúsculas/minúsculas, acentos e espaços excedentes, tanto na criação quanto na
+edição (conflito `409 DUPLICIDADE` no campo `nome`).
+
 ### 5.3 Recorrência
 
 `edicoes_evento`: `id_edicao_evento` PK, `id_evento` FK, `identificacao`,
@@ -389,9 +408,10 @@ geração, inscrição e alteração estrutural. Bloquear a partida para súmula
 Promoção de chaves e correções bloqueiam a edição e as partidas afetadas em ordem
 estável.
 
-### 5.9 Portão de saída da fatia 1
+### 5.9 Portão de saída da fatia 1 (Concluída em 2026-10-15)
 
-- Schema migrado ≡ ORM em SQLite e em MySQL 8 real pelo harness da fatia 0.
+- **Status:** ✅ Concluída em 2026-10-15.
+- Schema migrado ≡ ORM em SQLite e em MySQL 8 real pelo harness (`Schema do MySQL equivalente ao metadata ORM: sem divergencias.`).
 - Upgrade de banco vazio e de snapshot sintético com dados de escolinhas chegam
   ao mesmo schema, com os dados compartilhados preservados.
 - Integrante apontando equipe de outra edição levanta `IntegrityError` no flush.
@@ -400,9 +420,10 @@ estável.
 - Terceiro cadastrado sem aluno; aluno importado uma vez, inclusive sob
   concorrência; excluir aluno não remove competidor; copiar elenco não duplica
   inscrição nem altera histórico.
-- Regressão de escolinhas e autenticação verde; nenhum consumidor restante das
-  rotas esportivas retiradas.
-- `tsc --noEmit` e `npm run build` sem novos erros; `git diff --check` limpo.
+- Regressão de escolinhas e autenticação verde: 106 testes passando em `tests` e `migration_tests`.
+- Suíte de consolidação de competições: 154 testes passando em `competition_tests/consolidacao`.
+- Frontend Playwright E2E: 8 testes passando em `frontend/e2e/`.
+- `tsc --noEmit` com 0 erros, `npm run build` compilando 19 páginas com sucesso e `git diff --check` limpo.
 
 ## 6. Fatia 2 — estrutura da disputa e resultado simples
 
@@ -483,9 +504,12 @@ sem conservar aliases de formato ou chaves inconsistentes.
 
 - Liga usa round-robin; quantidade ímpar gera folgas, sem jogos fictícios.
 - Turno e returno invertem mandos. Grupos usam o mesmo cálculo, isolado por grupo.
-- Grupos permitem distribuição automática equilibrada e ajuste manual antes de
-  iniciar. Validar quantidade de grupos, de equipes e de classificados: cada grupo
-  precisa permitir a quantidade configurada.
+- Grupos usam distribuição automática equilibrada ao gerar a tabela (ajuste manual
+  de grupos fora do escopo — decisão de 2026-11-23, PD-RT12-01). Validar quantidade
+  de grupos, de equipes e de classificados: cada grupo precisa permitir a
+  quantidade configurada.
+- Gerar a tabela já coloca a edição em `EM_ANDAMENTO` (decisão de 2026-11-23,
+  PD-RT12-01).
 - O cruzamento é materializado nas vagas e apresentado antes do início. Para dois
   grupos com dois classificados, 1ºA × 2ºB e 1ºB × 2ºA. Para outras quantidades,
   proposta determinística por posição e grupo, revisável antes do início,
@@ -604,8 +628,9 @@ campo digita motivo a cada gol.
 `decisoes_classificacao`: edição, conjunto de equipes empatadas, vaga ou título em
 disputa, equipe escolhida, motivo, responsável, e a **revisão de resultados** sob
 a qual a decisão foi tomada. Resultado alterado depois invalida a decisão afetada
-e exige nova conferência, em vez de carregar silenciosamente uma escolha feita
-sobre dados que mudaram.
+de forma **definitiva** — uma decisão invalidada **nunca** volta a valer
+automaticamente mesmo que o placar retorne ao valor original (decisão de
+2026-11-23, PD-RT13-01), exigindo registro explícito de nova decisão.
 
 ### 7.4 Disciplina
 
@@ -620,7 +645,10 @@ uma partida cumpre no máximo uma unidade da fila daquele integrante. Jogo
 cancelado e classificação automática não cumprem punição. O cumprimento é
 confirmado pelo organizador após finalizar uma partida posterior à punição, da
 equipe do competidor; não se infere ausência só porque não houve ocorrência com o
-jogador.
+jogador. Marcar uma suspensão como `CUMPRIDA` por ajuste manual exige que os
+cumprimentos registrados atinjam a quantidade de jogos da punição (decisão de
+2026-11-23, PD-RT14-01); encerramento administrativo sem cumprimento deve usar
+`CANCELADA` com justificativa.
 
 Parâmetros em `configuracao`:
 
@@ -648,7 +676,7 @@ revisão disciplinar explícita em vez de apagar o histórico.
 | Ação | Condições |
 | --- | --- |
 | Criar edição | Rascunho, formato suportado, configuração válida, datas válidas. |
-| Gerar tabela | Rascunho, equipes suficientes, configuração coerente, nenhuma tabela existente. |
+| Gerar tabela | Rascunho, equipes suficientes, configuração coerente, nenhuma tabela existente; transita a edição para `EM_ANDAMENTO` (PD-RT12-01). |
 | Desfazer tabela | Rascunho, nenhum jogo iniciado, ocorrência ou resultado; explícita. |
 | Iniciar edição | Tabela gerada e conferida, sem inconsistência estrutural. Agendamento pode estar pendente. |
 | Finalizar edição | Jogos obrigatórios resolvidos, classificação e título sem decisão pendente. Jogo cancelado não equivale a resultado resolvido. |
@@ -661,9 +689,14 @@ das equipes na tabela — fica bloqueada com tabela gerada. Desfazê-la permite
 editar apenas antes do início. Ajuste de descrição, publicação e agendamento tem
 operação própria e nunca reabre configuração esportiva implicitamente.
 
-Exclusão física somente de rascunho sem disputa nem histórico. Bloquear exclusão
-de evento ou competição com edições, e de edição de evento com competições
-vinculadas. Não configurar cascata de pai que apague resultados.
+Exclusão de edição é física e em cascata, em qualquer estado (decisão de
+2026-10-19, seção 3 item 7); exclusão de competição apaga todas as suas edições;
+exclusão de equipe apaga seus atletas e exige edição em rascunho. Exclusão de
+evento e de edição de evento também é **física e em cascata** (decisão de
+2026-11-23, PD-RT15-01): exige prévia de impacto e confirmação digitando o nome
+exato do evento (ou identificação exata da edição), removendo edições do evento,
+edições de competição vinculadas (com equipes, partidas, súmulas e disciplina) e
+competições que ficarem sem edições restantes.
 
 ### 7.6 Portão de saída da fatia 3
 

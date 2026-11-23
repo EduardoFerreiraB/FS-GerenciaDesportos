@@ -31,67 +31,57 @@ command com as mesmas variáveis do serviço e execute `alembic upgrade head`
 antes de liberar a nova instância. Não inclua esse comando no `CMD` da API: a
 execução deve ser coordenada uma vez por release.
 
-## Banco existente: baseline seguro
+## Baseline `20261015_0100`
 
-A revisão `20260824_0001` é um retrato do schema atual, incluindo
-`competicoes` e `equipes.id_competicao`; ela não transforma dados históricos.
+A cadeia de migrações foi consolidada em uma única revisão, `20261015_0100`,
+gerada a partir do metadata ORM por `scripts/gerar_baseline.py` (apenas contra
+SQLite temporário). Ela é a única `head` e não tem `down_revision`.
 
-1. Faça backup e verifique o ambiente e o alvo antes de qualquer comando.
-2. Compare tabelas, colunas, chaves estrangeiras, índices e constraints do
-   banco existente com a revisão. Confirme também o estado atual com
-   `alembic current`.
-3. Somente se o schema já for exatamente equivalente à revisão, registre o
-   baseline com `alembic stamp 20260824_0001`.
-4. Se houver qualquer diferença — por exemplo, o banco legado não possuir
-   `competicoes` ou `equipes.id_competicao` — **não execute `stamp`**. Registre
-   a diferença e crie/revise uma migração corretiva em uma etapa aprovada.
-5. Depois de um `stamp` validado ou de uma atualização normal, rode
-   `alembic upgrade head` antes de iniciar a API.
+- **Banco novo:** `alembic upgrade head` cria todo o schema e chega à
+  `20261015_0100`.
+- **Banco existente:** faça backup, compare tabelas, colunas, chaves
+  estrangeiras, índices e constraints com a revisão e confira `alembic current`.
+  Somente se o schema for exatamente equivalente, **o usuário** executa
+  `alembic stamp 20261015_0100`. Qualquer divergência interrompe a adoção: não
+  execute `stamp`; registre a diferença e trate-a numa etapa aprovada.
+- **Diferenças conhecidas** entre um banco criado pela cadeia antiga e o
+  baseline (que segue o metadata ORM). Espere vê-las na comparação:
+  - defaults de servidor ausentes no baseline: `grupos_competicoes.status='ATIVO'`
+    e `criado_em=now()`; `jogadores.ativo=true` e `criado_em=now()`;
+    `ocorrencias_partida.tempo_jogo='1T'` e `criado_em=now()`;
+    `confrontos.ordem_jogo='1'`;
+  - `grupos_competicoes.slug`: constraint única `uq_grupos_competicoes_slug` +
+    índice não único, contra um único índice único no baseline;
+  - `equipes.id_edicao`: NOT NULL no banco antigo, anulável no baseline.
 
-`stamp` apenas marca uma revisão na tabela `alembic_version`; ele não cria nem
-altera tabelas. Marcá-lo contra um schema diferente ocultaria o desvio e pode
-causar perda de dados em releases posteriores.
+  Essas tabelas serão todas recriadas/descartadas pela revisão de consolidação
+  seguinte. A decisão do usuário é: aceitar as diferenças e executar `stamp`,
+  ou recriar o banco de desenvolvimento. Não há migração corretiva.
+- `stamp` apenas marca a revisão em `alembic_version`; não cria nem altera
+  tabelas. Marcá-lo contra um schema diferente oculta o desvio.
+- `alembic downgrade` segue proibido contra banco com dados: o downgrade do
+  baseline remove as tabelas.
 
-Não use `alembic downgrade` contra um banco adotado por `stamp` ou contendo
-dados de produção: o downgrade da revisão inicial remove as tabelas do schema.
+Execuções normais do Alembic não carregam os modelos (`target_metadata` é
+`None`); somente o gerador injeta o metadata via `config.attributes`.
 
-## Passo 3: reconciliação de equipes históricas
+## Verificação em MySQL descartável (obrigatória antes de release)
 
-A revisão `20260824_0003` é aditiva: conserva `equipes.id_edicao`, mantém
-`id_competicao` anulável durante o rollout e cria a auditoria
-`migracao_equipes_origem`. Para uma equipe histórica sem competição, ela usa
-as partidas por modalidade e a competição `EQUIPE` da mesma edição. Se houver
-mais de uma modalidade, mantém o registro original para uma competição, cria
-uma cópia para cada competição adicional, copia integralmente o elenco e
-redireciona as partidas da modalidade correspondente. Não cria participantes
-nem apaga equipes ou partidas.
-
-Antes do primeiro rollout, produza dois dumps SQLite **anonimizados**: um na
-revisão `20260824_0002` e outro após aplicar `20260824_0003` somente à cópia.
-Valide-os sem credenciais e sem escrita no dump:
+Antes de qualquer release, rode o harness de equivalência schema/ORM contra um
+servidor MySQL-compatível (MySQL local ou TiDB):
 
 ```bash
-python scripts/validar_migracao_equipes.py \
-  --antes /copia/anonimizada-0002.sqlite \
-  --depois /copia/anonimizada-0003.sqlite \
-  --relatorio /tmp/relatorio-equipes.json
+env HARNESS_MYSQL_URL='mysql+pymysql://user:pass@localhost:3306/' PYTHONPATH=app:. .venv/bin/python scripts/testar_mysql_competicoes.py
 ```
 
-O relatório contém cada `equipe original → equipe/competição`, as contagens
-pré/pós de partidas e os conjuntos de participantes. O processo deve ser
-revisado manualmente antes do rollout. O validador termina com erro se uma
-equipe com partidas não tiver exatamente uma competição EQUIPE inferível para
-cada modalidade, ou se houver divergência de partidas/elenco.
-
-Equipes sem partidas e sem modalidade inferível não são alteradas: recebem
-`PENDENTE` na auditoria e entram no relatório para decisão manual. O downgrade
-de `20260824_0003` é bloqueado após qualquer reconciliação, pois desfazer
-clones e partidas não é seguro automaticamente. A geração MySQL offline só
-emite DDL; ela não reconcilia dados. Não execute a migração em `.env`, banco
-local de desenvolvimento ou produção antes da aprovação do relatório.
-
-As alterações de elenco de equipes vinculadas bloqueiam a linha da competição
-antes de reler o elenco e inserir o participante. A consulta inicial usada
-somente para descobrir a competição é descartada com rollback antes do lock,
-para não reutilizar um snapshot anterior no MySQL. O participante continua
-permitido em outra competição e a resposta de conflito segue sendo `422`.
+A URL é do **servidor**, sem nome de banco (com nome, o harness recusa). Ele
+cria um banco `harness_<id>` aleatório, aplica `alembic upgrade head`,
+compara tabelas, colunas, nulabilidade, tipos, defaults de servidor, chaves
+primárias, unicidade, índices, chaves estrangeiras e `ondelete` com
+`models.Base.metadata` e descarta esse mesmo banco ao terminar (inclusive em
+erro); só remove o banco que ele próprio criou. Exige privilégio
+`CREATE`/`DROP DATABASE`. **Nunca toca o banco configurado da aplicação:**
+ignora `DATABASE_URL` e `.env`, e `--usar-database-url` é recusado. Sucesso:
+"sem divergências" e código de saída 0. Também disponível como
+`pytest -m mysql migration_tests/test_harness_mysql.py` (pula se
+`HARNESS_MYSQL_URL` não estiver definida); a suíte padrão usa `-m 'not mysql'`.

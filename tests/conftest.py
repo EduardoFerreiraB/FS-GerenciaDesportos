@@ -13,28 +13,33 @@ import models
 from database import Base, get_db
 from main import app
 
-# Configura o SQLite para rodar testes locais isolados
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# SQLite de teste isolado em diretório temporário (nunca na raiz do repositório)
+@pytest.fixture(scope="session")
+def engine(tmp_path_factory):
+    caminho = tmp_path_factory.mktemp("banco_teste") / "testes.sqlite"
+    eng = create_engine(f"sqlite:///{caminho}", connect_args={"check_same_thread": False})
+    yield eng
+    eng.dispose()
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_db():
+def setup_db(engine):
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
-def db():
+def db(engine):
     connection = engine.connect()
     transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection, join_transaction_mode="create_savepoint")
-    
+    session = sessionmaker(autocommit=False, autoflush=False, bind=connection)(
+        join_transaction_mode="create_savepoint"
+    )
+
     # Garante tabelas limpas a cada teste
     Base.metadata.create_all(bind=engine)
-    
+
     yield session
-    
+
     session.close()
     transaction.rollback()
     connection.close()
@@ -89,9 +94,8 @@ class MockQuery:
                 col_table = getattr(col, 'table', None)
                 if col_table is not None:
                     table_name = getattr(col_table, 'name', str(col_table))
-                    for c in [models.Usuario, models.RefreshToken, models.Professor, models.Turma, 
-                              models.TurmaDia, models.Aluno, models.Matricula, models.Presenca, 
-                              models.Evento, models.Edicao, models.Equipe, models.Partida, 
+                    for c in [models.Usuario, models.RefreshToken, models.Professor, models.Turma,
+                              models.TurmaDia, models.Aluno, models.Matricula, models.Presenca,
                               models.Local, models.Arbitro]:
                         if getattr(c, '__tablename__', None) == table_name:
                             col_class = c
@@ -221,13 +225,6 @@ class MockSession:
             (models.Matricula, 'turma'): (models.Turma, 'id_turma', 'id_turma'),
             (models.Presenca, 'aluno'): (models.Aluno, 'id_aluno', 'id_aluno'),
             (models.Presenca, 'turma'): (models.Turma, 'id_turma', 'id_turma'),
-            (models.Edicao, 'evento'): (models.Evento, 'id_evento', 'id_evento'),
-            (models.Equipe, 'edicao'): (models.Edicao, 'id_edicao', 'id_edicao'),
-            (models.Partida, 'edicao'): (models.Edicao, 'id_edicao', 'id_edicao'),
-            (models.Partida, 'local'): (models.Local, 'id_local', 'id_local'),
-            (models.Partida, 'arbitro'): (models.Arbitro, 'id_arbitro', 'id_arbitro'),
-            (models.Partida, 'equipe_casa'): (models.Equipe, 'id_equipe_casa', 'id_equipe'),
-            (models.Partida, 'equipe_visitante'): (models.Equipe, 'id_equipe_visitante', 'id_equipe'),
             (models.TurmaDia, 'turma'): (models.Turma, 'id_turma', 'id_turma'),
             (models.Aluno, 'participante'): (models.Participante, 'id_participante', 'id_participante'),
             (models.Atleta, 'participante'): (models.Participante, 'id_participante', 'id_participante'),

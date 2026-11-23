@@ -1,168 +1,224 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  ClipboardList, 
-  Search, 
-  User, 
-  GraduationCap, 
-  CheckCircle,
-  X,
-  Filter,
-  Loader2
-} from 'lucide-react';
-import useSWR, { mutate } from 'swr';
+import Link from 'next/link';
+import useSWR from 'swr';
+import { ClipboardList, GraduationCap, Search } from 'lucide-react';
 import api from '@/lib/api';
+import { useBreadcrumb } from '@/context/BreadcrumbContext';
+import { useNotification } from '@/context/NotificationContext';
+import { formatarHora } from '@/lib/formatos';
+import {
+  Alert,
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  EmptyState,
+  Input,
+  PageHeader,
+  Skeleton,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '@/components/ui';
 
 const fetcher = (url: string) => api.get(url).then(res => res.data);
 
+const ROTULO_DIA: Record<string, string> = {
+  SEG: 'Seg', TER: 'Ter', QUA: 'Qua', QUI: 'Qui', SEX: 'Sex', SAB: 'Sáb', DOM: 'Dom',
+};
+
+function iniciais(nome: string) {
+  return (nome || '?').trim().split(/\s+/).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('');
+}
+
+function descreverDias(dias: unknown): string {
+  if (Array.isArray(dias)) return dias.length ? dias.map((d) => ROTULO_DIA[d] || d).join(', ') : 'Dias a definir';
+  return typeof dias === 'string' && dias ? dias : 'Dias a definir';
+}
+
 export default function MatriculasPage() {
+  const { toast } = useNotification();
+  useBreadcrumb([{ label: 'Dashboard', href: '/dashboard' }, { label: 'Matrículas' }]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAluno, setSelectedAluno] = useState<any>(null);
-  const { data: alunos, isLoading: isLoadingAlunos } = useSWR('/alunos/', fetcher);
-  const { data: turmas, isLoading: isLoadingTurmas } = useSWR('/turmas/', fetcher);
+  const [turmaEmEnvio, setTurmaEmEnvio] = useState<number | null>(null);
+  const { data: alunos, error: errorAlunos, isLoading: isLoadingAlunos, mutate: recarregarAlunos } = useSWR('/alunos/', fetcher);
+  const { data: turmas, error: errorTurmas, isLoading: isLoadingTurmas, mutate: recarregarTurmas } = useSWR('/turmas/', fetcher);
 
-  const filteredAlunos = alunos?.filter((a: any) => 
+  const turmasMatriculadasIds = new Set<number>(
+    (selectedAluno?.matriculas ?? [])
+      .filter((m: any) => m.ativo !== false)
+      .map((m: any) => m.turma?.id_turma ?? m.id_turma)
+      .filter((id: unknown): id is number => typeof id === 'number'),
+  );
+
+  const filteredAlunos = alunos?.filter((a: any) =>
     a.nome_completo.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   const handleMatricular = async (turma: any) => {
     if (!selectedAluno) return;
-
+    setTurmaEmEnvio(turma.id_turma);
     try {
       await api.post('/matriculas/', {
         id_aluno: selectedAluno.id_aluno,
         id_turma: turma.id_turma
       });
-      alert(`Aluno ${selectedAluno.nome_completo} matriculado na turma ${turma.descricao} com sucesso!`);
+      await recarregarAlunos();
+      toast(`Aluno ${selectedAluno.nome_completo} matriculado na turma ${turma.descricao} com sucesso!`, 'success');
       setSelectedAluno(null);
     } catch (error: any) {
       console.error(error);
       const msg = error.response?.data?.detail || 'Erro ao realizar matrícula.';
-      alert(msg);
+      toast(Array.isArray(msg) ? msg[0]?.msg || 'Erro ao realizar matrícula.' : msg, 'error');
+    } finally {
+      setTurmaEmEnvio(null);
     }
   };
 
   return (
-    <>
-      {/* Cabeçalho */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <ClipboardList className="text-blue-600" size={28} />
-          Nova Matrícula
-        </h1>
-        <p className="text-slate-500 mt-1">Selecione um aluno para iniciar o processo de matrícula.</p>
+    <div>
+      <PageHeader
+        title="Matrículas"
+        description="Selecione um aluno para matriculá-lo em uma turma."
+      />
+
+      <div className="relative mb-4 max-w-md">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" />
+        <Input
+          type="text"
+          aria-label="Buscar aluno"
+          placeholder="Buscar aluno por nome..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
-      {/* Busca de Aluno */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-        <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-            <Search size={22} />
-          </span>
-          <input 
-            type="text" 
-            placeholder="Buscar aluno por nome..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700"
-          />
-        </div>
-      </div>
-
-      {/* Lista de Alunos (Grid) */}
       {isLoadingAlunos ? (
-        <div className="flex justify-center p-8"><Loader2 className="animate-spin text-blue-600" /></div>
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
+      ) : errorAlunos ? (
+        <Alert tone="danger" title="Erro ao carregar alunos" action={<Button variant="secondary" size="sm" onClick={() => recarregarAlunos()}>Tentar novamente</Button>}>
+          Não foi possível obter a lista de alunos.
+        </Alert>
+      ) : filteredAlunos.length === 0 ? (
+        <EmptyState
+          icon={<ClipboardList />}
+          title={searchTerm ? 'Nenhum aluno encontrado' : 'Nenhum aluno cadastrado'}
+          description={searchTerm ? 'Tente outro termo de busca.' : 'Cadastre alunos para poder matriculá-los em turmas.'}
+          action={!searchTerm ? <Button asChild><Link href="/dashboard/alunos/novo">Novo aluno</Link></Button> : undefined}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredAlunos.map((aluno: any) => (
-            <div 
-              key={aluno.id_aluno}
-              onClick={() => setSelectedAluno(aluno)}
-              className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative overflow-hidden"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                  {aluno.nome_completo.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{aluno.nome_completo}</h3>
-                  <p className="text-xs text-slate-500">ID: #{aluno.id_aluno}</p>
-                </div>
-              </div>
-              
-              {/* Indicador de Seleção */}
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500">
-                <ArrowRightCircle size={24} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Modal de Seleção de Turma */}
-      {selectedAluno && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-            
-            <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <User className="text-blue-500" />
-                  Matricular {selectedAluno.nome_completo}
-                </h2>
-                <p className="text-sm text-slate-500">Escolha uma turma disponível abaixo.</p>
-              </div>
-              <button 
-                onClick={() => setSelectedAluno(null)}
-                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            {/* Lista de Turmas Disponíveis */}
-            {isLoadingTurmas ? (
-               <div className="flex justify-center p-8"><Loader2 className="animate-spin text-blue-600" /></div>
-            ) : (
-              <div className="overflow-y-auto pr-2 space-y-3 flex-1">
-                {turmas?.map((turma: any) => (
-                  <div key={turma.id_turma} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <GraduationCap size={20} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-800">{turma.descricao || `Turma ${turma.id_turma}`}</h4>
-                        <p className="text-xs text-slate-500">
-                          {turma.modalidade?.nome} • {Array.isArray(turma.dias_semana) ? turma.dias_semana.join(', ') : (turma.dias_semana || 'Dias a definir')} • {turma.horario_inicio?.substring(0, 5)}-{turma.horario_fim?.substring(0, 5)}
-                        </p>
-                      </div>
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Aluno</TH>
+              <TH className="w-32"><span className="sr-only">Ações</span></TH>
+            </TR>
+          </THead>
+          <TBody>
+            {filteredAlunos.map((aluno: any) => (
+              <TR key={aluno.id_aluno}>
+                <TD>
+                  <div className="flex items-center gap-3">
+                    <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary">
+                      {iniciais(aluno.nome_completo)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-fg" title={aluno.nome_completo}>{aluno.nome_completo}</p>
+                      <p className="text-xs tabular-nums text-fg-muted">ID #{aluno.id_aluno}</p>
                     </div>
-
-                    <button 
-                      onClick={() => handleMatricular(turma)}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
-                    >
-                      Matricular
-                    </button>
                   </div>
-                ))}
-                {turmas?.length === 0 && <p className="text-center text-slate-400">Nenhuma turma disponível.</p>}
-              </div>
-            )}
-
-          </div>
-        </div>
+                </TD>
+                <TD className="text-right">
+                  <Button variant="secondary" size="sm" onClick={() => setSelectedAluno(aluno)} aria-label={`Matricular ${aluno.nome_completo}`}>
+                    Matricular
+                  </Button>
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
       )}
-    </>
+
+      <Dialog open={!!selectedAluno} onOpenChange={(v) => { if (!v && turmaEmEnvio === null) setSelectedAluno(null); }}>
+        {selectedAluno ? (
+          <DialogContent
+            size="lg"
+            title={`Matricular ${selectedAluno.nome_completo}`}
+            description="Escolha uma turma disponível abaixo."
+          >
+            {isLoadingTurmas ? (
+              <div className="space-y-2">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            ) : errorTurmas ? (
+              <Alert tone="danger" title="Erro ao carregar turmas" action={<Button variant="secondary" size="sm" onClick={() => recarregarTurmas()}>Tentar novamente</Button>}>
+                Não foi possível obter a lista de turmas.
+              </Alert>
+            ) : !turmas || turmas.length === 0 ? (
+              <EmptyState
+                icon={<GraduationCap />}
+                title="Nenhuma turma disponível."
+                description="Crie uma turma antes de matricular alunos."
+                action={<Button asChild variant="secondary"><Link href="/dashboard/turmas/novo">Nova turma</Link></Button>}
+              />
+            ) : (
+              <ul className="divide-y divide-line rounded-xl border border-line">
+                {turmas.map((turma: any) => {
+                  const nome = turma.descricao || `Turma ${turma.id_turma}`;
+                  const jaMatriculado = turmasMatriculadasIds.has(turma.id_turma);
+                  return (
+                    <li
+                      key={turma.id_turma}
+                      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-fg-muted">
+                          <GraduationCap className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate font-medium text-fg" title={nome}>{nome}</p>
+                            {jaMatriculado ? <Badge tone="success">Já matriculado</Badge> : null}
+                          </div>
+                          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
+                            {turma.modalidade?.nome ? <Badge tone="primary">{turma.modalidade.nome}</Badge> : null}
+                            <span>{descreverDias(turma.dias_semana)}</span>
+                            <span className="tabular-nums">{formatarHora(turma.horario_inicio) || '—'}–{formatarHora(turma.horario_fim) || '—'}</span>
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={jaMatriculado ? 'secondary' : 'primary'}
+                        className="self-start sm:self-auto"
+                        loading={turmaEmEnvio === turma.id_turma}
+                        disabled={jaMatriculado || (turmaEmEnvio !== null && turmaEmEnvio !== turma.id_turma)}
+                        onClick={() => handleMatricular(turma)}
+                      >
+                        {jaMatriculado ? 'Já matriculado' : 'Matricular'}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </DialogContent>
+        ) : null}
+      </Dialog>
+    </div>
   );
 }
-
-const ArrowRightCircle = ({ size }: any) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 16l4-4-4-4" />
-    <path d="M8 12h8" />
-  </svg>
-);
