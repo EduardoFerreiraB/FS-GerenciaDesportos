@@ -8,6 +8,7 @@ import type {
   CompetidorAtualizar,
   CompetidorCriar,
   CompetidorDetalhe,
+  DetalheCampo,
   EdicaoCompeticaoAtualizar,
   EdicaoCompeticaoCriar,
   EdicaoCompeticaoDetalhe,
@@ -45,6 +46,13 @@ import type {
   CumprimentoCriar,
   DecisaoClassificacaoCriar,
   DecisaoClassificacaoDetalhe,
+  EdicaoEventoExcluir,
+  EquipeAtualizar,
+  EventoExcluir,
+  OrigemCopiaEquipes,
+  PartidaElegivelCumprimento,
+  PreviaExclusaoEvento,
+  VinculoEdicaoCriar,
 } from '@/types/competicoes';
 
 // ==========================================
@@ -55,13 +63,17 @@ export class ApiError extends Error implements ErroApi {
   codigo: string;
   mensagem: string;
   campos?: string[];
+  detalhes?: DetalheCampo[];
+  status?: number;
 
-  constructor(erro: ErroApi) {
+  constructor(erro: ErroApi, status?: number) {
     super(erro.mensagem);
     this.name = 'ApiError';
     this.codigo = erro.codigo;
     this.mensagem = erro.mensagem;
     this.campos = erro.campos;
+    this.detalhes = erro.detalhes;
+    this.status = status;
     Object.setPrototypeOf(this, ApiError.prototype);
   }
 }
@@ -83,7 +95,8 @@ function normalizarErro(error: unknown): never {
         codigo: String(data.codigo),
         mensagem: String(data.mensagem),
         campos: Array.isArray(data.campos) ? data.campos.map(String) : undefined,
-      });
+        detalhes: Array.isArray(data.detalhes) ? (data.detalhes as DetalheCampo[]) : undefined,
+      }, error.response.status);
     }
   }
   throw error;
@@ -827,6 +840,105 @@ export async function registrarDecisaoClassificacao(
 }
 
 // ==========================================
+// Correções dos testes manuais (contratos da T0.2; endpoints entregues em T1/T2b/T5)
+// ==========================================
+
+export async function obterPreviaExclusaoEvento(idEvento: number): Promise<PreviaExclusaoEvento> {
+  try {
+    const res = await api.get<PreviaExclusaoEvento>(`/competicoes/eventos/${idEvento}/exclusao/previa`);
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+/** Exclui o evento e toda a árvore (edições, competições vinculadas, jogos). Exige o nome exato. */
+export async function excluirEvento(idEvento: number, confirmacaoNome: string): Promise<void> {
+  try {
+    const dados: EventoExcluir = { confirmacao_nome: confirmacaoNome };
+    await api.delete(`/competicoes/eventos/${idEvento}`, { data: dados });
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function excluirEdicaoEvento(idEdicaoEvento: number, confirmacaoIdentificacao: string): Promise<void> {
+  try {
+    const dados: EdicaoEventoExcluir = { confirmacao_identificacao: confirmacaoIdentificacao };
+    await api.delete(`/competicoes/edicoes-evento/${idEdicaoEvento}`, { data: dados });
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function vincularEdicaoAoEvento(
+  idEdicaoEvento: number,
+  idEdicaoCompeticao: number
+): Promise<EdicaoEventoDetalhe> {
+  try {
+    const dados: VinculoEdicaoCriar = { id_edicao_competicao: idEdicaoCompeticao };
+    const res = await api.post<EdicaoEventoDetalhe>(`/competicoes/edicoes-evento/${idEdicaoEvento}/vinculos`, dados);
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function desvincularEdicaoDoEvento(
+  idEdicaoEvento: number,
+  idEdicaoCompeticao: number
+): Promise<EdicaoEventoDetalhe> {
+  try {
+    const res = await api.delete<EdicaoEventoDetalhe>(
+      `/competicoes/edicoes-evento/${idEdicaoEvento}/vinculos/${idEdicaoCompeticao}`
+    );
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function atualizarEquipe(idEquipe: number, dados: EquipeAtualizar): Promise<EquipeDetalhe> {
+  try {
+    const res = await api.patch<EquipeDetalhe>(`/competicoes/equipes/${idEquipe}`, dados);
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function atualizarIntegrante(idIntegrante: number, dados: IntegranteAtualizar): Promise<IntegranteDetalhe> {
+  try {
+    const res = await api.patch<IntegranteDetalhe>(`/competicoes/integrantes/${idIntegrante}`, dados);
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function reativarIntegrante(idIntegrante: number): Promise<IntegranteDetalhe> {
+  return atualizarIntegrante(idIntegrante, { situacao: 'ATIVO' });
+}
+
+export async function listarOrigensCopiaEquipes(idEdicaoDestino: number): Promise<OrigemCopiaEquipes[]> {
+  try {
+    const res = await api.get<OrigemCopiaEquipes[]>(`/competicoes/edicoes/${idEdicaoDestino}/copiar-equipes/origens`);
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+export async function listarPartidasElegiveisCumprimento(idSuspensao: number): Promise<PartidaElegivelCumprimento[]> {
+  try {
+    const res = await api.get<PartidaElegivelCumprimento[]>(`/competicoes/suspensoes/${idSuspensao}/partidas-elegiveis`);
+    return res.data;
+  } catch (err) {
+    normalizarErro(err);
+  }
+}
+
+// ==========================================
 // Objeto de Serviço Agrupado
 // ==========================================
 
@@ -898,6 +1010,18 @@ export const competicoesService = {
   ajustarSuspensao,
   listarDecisoesClassificacao,
   registrarDecisaoClassificacao,
+
+  // Correções dos testes manuais
+  obterPreviaExclusaoEvento,
+  excluirEvento,
+  excluirEdicaoEvento,
+  vincularEdicaoAoEvento,
+  desvincularEdicaoDoEvento,
+  atualizarEquipe,
+  atualizarIntegrante,
+  reativarIntegrante,
+  listarOrigensCopiaEquipes,
+  listarPartidasElegiveisCumprimento,
 };
 
 export const competicaoService = competicoesService;

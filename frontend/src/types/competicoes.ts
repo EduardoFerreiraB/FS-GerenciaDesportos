@@ -7,10 +7,18 @@
 // Comuns e Erros
 // ==========================================
 
+export interface DetalheCampo {
+  /** Caminho do campo com pontos (ex.: "edicao.data_fim"). */
+  campo: string;
+  mensagem: string;
+}
+
 export interface ErroApi {
   codigo: string;
   mensagem: string;
   campos?: string[];
+  /** Mensagem legível por campo (T0.2); ler sempre via `extrairErro` de `@/lib/erros`. */
+  detalhes?: DetalheCampo[];
 }
 
 export interface Pagina<T> {
@@ -111,10 +119,46 @@ export interface EdicaoEventoAtualizar {
   data_fim?: string | null;
 }
 
+/** Competição vinculada a uma edição de evento (T1). */
+export interface CompeticaoVinculada {
+  id_competicao: number;
+  nome: string;
+  id_edicao_competicao: number;
+  identificacao: string;
+  estado: EstadoEdicao;
+  publicada: boolean;
+}
+
 export interface EdicaoEventoDetalhe extends EdicaoEventoCriar {
   id_edicao_evento: number;
   id_evento: number;
   criado_em: string;
+  /** Preenchido pela API a partir da T1. */
+  competicoes?: CompeticaoVinculada[];
+}
+
+/** `POST /competicoes/edicoes-evento/{id}/vinculos` (T1). */
+export interface VinculoEdicaoCriar {
+  id_edicao_competicao: number;
+}
+
+/** `DELETE /competicoes/eventos/{id}` (T1): o nome precisa bater exatamente. */
+export interface EventoExcluir {
+  confirmacao_nome: string;
+}
+
+/** `DELETE /competicoes/edicoes-evento/{id}` (T1). */
+export interface EdicaoEventoExcluir {
+  confirmacao_identificacao: string;
+}
+
+/** `GET /competicoes/eventos/{id}/exclusao/previa` (T1): impacto mostrado no diálogo. */
+export interface PreviaExclusaoEvento {
+  edicoes_evento: number;
+  edicoes_competicao: number;
+  partidas: number;
+  equipes: number;
+  publicadas: number;
 }
 
 export interface EventoComEdicaoCriar extends EventoCriar {
@@ -155,7 +199,15 @@ export interface EdicaoCompeticaoAtualizar extends EdicaoCompeticaoCriar {
   revisao: number;
 }
 
+/** Evento vinculado à edição (selo no cabeçalho da competição). */
+export interface EventoResumo {
+  id_evento: number;
+  nome: string;
+  identificacao_edicao: string;
+}
+
 export interface EdicaoCompeticaoDetalhe extends EdicaoCompeticaoCriar {
+  evento?: EventoResumo | null;
   id_edicao_competicao: number;
   id_competicao: number;
   estado: EstadoEdicao;
@@ -231,6 +283,20 @@ export interface EquipesCopiar {
   id_edicao_origem: number;
 }
 
+/** `PATCH /competicoes/equipes/{id}` (T2b): editável em qualquer estado da edição. */
+export interface EquipeAtualizar {
+  nome?: string;
+  sigla?: string | null;
+}
+
+/** `GET /competicoes/edicoes/{id}/copiar-equipes/origens` (T2b). */
+export interface OrigemCopiaEquipes {
+  id_edicao_competicao: number;
+  /** Ex.: "Copa X · 2026". */
+  rotulo: string;
+  equipes: number;
+}
+
 export interface IntegranteCriar {
   id_competidor: number;
   nome_esportivo: string;
@@ -238,8 +304,12 @@ export interface IntegranteCriar {
   posicao?: string | null;
 }
 
+/** `PATCH /competicoes/integrantes/{id}`: todos opcionais a partir da T2b. */
 export interface IntegranteAtualizar {
-  situacao: SituacaoIntegrante;
+  situacao?: SituacaoIntegrante;
+  nome_esportivo?: string;
+  numero_camisa?: number | null;
+  posicao?: string | null;
 }
 
 export interface IntegranteDetalhe extends IntegranteCriar {
@@ -279,7 +349,19 @@ export interface VagaDueloDetalhe {
   origem_tipo: OrigemVaga;
   origem_id?: number | null;
   id_equipe?: number | null;
+  /** Equipe definida depois da origem (vencedor do duelo, colocado do grupo). */
+  id_equipe_resolvida?: number | null;
   nome_equipe?: string | null;
+  /** "Grupo A" nas vagas vindas de posição de grupo (T3). */
+  nome_grupo?: string | null;
+  /** Texto legível da origem: "1º do Grupo A", "Vencedor da Semifinal 1" (T3). */
+  descricao_origem?: string | null;
+}
+
+/** Placar agregado do duelo na ordem das vagas (T3); ida e volta somadas. */
+export interface PlacarDuelo {
+  gols: [number | null, number | null];
+  penaltis: [number | null, number | null];
 }
 
 export interface DueloEliminatorioDetalhe {
@@ -291,6 +373,8 @@ export interface DueloEliminatorioDetalhe {
   status: string;
   id_equipe_vencedora?: number | null;
   vagas: VagaDueloDetalhe[];
+  /** Preenchido pela API a partir da T3. */
+  placar?: PlacarDuelo | null;
 }
 
 export interface EstruturaDisputaDetalhe {
@@ -344,7 +428,9 @@ export interface PartidaDetalhe {
   sigla_visitante?: string | null;
   rodada?: number | null;
   turno?: number | null;
-  numero_partida: number;
+  ordem_jogo?: number;
+  /** Número exibido ao usuário ("Jogo 7"): 1..N por edição, grupos antes do mata-mata. */
+  numero_jogo: number;
   data_hora?: string | null;
   local?: string | null;
   campo?: string | null;
@@ -498,6 +584,26 @@ export interface CumprimentoDetalhe {
   id_integrante: number;
   id_partida: number;
   criado_em?: string | null;
+  /** T5. */
+  responsavel_nome?: string | null;
+}
+
+/** Linha do histórico de uma suspensão, lida da auditoria (T5). */
+export interface HistoricoSuspensao {
+  em: string;
+  responsavel_nome?: string | null;
+  acao: string;
+  situacao_anterior?: SituacaoSuspensao | string | null;
+  situacao_nova?: SituacaoSuspensao | string | null;
+  justificativa?: string | null;
+}
+
+/** `GET /competicoes/suspensoes/{id}/partidas-elegiveis` (T5). */
+export interface PartidaElegivelCumprimento {
+  id_partida: number;
+  numero_jogo: number;
+  /** Ex.: "Jogo 6 · Final · Leões RT × Tigres RT". */
+  rotulo: string;
 }
 
 export interface SuspensaoDetalhe {
@@ -518,6 +624,14 @@ export interface SuspensaoDetalhe {
   situacao: SituacaoSuspensao | string;
   cumprimentos: CumprimentoDetalhe[];
   criado_em?: string | null;
+  /** T5. */
+  responsavel_nome?: string | null;
+  historico?: HistoricoSuspensao[];
+}
+
+/** Corpo de `DELETE /competicoes/ocorrencias/{id}` (T5): motivo obrigatório se a partida já foi finalizada. */
+export interface OcorrenciaRemover {
+  motivo?: string;
 }
 
 export interface SuspensaoManualCriar {
@@ -571,6 +685,8 @@ export interface DecisaoClassificacaoDetalhe {
   revisao_resultados: string;
   valida: boolean;
   criado_em?: string | null;
+  /** T4. */
+  responsavel_nome?: string | null;
 }
 
 // ==========================================

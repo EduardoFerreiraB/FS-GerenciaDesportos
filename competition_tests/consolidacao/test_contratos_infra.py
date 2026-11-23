@@ -227,7 +227,7 @@ def test_tratadores_respondem_envelope(erro, status, codigo):
 
     resposta = TestClient(app).get("/competicoes/recurso")
     assert resposta.status_code == status
-    assert resposta.json() == {"codigo": codigo, "mensagem": "Operacao recusada", "campos": ["revisao"]}
+    assert resposta.json() == {"codigo": codigo, "mensagem": "Operacao recusada", "campos": ["revisao"], "detalhes": []}
 
 
 def test_main_registra_tratadores_e_router_central_inclui_subrouters():
@@ -257,9 +257,11 @@ def test_validacao_http_responde_envelope_sem_expor_entrada(dados, campos):
     assert resposta.status_code == 422
     assert resposta.json() == {
         "codigo": "CONFIGURACAO_INVALIDA",
-        "mensagem": "Dados da requisicao invalidos.",
+        "mensagem": "Dados inválidos. Verifique os campos destacados.",
         "campos": campos,
+        "detalhes": resposta.json()["detalhes"],
     }
+    assert [d["campo"] for d in resposta.json()["detalhes"]] == campos
 
 
 @pytest.mark.parametrize("caminho,competicoes", [
@@ -279,8 +281,9 @@ def test_envelope_de_validacao_limitado_ao_dominio_competicoes(caminho, competic
     if competicoes:
         assert resposta.json() == {
             "codigo": "CONFIGURACAO_INVALIDA",
-            "mensagem": "Dados da requisicao invalidos.",
+            "mensagem": "Dados inválidos. Verifique os campos destacados.",
             "campos": ["nome"],
+            "detalhes": [{"campo": "nome", "mensagem": "Texto muito curto."}],
         }
     else:
         assert set(resposta.json()) == {"detail"}
@@ -318,7 +321,7 @@ def test_erros_de_seguranca_usam_envelope_apenas_em_competicoes(
     if status == 200:
         assert resposta.json() == {"role": "coordenador"}
     elif competicoes:
-        assert set(resposta.json()) == {"codigo", "mensagem", "campos"}
+        assert set(resposta.json()) == {"codigo", "mensagem", "campos", "detalhes"}
         assert resposta.json()["codigo"] == codigo
         assert resposta.json()["campos"] == []
         assert resposta.json()["mensagem"]
