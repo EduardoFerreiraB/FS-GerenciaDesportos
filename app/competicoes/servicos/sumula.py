@@ -28,7 +28,7 @@ from competicoes.infra import (
 )
 from competicoes.modelos.disciplina import SuspensaoCompeticao
 from competicoes.modelos.disputa import DueloEliminatorio, VagaDuelo
-from competicoes.modelos.operacao import RequisicaoPartida
+from competicoes.modelos.operacao import AuditoriaCompeticao, RequisicaoPartida
 from competicoes.modelos.organizacao import EdicaoCompeticao
 from competicoes.modelos.partidas import OcorrenciaPartida, Partida
 from competicoes.modelos.pessoas import IntegranteEquipe
@@ -158,7 +158,7 @@ def iniciar_partida(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para iniciar uma partida.",
+                "A edição precisa estar em andamento para iniciar uma partida.",
                 campos=["estado"],
             )
 
@@ -234,7 +234,7 @@ def registrar_ocorrencia(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para registrar ocorrências.",
+                "A edição precisa estar em andamento para registrar ocorrências.",
                 campos=["estado"],
             )
 
@@ -379,7 +379,7 @@ def atribuir_autor_ocorrencia(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para alterar ocorrências.",
+                "A edição precisa estar em andamento para alterar ocorrências.",
                 campos=["estado"],
             )
 
@@ -488,14 +488,29 @@ def remover_ocorrencia(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para remover ocorrências.",
+                "A edição precisa estar em andamento para remover ocorrências.",
                 campos=["estado"],
             )
 
         if partida.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A partida deve estar EM_ANDAMENTO para remover ocorrências. Reabra a partida primeiro.",
+                "O jogo precisa estar em andamento para remover ocorrências. Reabra o jogo primeiro.",
                 campos=["estado"],
+            )
+
+        # DF-RT14-07: corrigir súmula de jogo que já foi finalizado exige justificativa (spec 7.2).
+        ja_finalizada = db.execute(
+            select(AuditoriaCompeticao.id_auditoria).where(
+                AuditoriaCompeticao.entidade == "partida",
+                AuditoriaCompeticao.id_entidade == partida.id_partida,
+                AuditoriaCompeticao.acao == "REABRIR_PARTIDA",
+            ).limit(1)
+        ).first() is not None
+        motivo = (motivo or "").strip() or None
+        if ja_finalizada and (motivo is None or len(motivo) < 3):
+            raise ConfiguracaoInvalida(
+                "Informe o motivo da remoção (mínimo de 3 caracteres): este jogo já tinha sido finalizado.",
+                campos=["motivo"],
             )
 
         if oc.tipo == "EXPULSAO_SEGUNDO_AMARELO":
@@ -563,7 +578,7 @@ def finalizar_partida(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para finalizar uma partida.",
+                "A edição precisa estar em andamento para finalizar uma partida.",
                 campos=["estado"],
             )
 
@@ -667,7 +682,7 @@ def reabrir_partida(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para reabrir uma partida.",
+                "A edição precisa estar em andamento para reabrir uma partida.",
                 campos=["estado"],
             )
 
@@ -809,7 +824,7 @@ def cancelar_partida(
 
         if edicao.estado != "EM_ANDAMENTO":
             raise ConflitoEstado(
-                "A edição deve estar EM_ANDAMENTO para cancelar uma partida.",
+                "A edição precisa estar em andamento para cancelar uma partida.",
                 campos=["estado"],
             )
 

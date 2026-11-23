@@ -7,14 +7,16 @@ from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, object_session, selectinload
 
 from models import Usuario
 from competicoes.contratos.configuracao import DisciplinaSchema
 from competicoes.contratos.disciplina import (
     CumprimentoCriar,
     CumprimentoDetalhe,
+    HistoricoSuspensao,
     PainelDisciplinarDetalhe,
+    PartidaElegivelCumprimento,
     ResumoCartoesIntegrante,
     SuspensaoAjustar,
     SuspensaoDetalhe,
@@ -23,11 +25,12 @@ from competicoes.contratos.disciplina import (
 from competicoes.erros import ConfiguracaoInvalida, ConflitoEstado, NaoEncontrado
 from competicoes.infra import bloquear_edicao, registrar_auditoria, transacao
 from competicoes.modelos.disciplina import CumprimentoSuspensao, SuspensaoCompeticao
-from competicoes.modelos.disputa import DueloEliminatorio, VagaDuelo
+from competicoes.modelos.disputa import DueloEliminatorio, GrupoCompeticao, VagaDuelo
 from competicoes.modelos.operacao import AuditoriaCompeticao
 from competicoes.modelos.organizacao import EdicaoCompeticao
 from competicoes.modelos.partidas import OcorrenciaPartida, Partida
 from competicoes.modelos.pessoas import Equipe, IntegranteEquipe
+from competicoes.servicos.numeracao import mapa_numeros_jogos
 from competicoes.servicos.motores.disciplina import (
     calcular_sancoes_e_cartoes,
     reconciliar_suspensoes_existentes,
@@ -128,6 +131,52 @@ def _carregar_mapas_integrantes_equipes(
     )
 
 
+_ACOES_HISTORICO = {
+    "CRIAR_MANUAL": "Criada manualmente",
+    "AJUSTAR": "Ajuste",
+    "CUMPRIR_SUSPENSAO": "Cumprimento registrado",
+}
+
+# Campos que não entram no ``antes``/``depois`` da auditoria (evita aninhar o histórico).
+SEM_HISTORICO = {"historico"}
+
+
+def _nome_usuario(usuario) -> str | None:
+    return usuario.username if usuario is not None else None
+
+
+def _historico_suspensao(suspensao: SuspensaoCompeticao) -> list[HistoricoSuspensao]:
+    """Histórico lido da auditoria; a suspensão automática ganha a linha de origem."""
+    db = object_session(suspensao)
+    auditorias = [] if db is None or suspensao.id_suspensao is None else db.execute(
+        select(AuditoriaCompeticao)
+        .where(
+            AuditoriaCompeticao.entidade == "suspensoes_competicao",
+            AuditoriaCompeticao.id_entidade == suspensao.id_suspensao,
+        )
+        .order_by(AuditoriaCompeticao.instante, AuditoriaCompeticao.id_auditoria)
+    ).scalars().all()
+    historico = [
+        HistoricoSuspensao(
+            em=a.instante,
+            responsavel_nome=a.responsavel_nome,
+            acao=_ACOES_HISTORICO.get(a.acao, a.acao.replace("_", " ").capitalize()),
+            situacao_anterior=(a.antes or {}).get("situacao"),
+            situacao_nova=(a.depois or {}).get("situacao"),
+            justificativa=a.motivo,
+        )
+        for a in auditorias
+    ]
+    if suspensao.origem != "MANUAL":
+        historico.insert(0, HistoricoSuspensao(
+            em=suspensao.criado_em,
+            acao="Gerada pela súmula",
+            situacao_nova="ATIVA",
+            justificativa=suspensao.motivo,
+        ))
+    return historico
+
+
 def _para_suspensao_detalhe(
     suspensao: SuspensaoCompeticao,
     integrantes_map: dict[int, IntegranteEquipe] | None = None,
@@ -156,6 +205,7 @@ def _para_suspensao_detalhe(
             id_integrante=c.id_integrante,
             id_partida=c.id_partida,
             criado_em=c.criado_em,
+            responsavel_nome=_nome_usuario(c.usuario_responsavel),
         )
         for c in cumprimentos_ordenados
     ]
@@ -180,6 +230,8 @@ def _para_suspensao_detalhe(
         situacao=suspensao.situacao,
         cumprimentos=cumprimentos_detalhe,
         criado_em=suspensao.criado_em,
+        responsavel_nome=_nome_usuario(suspensao.usuario_responsavel),
+        historico=_historico_suspensao(suspensao),
     )
 
 
@@ -195,6 +247,12 @@ def _executar_reconciliacao_interna(
 ]:
     id_edicao = edicao.id_edicao_competicao
     config_disciplina = _extrair_config_disciplina(edicao)
+
+    # Toda alteração de resultado passa por aqui: grava a perda de validade das
+    # decisões de classificação antes que o resultado possa voltar ao original.
+    from competicoes.servicos.classificacao import invalidar_decisoes_desatualizadas
+
+    invalidar_decisoes_desatualizadas(db, id_edicao)
 
     partidas = (
         db.execute(
@@ -275,6 +333,34 @@ def _executar_reconciliacao_interna(
 
     rec = reconciliar_suspensoes_existentes(sancoes_esperadas, suspensoes_banco)
 
+    # DF-RT14-06: com um jogo reaberto, os cartões dele saem da conta do motor (só conta
+    # jogo finalizado) e a sanção some das esperadas, embora nada tenha mudado de fato.
+    # A suspensão fica como está e é reaproveitada ao finalizar de novo. Ela só é segurada
+    # enquanto a dúvida existe: cartão de origem ainda na súmula E (o jogo de origem está
+    # reaberto OU o atleta tem cartão em algum jogo reaberto). Se o cartão que sustentava
+    # a sanção foi removido de um jogo já finalizado de novo, ela cai normalmente
+    # (revisão #63: acúmulo com amarelo anterior removido).
+    ids_ocorrencias = {o.id_ocorrencia for o in ocorrencias}
+    estado_partida = {p.id_partida: p.estado for p in partidas}
+    tipos_cartao = {"CARTAO_AMARELO", "CARTAO_VERMELHO_DIRETO", "EXPULSAO_SEGUNDO_AMARELO"}
+    atletas_com_cartao_pendente = {
+        o.id_integrante
+        for o in ocorrencias
+        if o.tipo in tipos_cartao and estado_partida.get(o.id_partida) != "FINALIZADA"
+    }
+
+    def origem_presente(susp: SuspensaoCompeticao) -> bool:
+        if susp.id_ocorrencia_origem is None or susp.id_ocorrencia_origem not in ids_ocorrencias:
+            return False
+        origem_reaberta = (
+            susp.id_partida_origem is not None
+            and estado_partida.get(susp.id_partida_origem) != "FINALIZADA"
+        )
+        return origem_reaberta or susp.id_integrante in atletas_com_cartao_pendente
+
+    rec["para_cancelar"] = [s for s in rec["para_cancelar"] if not origem_presente(s)]
+    rec["para_revisao"] = [s for s in rec["para_revisao"] if not origem_presente(s)]
+
     # Identifica suspensões que já tiveram revisão manual resolvida pelo coordenador
     ids_em_revisao_resolvidos: set[int] = set()
     if rec["para_revisao"]:
@@ -310,7 +396,11 @@ def _executar_reconciliacao_interna(
     chaves_mantidas_no_banco: set[str] = set()
     for susp in suspensoes_banco:
         if susp.chave_origem is not None:
-            if susp.situacao == "CANCELADA" and susp.chave_origem not in esperadas_por_chave:
+            if (
+                susp.situacao == "CANCELADA"
+                and susp.chave_origem not in esperadas_por_chave
+                and not origem_presente(susp)
+            ):
                 susp.chave_origem = None
             else:
                 chaves_mantidas_no_banco.add(str(susp.chave_origem))
@@ -553,7 +643,7 @@ def cumprir_suspensao(
             participante_atuou_na_partida=atuou,
         )
 
-        antes = _para_suspensao_detalhe(suspensao).model_dump(mode="json")
+        antes = _para_suspensao_detalhe(suspensao).model_dump(mode="json", exclude=SEM_HISTORICO)
 
         novo_cumprimento = CumprimentoSuspensao(
             id_suspensao=suspensao.id_suspensao,
@@ -576,12 +666,12 @@ def cumprir_suspensao(
             id_entidade=suspensao.id_suspensao,
             acao="CUMPRIR_SUSPENSAO",
             antes=antes,
-            depois=detalhe.model_dump(mode="json"),
+            depois=detalhe.model_dump(mode="json", exclude=SEM_HISTORICO),
             id_edicao_competicao=suspensao.id_edicao_competicao,
             responsavel=responsavel,
-            motivo=f"Cumprimento registrado na partida {dados.id_partida}",
+            motivo=f"Cumprimento registrado no jogo {mapa_numeros_jogos(db, partida.id_edicao_competicao).get(partida.id_partida, '?')}.",
         )
-        return detalhe
+        return _para_suspensao_detalhe(suspensao)
 
 
 def criar_suspensao_manual(
@@ -649,12 +739,12 @@ def criar_suspensao_manual(
             id_entidade=suspensao.id_suspensao,
             acao="CRIAR_MANUAL",
             antes=None,
-            depois=detalhe.model_dump(mode="json"),
+            depois=detalhe.model_dump(mode="json", exclude=SEM_HISTORICO),
             id_edicao_competicao=id_edicao,
             responsavel=responsavel,
             motivo=motivo,
         )
-        return detalhe
+        return _para_suspensao_detalhe(suspensao)
 
 
 def ajustar_suspensao(
@@ -697,7 +787,7 @@ def ajustar_suspensao(
                 campos=["motivo"],
             )
 
-        antes = _para_suspensao_detalhe(suspensao).model_dump(mode="json")
+        antes = _para_suspensao_detalhe(suspensao).model_dump(mode="json", exclude=SEM_HISTORICO)
         jogos_cumpridos = len(suspensao.cumprimentos or [])
 
         if dados.jogos is not None:
@@ -713,6 +803,12 @@ def ajustar_suspensao(
                 )
             suspensao.jogos = dados.jogos
 
+        if dados.situacao == "CUMPRIDA" and jogos_cumpridos < suspensao.jogos:
+            # PD-RT14-01: encerrar sem cumprimento é "Cancelada" com justificativa.
+            raise ConfiguracaoInvalida(
+                "Para marcar como cumprida, registre os cumprimentos nas partidas.",
+                campos=["situacao"],
+            )
         if dados.situacao is not None:
             suspensao.situacao = dados.situacao
         elif suspensao.situacao == "ATIVA" and jogos_cumpridos >= suspensao.jogos:
@@ -742,9 +838,128 @@ def ajustar_suspensao(
             id_entidade=suspensao.id_suspensao,
             acao="AJUSTAR",
             antes=antes,
-            depois=detalhe.model_dump(mode="json"),
+            depois=detalhe.model_dump(mode="json", exclude=SEM_HISTORICO),
             id_edicao_competicao=suspensao.id_edicao_competicao,
             responsavel=responsavel,
             motivo=motivo,
         )
-        return detalhe
+        return _para_suspensao_detalhe(suspensao)
+
+
+def listar_partidas_elegiveis(db: Session, id_suspensao: int) -> list[PartidaElegivelCumprimento]:
+    """Jogos em que a suspensão pode ser cumprida (DF-RT14-02).
+
+    Aplica a mesma validação do registro de cumprimento: jogo finalizado da equipe do
+    atleta, posterior à origem, sem ocorrência do atleta e sem outro cumprimento dele.
+    """
+    from competicoes.servicos.chave import rotulo_fase
+
+    suspensao = db.execute(
+        select(SuspensaoCompeticao)
+        .options(
+            selectinload(SuspensaoCompeticao.cumprimentos),
+            joinedload(SuspensaoCompeticao.integrante),
+            joinedload(SuspensaoCompeticao.partida_origem),
+        )
+        .where(SuspensaoCompeticao.id_suspensao == id_suspensao)
+    ).scalars().first()
+    if suspensao is None:
+        raise NaoEncontrado("Suspensão não encontrada.", campos=["id_suspensao"])
+    integrante = suspensao.integrante
+    if integrante is None:
+        return []
+
+    id_edicao = suspensao.id_edicao_competicao
+    partidas = db.execute(
+        select(Partida).where(
+            Partida.id_edicao_competicao == id_edicao,
+            Partida.estado == "FINALIZADA",
+            (Partida.id_equipe_mandante == integrante.id_equipe)
+            | (Partida.id_equipe_visitante == integrante.id_equipe),
+        )
+    ).scalars().all()
+    if not partidas:
+        return []
+
+    ids = [p.id_partida for p in partidas]
+    jogou = set(db.scalars(
+        select(OcorrenciaPartida.id_partida).where(
+            OcorrenciaPartida.id_partida.in_(ids),
+            OcorrenciaPartida.id_integrante == suspensao.id_integrante,
+        )
+    ))
+    cumprimentos_integrante = [
+        {"id_partida": c.id_partida, "id_suspensao": c.id_suspensao}
+        for c in db.execute(
+            select(CumprimentoSuspensao).where(
+                CumprimentoSuspensao.id_integrante == suspensao.id_integrante
+            )
+        ).scalars()
+    ]
+    origem = suspensao.partida_origem
+    numeros = mapa_numeros_jogos(db, id_edicao)
+    equipes = {
+        e.id_equipe: e.nome
+        for e in db.execute(select(Equipe).where(Equipe.id_edicao_competicao == id_edicao)).scalars()
+    }
+    grupos = {
+        g.id_grupo: g.nome
+        for g in db.execute(
+            select(GrupoCompeticao).where(GrupoCompeticao.id_edicao_competicao == id_edicao)
+        ).scalars()
+    }
+    fases = {
+        d.id_duelo: d.fase
+        for d in db.execute(
+            select(DueloEliminatorio).where(DueloEliminatorio.id_edicao_competicao == id_edicao)
+        ).scalars()
+    }
+
+    elegiveis: list[PartidaElegivelCumprimento] = []
+    for partida in sorted(partidas, key=lambda p: numeros.get(p.id_partida, 0)):
+        rodada_origem = None
+        if origem is not None and partida.id_grupo == origem.id_grupo and partida.id_duelo == origem.id_duelo:
+            rodada_origem = origem.rodada
+        try:
+            validar_elegibilidade_cumprimento(
+                suspensao={
+                    "id_suspensao": suspensao.id_suspensao,
+                    "id_edicao_competicao": id_edicao,
+                    "id_integrante": suspensao.id_integrante,
+                    "id_partida_origem": suspensao.id_partida_origem,
+                    "rodada_origem": rodada_origem,
+                    "situacao": suspensao.situacao,
+                    "jogos": suspensao.jogos,
+                    "jogos_cumpridos": len(suspensao.cumprimentos or []),
+                },
+                partida={
+                    "id_partida": partida.id_partida,
+                    "id_edicao_competicao": partida.id_edicao_competicao,
+                    "id_equipe_mandante": partida.id_equipe_mandante,
+                    "id_equipe_visitante": partida.id_equipe_visitante,
+                    "rodada": partida.rodada,
+                    "estado": partida.estado,
+                },
+                id_equipe_integrante=integrante.id_equipe,
+                cumprimentos_existentes_integrante=cumprimentos_integrante,
+                participante_atuou_na_partida=partida.id_partida in jogou,
+            )
+        except (ConflitoEstado, ConfiguracaoInvalida):
+            continue
+
+        numero = numeros.get(partida.id_partida, 0)
+        if partida.id_duelo is not None:
+            contexto = rotulo_fase(fases.get(partida.id_duelo, ""))
+        elif partida.id_grupo is not None:
+            contexto = f"{grupos.get(partida.id_grupo, 'Grupo')} · Rodada {partida.rodada}"
+        else:
+            contexto = f"Rodada {partida.rodada}"
+        confronto = (
+            f"{equipes.get(partida.id_equipe_mandante, '?')} × {equipes.get(partida.id_equipe_visitante, '?')}"
+        )
+        elegiveis.append(PartidaElegivelCumprimento(
+            id_partida=partida.id_partida,
+            numero_jogo=numero,
+            rotulo=f"Jogo {numero} · {contexto} · {confronto}",
+        ))
+    return elegiveis

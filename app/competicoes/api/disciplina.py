@@ -11,6 +11,7 @@ from security import check_coordenador_role, get_current_active_user
 from competicoes.contratos.disciplina import (
     CumprimentoCriar,
     PainelDisciplinarDetalhe,
+    PartidaElegivelCumprimento,
     SuspensaoAjustar,
     SuspensaoDetalhe,
     SuspensaoManualCriar,
@@ -93,3 +94,16 @@ def ajustar_suspensao(
     return servico_disciplina.ajustar_suspensao(
         db, id_suspensao=id_suspensao, dados=dados, responsavel=current_user
     )
+
+
+@router.get(
+    "/suspensoes/{id_suspensao}/partidas-elegiveis",
+    response_model=list[PartidaElegivelCumprimento],
+)
+def listar_partidas_elegiveis(
+    id_suspensao: int,
+    db: Session = Depends(get_db),
+    _current_user: models.Usuario = Depends(get_current_active_user),
+) -> list[PartidaElegivelCumprimento]:
+    """Jogos em que a suspensão pode ser cumprida, com rótulo pronto para exibir."""
+    return servico_disciplina.listar_partidas_elegiveis(db, id_suspensao)
