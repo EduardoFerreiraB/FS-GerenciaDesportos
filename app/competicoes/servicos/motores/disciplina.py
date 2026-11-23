@@ -299,7 +299,7 @@ def validar_elegibilidade_cumprimento(
     situacao = str(_obter_campo(suspensao, "situacao", "")).upper()
     if situacao != "ATIVA":
         raise ConflitoEstado(
-            "Apenas suspensões com situação ATIVA podem receber cumprimento.",
+            "Apenas suspensões ativas podem receber cumprimento.",
             campos=["id_suspensao"],
         )
 

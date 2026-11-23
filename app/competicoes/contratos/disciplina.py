@@ -29,6 +29,26 @@ class CumprimentoDetalhe(Contrato):
     id_integrante: int
     id_partida: int
     criado_em: datetime | None = None
+    responsavel_nome: str | None = None
+
+
+class HistoricoSuspensao(Contrato):
+    """Linha do histórico de uma suspensão, lida da auditoria (DF-RT14-05)."""
+
+    em: datetime | None = None
+    responsavel_nome: str | None = None
+    acao: str
+    situacao_anterior: str | None = None
+    situacao_nova: str | None = None
+    justificativa: str | None = None
+
+
+class PartidaElegivelCumprimento(Contrato):
+    """Jogo em que a suspensão pode ser cumprida (DF-RT14-02)."""
+
+    id_partida: int
+    numero_jogo: int
+    rotulo: str
 
 
 class SuspensaoDetalhe(Contrato):
@@ -49,6 +69,8 @@ class SuspensaoDetalhe(Contrato):
     situacao: str
     cumprimentos: list[CumprimentoDetalhe] = Field(default_factory=list)
     criado_em: datetime | None = None
+    responsavel_nome: str | None = None
+    historico: list[HistoricoSuspensao] = Field(default_factory=list)
 
 
 class SuspensaoManualCriar(Contrato):
@@ -102,3 +124,4 @@ class DecisaoClassificacaoDetalhe(Contrato):
     revisao_resultados: str
     valida: bool = True
     criado_em: datetime | None = None
+    responsavel_nome: str | None = None
