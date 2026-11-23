@@ -10,9 +10,11 @@ import { ChaveFases, duelosDaDisputa } from '@/components/competicoes/visual';
 
 interface ChaveamentoEliminatorioProps {
   idEdicaoCompeticao: number;
+  /** Muda quando jogos ou tabela mudam em outra área: o chaveamento recarrega (DF-RT12-02). */
+  versao?: number;
 }
 
-export default function ChaveamentoEliminatorio({ idEdicaoCompeticao }: ChaveamentoEliminatorioProps) {
+export default function ChaveamentoEliminatorio({ idEdicaoCompeticao, versao = 0 }: ChaveamentoEliminatorioProps) {
   const [disputa, setDisputa] = useState<EstruturaDisputaDetalhe | null>(null);
   const [equipes, setEquipes] = useState<EquipeDetalhe[]>([]);
   const [partidas, setPartidas] = useState<PartidaDetalhe[]>([]);
@@ -49,7 +51,7 @@ export default function ChaveamentoEliminatorio({ idEdicaoCompeticao }: Chaveame
 
   useEffect(() => {
     carregarChaveamento();
-  }, [carregarChaveamento]);
+  }, [carregarChaveamento, versao]);
 
   const duelos = useMemo(
     () => duelosDaDisputa(disputa?.duelos ?? [], partidas, equipes, disputa?.grupos ?? []),

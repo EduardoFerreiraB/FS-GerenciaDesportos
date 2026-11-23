@@ -18,6 +18,8 @@ import {
   Textarea,
 } from '@/components/ui';
 import { EscudoIniciais } from '@/components/competicoes/visual';
+import { extrairErro } from '@/lib/erros';
+import { ROTULO_TIPO_OCORRENCIA } from '@/lib/rotulos';
 import LinhaTempoSumula from './LinhaTempoSumula';
 import {
   obterSumula,
@@ -76,6 +78,10 @@ export default function ModalSumulaDetalhada({
 
   // Estado de Remoção de Ocorrência
   const [removendoId, setRemovendoId] = useState<number | null>(null);
+  // DF-RT14-07: remover pede confirmação; o motivo é obrigatório se o jogo já foi finalizado antes.
+  const [ocorrenciaRemovendo, setOcorrenciaRemovendo] = useState<OcorrenciaDetalhe | null>(null);
+  const [motivoRemocao, setMotivoRemocao] = useState('');
+  const [erroRemocao, setErroRemocao] = useState<string | null>(null);
 
   // Estado de Finalização de Partida
   const [finalizando, setFinalizando] = useState(false);
@@ -215,25 +221,30 @@ export default function ModalSumulaDetalhada({
     }
   };
 
-  // Handler: Remover Ocorrência
-  const handleRemoverOcorrencia = async (idOcorrencia: number) => {
+  // Handler: Remover Ocorrência (depois da confirmação)
+  const abrirRemocao = (oc: OcorrenciaDetalhe) => {
+    setOcorrenciaRemovendo(oc);
+    setMotivoRemocao('');
+    setErroRemocao(null);
+  };
+
+  const handleRemoverOcorrencia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ocorrenciaRemovendo || removendoId != null) return;
     setErro(null);
     setSucesso(null);
+    setErroRemocao(null);
 
     try {
-      setRemovendoId(idOcorrencia);
-      const sumulaAtualizada = await removerOcorrencia(idOcorrencia);
+      setRemovendoId(ocorrenciaRemovendo.id_ocorrencia);
+      const motivo = motivoRemocao.trim();
+      const sumulaAtualizada = await removerOcorrencia(ocorrenciaRemovendo.id_ocorrencia, motivo || undefined);
       setSumula(sumulaAtualizada);
+      setOcorrenciaRemovendo(null);
       setSucesso('Ocorrência removida com sucesso!');
       onSucesso();
     } catch (err: unknown) {
-      if (isErroApi(err)) {
-        setErro(err.mensagem);
-      } else if (err instanceof Error) {
-        setErro(err.message);
-      } else {
-        setErro('Erro ao remover ocorrência.');
-      }
+      setErroRemocao(extrairErro(err, { padrao: 'Erro ao remover ocorrência.' }).mensagem);
     } finally {
       setRemovendoId(null);
     }
@@ -337,7 +348,7 @@ export default function ModalSumulaDetalhada({
   return (
     <Dialog open onOpenChange={(aberto) => (!aberto ? onClose() : undefined)}>
       <DialogContent
-        title={`Súmula Detalhada do Jogo #${partida.numero_partida || partida.id_partida}`}
+        title={`Súmula Detalhada do Jogo ${partida.numero_jogo}`}
         description={`${nomeMandante} vs ${nomeVisitante}`}
         size="xl"
       >
@@ -632,8 +643,7 @@ export default function ModalSumulaDetalhada({
                           variant="ghost"
                           size="sm"
                           data-testid={`btn-remover-ocorrencia-${oc.id_ocorrencia}`}
-                          loading={removendoId === oc.id_ocorrencia}
-                          onClick={() => handleRemoverOcorrencia(oc.id_ocorrencia)}
+                          onClick={() => abrirRemocao(oc)}
                           title="Remover ocorrência"
                           leftIcon={<Trash2 className="size-3.5" aria-hidden="true" />}
                           className="text-danger hover:bg-danger-soft hover:text-danger"
@@ -761,6 +771,61 @@ export default function ModalSumulaDetalhada({
                 </Button>
                 <Button type="submit" form="form-autor-ocorrencia" data-testid="btn-salvar-autor" loading={salvandoAutor}>
                   Confirmar Autor
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          )}
+        </Dialog>
+
+        <Dialog
+          open={Boolean(ocorrenciaRemovendo)}
+          onOpenChange={(aberto) => {
+            if (!aberto && removendoId == null) setOcorrenciaRemovendo(null);
+          }}
+        >
+          {ocorrenciaRemovendo && (
+            <DialogContent
+              size="sm"
+              title="Remover ocorrência?"
+              description={`${ROTULO_TIPO_OCORRENCIA[ocorrenciaRemovendo.tipo] ?? 'Ocorrência'}${
+                ocorrenciaRemovendo.minuto != null ? ` aos ${ocorrenciaRemovendo.minuto}'` : ''
+              }. Placar, classificação e suspensões serão recalculados.`}
+            >
+              <form id="form-remover-ocorrencia" onSubmit={handleRemoverOcorrencia} className="space-y-4">
+                {erroRemocao && <Alert tone="danger">{erroRemocao}</Alert>}
+                <Field
+                  label="Motivo da remoção"
+                  htmlFor="motivo-remocao"
+                  hint="Obrigatório se o jogo já foi finalizado antes (mínimo de 3 caracteres)."
+                >
+                  <Textarea
+                    id="motivo-remocao"
+                    rows={2}
+                    value={motivoRemocao}
+                    onChange={(e) => {
+                      setMotivoRemocao(e.target.value);
+                      setErroRemocao(null);
+                    }}
+                    className="resize-none"
+                  />
+                </Field>
+              </form>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={() => setOcorrenciaRemovendo(null)}
+                  disabled={removendoId != null}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  form="form-remover-ocorrencia"
+                  variant="danger"
+                  data-testid="btn-confirmar-remocao-ocorrencia"
+                  loading={removendoId != null}
+                >
+                  Remover
                 </Button>
               </DialogFooter>
             </DialogContent>

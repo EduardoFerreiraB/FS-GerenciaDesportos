@@ -30,15 +30,19 @@ import {
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { TabelaClassificacaoVisual } from '@/components/competicoes/visual';
+import { formatarDataHora } from '@/lib/formatos';
 
 interface TabelaClassificacaoProps {
   idEdicaoCompeticao: number;
   formato?: string;
+  /** Quantos avançam de cada grupo (configuração da edição); marca a zona da tabela. */
+  classificadosPorGrupo?: number;
 }
 
 export default function TabelaClassificacao({
   idEdicaoCompeticao,
   formato,
+  classificadosPorGrupo = 2,
 }: TabelaClassificacaoProps) {
   const [classificacao, setClassificacao] = useState<TabelaClassificacaoDetalhe | null>(null);
   const [decisoes, setDecisoes] = useState<DecisaoClassificacaoDetalhe[]>([]);
@@ -86,6 +90,12 @@ export default function TabelaClassificacao({
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  // Equipes com posição definida por decisão válida (marca na linha, DF-RT13-04).
+  const equipesDecididas = useMemo(
+    () => new Set(decisoes.filter((d) => d.valida).flatMap((d) => d.conjunto_equipes)),
+    [decisoes],
+  );
 
   // Mapa de Nomes das Equipes para exibir nas decisões
   const mapaNomesEquipes = useMemo(() => {
@@ -267,7 +277,11 @@ export default function TabelaClassificacao({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-fg">Classificação</h3>
-          <p className="mt-0.5 text-sm text-fg-muted">Pontuação, estatísticas e zona de classificação das equipes.</p>
+          <p className="mt-0.5 text-sm text-fg-muted">
+            {formato === 'GRUPOS_MATA_MATA'
+              ? 'Pontuação, estatísticas e classificados de cada grupo.'
+              : 'Pontuação e estatísticas das equipes.'}
+          </p>
         </div>
         <IconButton
           variant="secondary"
@@ -306,15 +320,17 @@ export default function TabelaClassificacao({
 
       {/* Por grupos (GRUPOS_MATA_MATA) */}
       {temGrupos && classificacao?.grupos && (
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+        // DF-RT13-10: duas colunas só em telas muito largas, para nenhuma coluna ficar escondida.
+        <div className="grid grid-cols-1 gap-8 2xl:grid-cols-2">
           {classificacao.grupos.map((grupo) => (
             <TabelaClassificacaoVisual
               key={grupo.id_grupo}
               titulo={grupo.nome}
               descricao={`${grupo.linhas.length} equipes`}
               linhas={grupo.linhas}
-              classificados={2}
+              classificados={classificadosPorGrupo}
               rotuloZona="Classificados para o mata-mata"
+              decididas={equipesDecididas}
             />
           ))}
         </div>
@@ -326,7 +342,9 @@ export default function TabelaClassificacao({
           titulo="Classificação geral"
           descricao={`${classificacao.linhas.length} equipes`}
           linhas={classificacao.linhas}
-          classificados={4}
+          // DF-RT13-03: pontos corridos não tem zona de classificação.
+          classificados={0}
+          decididas={equipesDecididas}
         />
       )}
 
@@ -368,9 +386,7 @@ export default function TabelaClassificacao({
                   className="space-y-2 rounded-lg border border-line bg-surface-muted p-3 text-sm"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium text-fg">
-                      {grupoNome} <span className="text-xs font-normal text-fg-subtle">· Decisão #{dec.id_decisao}</span>
-                    </span>
+                    <span className="font-medium text-fg">{grupoNome}</span>
                     <Badge tone={dec.valida ? 'success' : 'danger'} dot>
                       {dec.valida ? 'Válida' : 'Invalidada por alteração de resultados'}
                     </Badge>
@@ -391,6 +407,10 @@ export default function TabelaClassificacao({
 
                   <p className="text-xs text-fg-muted">
                     <span className="font-medium text-fg">Motivo:</span> {dec.motivo}
+                  </p>
+                  <p className="text-xs text-fg-subtle" data-testid="responsavel-decisao">
+                    Registrada por {dec.responsavel_nome ?? 'responsável não informado'}
+                    {dec.criado_em ? ` em ${formatarDataHora(dec.criado_em)}` : ''}
                   </p>
                 </li>
               );

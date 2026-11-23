@@ -54,11 +54,19 @@ export default function ModalResultadoSimples({
     setErro(null);
   }, [isOpen, p]);
 
+  // DF-RT12-08: o erro de uma tentativa anterior some assim que o usuário corrige os dados.
+  useEffect(() => {
+    setErro(null);
+  }, [golsMandante, golsVisitante, temPenaltis, penaltisMandante, penaltisVisitante, ehWo, equipeDerrotadaWo]);
+
   if (!p) return null;
+
+  // DF-RT12-09: pênaltis só existem em confronto eliminatório.
+  const ehEliminatorio = p.id_duelo != null;
 
   const nomeMandante = p.nome_mandante || 'Mandante';
   const nomeVisitante = p.nome_visitante || 'Visitante';
-  const numeroJogo = p.numero_partida || p.ordem_jogo || p.id_partida;
+  const numeroJogo = p.numero_jogo;
 
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +96,7 @@ export default function ModalResultadoSimples({
         let pm: number | null = null;
         let pv: number | null = null;
 
-        if (temPenaltis) {
+        if (temPenaltis && ehEliminatorio) {
           if (penaltisMandante.trim() === '' || penaltisVisitante.trim() === '') {
             setErro('Preencha os pênaltis convertidos por ambas as equipes.');
             setSalvando(false);
@@ -135,7 +143,7 @@ export default function ModalResultadoSimples({
 
   return (
     <Dialog open={isOpen} onOpenChange={(aberto) => (!aberto && !salvando ? onClose() : undefined)}>
-      <DialogContent title="Lançar Placar Simples" description={`Jogo #${numeroJogo} · registro oficial de resultado`} size="md">
+      <DialogContent title="Lançar Placar Simples" description={`Jogo ${numeroJogo} · registro oficial de resultado`} size="md">
         <form id="form-resultado-simples" onSubmit={handleSalvar} className="space-y-5">
           {erro && <Alert tone="danger">{erro}</Alert>}
 
@@ -179,7 +187,7 @@ export default function ModalResultadoSimples({
           </div>
 
           {/* Disputa por pênaltis */}
-          {!ehWo && (
+          {!ehWo && ehEliminatorio && (
             <div className="space-y-3 rounded-xl border border-line p-4">
               <label className="flex cursor-pointer select-none items-center gap-2.5 text-sm font-medium text-fg">
                 <Checkbox

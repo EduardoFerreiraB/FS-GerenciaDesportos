@@ -19,7 +19,7 @@
  * ícone de alerta e a explicação aparece na legenda abaixo da tabela.
  */
 import type { ReactNode } from 'react';
-import { TriangleAlert } from 'lucide-react';
+import { Scale, TriangleAlert } from 'lucide-react';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
@@ -51,6 +51,8 @@ export interface TabelaClassificacaoVisualProps<L extends LinhaClassificacaoBase
   classificados?: number;
   rotuloZona?: string;
   colunaExtra?: ColunaExtraClassificacao<L>;
+  /** Equipes cuja posição foi definida por decisão da organização (DF-RT13-04). */
+  decididas?: ReadonlySet<number>;
   vazio?: ReactNode;
   className?: string;
 }
@@ -65,6 +67,7 @@ const COLUNAS: { chave: keyof LinhaClassificacaoBase; rotulo: string; titulo: st
 ];
 
 const EXPLICACAO_EMPATE = 'Empate não resolvido pelos critérios de desempate; a ordem será decidida pela organização.';
+const EXPLICACAO_DECISAO = 'Posição definida por decisão da organização.';
 
 function formatarSaldo(saldo: number): string {
   return saldo > 0 ? `+${saldo}` : String(saldo);
@@ -74,6 +77,7 @@ export interface LinhaClassificacaoVisualProps<L extends LinhaClassificacaoBase 
   linha: L;
   naZona?: boolean;
   colunaExtra?: ColunaExtraClassificacao<L>;
+  decidida?: boolean;
 }
 
 /** Uma linha `<tr>` da tabela; útil para quem monta a própria `<table>`. */
@@ -81,6 +85,7 @@ export function LinhaClassificacaoVisual<L extends LinhaClassificacaoBase>({
   linha,
   naZona = false,
   colunaExtra,
+  decidida = false,
 }: LinhaClassificacaoVisualProps<L>) {
   return (
     <TR>
@@ -96,6 +101,12 @@ export function LinhaClassificacaoVisual<L extends LinhaClassificacaoBase>({
           <span className="truncate font-medium text-fg" title={linha.nome_equipe}>
             {linha.nome_equipe}
           </span>
+          {decidida ? (
+            <span title={EXPLICACAO_DECISAO} className="inline-flex shrink-0 text-primary" data-testid="marca-decisao">
+              <Scale aria-hidden="true" className="size-4" />
+              <span className="sr-only">{EXPLICACAO_DECISAO}</span>
+            </span>
+          ) : null}
           {linha.empate_persistente ? (
             <span title={EXPLICACAO_EMPATE} className="inline-flex shrink-0 text-warning">
               <TriangleAlert aria-hidden="true" className="size-4" />
@@ -133,6 +144,7 @@ export function TabelaClassificacaoVisual<L extends LinhaClassificacaoBase>({
   classificados = 0,
   rotuloZona = 'Zona de classificação',
   colunaExtra,
+  decididas,
   vazio,
   className,
 }: TabelaClassificacaoVisualProps<L>) {
@@ -196,6 +208,7 @@ export function TabelaClassificacaoVisual<L extends LinhaClassificacaoBase>({
                 linha={linha}
                 naZona={classificados > 0 && linha.posicao <= classificados}
                 colunaExtra={colunaExtra}
+                decidida={decididas?.has(linha.id_equipe) ?? false}
               />
             ))}
           </TBody>

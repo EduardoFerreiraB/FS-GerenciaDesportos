@@ -5,7 +5,7 @@
  * - `partida: PartidaPlacar` — dados normalizados da partida. Gere com os adaptadores de
  *   `./adaptadores`: `placarDePartida(p: PartidaDetalhe)` (administração) ou
  *   `placarDePartidaPublica(p: PartidaPublica)` (portal).
- *     · `numero?` → "Jogo #N" no cabeçalho;
+ *     · `numero?` → "Jogo N" no cabeçalho (numero_jogo da API, nunca o id);
  *     · `mandante` / `visitante` → `{ nome?, sigla? }` (nome ausente = "A definir");
  *     · `golsMandante` / `golsVisitante` → `null` mostra "×" no lugar do placar;
  *     · `penaltisMandante` / `penaltisVisitante` → exibidos abaixo do placar quando ambos existem;
@@ -214,7 +214,7 @@ export function CartaoPlacar({
       >
         <div className="flex min-w-0 items-center gap-2 text-fg-muted">
           {partida.numero != null ? (
-            <span className="shrink-0 font-semibold text-fg">Jogo #{partida.numero}</span>
+            <span className="shrink-0 font-semibold text-fg">Jogo {partida.numero}</span>
           ) : null}
           {partida.numero != null && rotulo ? (
             <span aria-hidden="true" className="text-fg-subtle">

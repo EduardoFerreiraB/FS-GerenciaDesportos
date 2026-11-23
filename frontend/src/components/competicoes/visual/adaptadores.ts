@@ -39,7 +39,7 @@ export function placarDePartida(partida: PartidaDetalhe): PartidaPlacar {
   if (!hora && p.data_hora && p.data_hora.includes('T')) hora = p.data_hora.split('T')[1] || null;
 
   return {
-    numero: p.numero_partida || p.ordem_jogo || p.id_partida,
+    numero: p.numero_jogo,
     mandante: { nome: p.nome_mandante, sigla: p.sigla_mandante },
     visitante: { nome: p.nome_visitante, sigla: p.sigla_visitante },
     golsMandante: mostraPlacar ? gm : null,
@@ -56,9 +56,9 @@ export function placarDePartida(partida: PartidaDetalhe): PartidaPlacar {
 
 export function placarDePartidaPublica(p: PartidaPublica): PartidaPlacar {
   return {
-    numero: null,
-    mandante: { nome: p.nome_mandante },
-    visitante: { nome: p.nome_visitante },
+    numero: p.numero_jogo,
+    mandante: { nome: p.nome_mandante, sigla: p.sigla_mandante },
+    visitante: { nome: p.nome_visitante, sigla: p.sigla_visitante },
     golsMandante: p.gols_mandante,
     golsVisitante: p.gols_visitante,
     penaltisMandante: p.penaltis_mandante,
@@ -116,6 +116,8 @@ function vagaDaDisputa(
     };
   }
   if (vaga.nome_equipe) return { idEquipe: null, nome: vaga.nome_equipe };
+  // A API já manda a origem legível ("1º do Grupo A", "Vencedor da Semifinal 1").
+  if (vaga.descricao_origem) return { pendente: vaga.descricao_origem };
 
   const origem = (v.origem || vaga.origem_tipo || '').toUpperCase();
   const idOrigem = v.posicao_duelo_origem ?? vaga.origem_id;
@@ -188,7 +190,18 @@ export function duelosDaDisputa(
     const d = duelo as DueloComLegado;
     const ordenadas = [...(duelo.vagas ?? [])].sort((a, b) => a.posicao - b.posicao);
     const vagas = [ordenadas[0], ordenadas[1]].map((v) => vagaDaDisputa(v, duelos, mapaEquipes, grupos));
-    const detalhe = aplicarPlacar(vagas, porDuelo.get(duelo.id_duelo) ?? []);
+    let detalhe: string | null = null;
+    if (duelo.placar) {
+      // Placar agregado da API, na ordem das vagas (DF-RT12-03, DF-RT16-01).
+      vagas.forEach((v, i) => {
+        v.gols = duelo.placar?.gols[i] ?? null;
+        v.penaltis = duelo.placar?.penaltis[i] ?? null;
+      });
+      const [g1, g2] = duelo.placar.gols;
+      if (Boolean(duelo.ida_e_volta ?? d.ida_volta) && g1 != null && g2 != null) detalhe = `Agregado ${g1} × ${g2}`;
+    } else {
+      detalhe = aplicarPlacar(vagas, porDuelo.get(duelo.id_duelo) ?? []);
+    }
     const bruto = (duelo.status || d.estado || 'PENDENTE').toUpperCase();
     const status = duelo.id_equipe_vencedora != null || bruto === 'FINALIZADA' ? 'RESOLVIDO' : bruto;
 
@@ -219,10 +232,12 @@ export function duelosPublicos(duelos: DueloPublico[]): DueloChave[] {
     idVencedor: d.id_equipe_vencedora,
     vagas: [...d.vagas]
       .sort((a, b) => a.posicao - b.posicao)
-      .map((v) => ({
+      .map((v, i) => ({
         idEquipe: v.id_equipe,
         nome: v.nome_equipe,
         pendente: descreverOrigem(v.descricao_origem) ?? 'A definir',
+        gols: d.placar?.gols[i] ?? null,
+        penaltis: d.placar?.penaltis[i] ?? null,
       })),
   }));
 }

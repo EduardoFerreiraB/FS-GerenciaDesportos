@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { CalendarPlus, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { CalendarPlus, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   obterCompeticao,
   criarEdicaoCompeticao,
@@ -33,6 +33,10 @@ import {
   Skeleton,
 } from '@/components/ui';
 import PainelEdicao from '@/components/competicoes/organizacao/PainelEdicao';
+import ModalEditarCompeticao from '@/components/competicoes/organizacao/ModalEditarCompeticao';
+import { SeloEvento } from '@/components/competicoes/organizacao/SeloEvento';
+import { gravarParametroUrl, lerParametroUrl } from '@/lib/url';
+import { extrairErro } from '@/lib/erros';
 import ModalConfirmarExclusao from '@/components/competicoes/organizacao/ModalConfirmarExclusao';
 import FormularioConfiguracao, {
   criarConfiguracaoPadrao,
@@ -47,6 +51,7 @@ export default function CompeticaoDetalhePage() {
   const params = useParams();
   const router = useRouter();
   const [modalExclusaoAberto, setModalExclusaoAberto] = useState(false);
+  const [modalEditarAberto, setModalEditarAberto] = useState(false);
   const idCompeticao = Number(params?.id);
 
   const [competicao, setCompeticao] = useState<CompeticaoDetalhe | null>(null);
@@ -67,6 +72,8 @@ export default function CompeticaoDetalhePage() {
   );
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [erroNovaEdicao, setErroNovaEdicao] = useState<string | null>(null);
+  // PD-RT09-01: erros por campo, mostrados abaixo do respectivo input.
+  const [errosNovaEdicao, setErrosNovaEdicao] = useState<Record<string, string>>({});
 
   useBreadcrumb([
     { label: 'Competições', href: '/dashboard/competicoes' },
@@ -88,6 +95,11 @@ export default function CompeticaoDetalhePage() {
         setEdicaoSelecionadaId((prev) => {
           if (prev && dados.edicoes.some((e) => e.id_edicao_competicao === prev)) {
             return prev;
+          }
+          // DF-RT10-02: a edição pedida no endereço (?edicao=92) tem prioridade.
+          const doEndereco = Number(lerParametroUrl('edicao'));
+          if (doEndereco && dados.edicoes.some((e) => e.id_edicao_competicao === doEndereco)) {
+            return doEndereco;
           }
           return dados.edicoes[dados.edicoes.length - 1].id_edicao_competicao;
         });
@@ -122,8 +134,16 @@ export default function CompeticaoDetalhePage() {
 
   const handleCriarEdicao = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identificacaoNova.trim() || !dataInicioNova || !dataFimNova) {
-      setErroNovaEdicao('Preencha os campos obrigatórios da edição.');
+    const locais: Record<string, string> = {};
+    if (!identificacaoNova.trim()) locais.identificacao = 'Informe a identificação da edição.';
+    if (!dataInicioNova) locais.data_inicio = 'Informe a data de início.';
+    if (!dataFimNova) locais.data_fim = 'Informe a data de término.';
+    if (dataInicioNova && dataFimNova && dataFimNova < dataInicioNova) {
+      locais.data_fim = 'A data de término deve ser igual ou posterior à data de início.';
+    }
+    setErrosNovaEdicao(locais);
+    if (Object.keys(locais).length > 0) {
+      setErroNovaEdicao(null);
       return;
     }
     try {
@@ -145,14 +165,14 @@ export default function CompeticaoDetalhePage() {
       setCategoriaNova('');
       await carregarCompeticao();
       setEdicaoSelecionadaId(novaEdicao.id_edicao_competicao);
+      gravarParametroUrl('edicao', novaEdicao.id_edicao_competicao);
     } catch (err: unknown) {
-      if (isErroApi(err)) {
-        setErroNovaEdicao(err.mensagem);
-      } else if (err instanceof Error) {
-        setErroNovaEdicao(err.message);
-      } else {
-        setErroNovaEdicao('Falha ao criar nova edição.');
-      }
+      const extraido = extrairErro(err, {
+        camposConhecidos: ['identificacao', 'categoria', 'data_inicio', 'data_fim'],
+        padrao: 'Falha ao criar nova edição.',
+      });
+      setErrosNovaEdicao(extraido.campos);
+      setErroNovaEdicao(extraido.mensagem);
     } finally {
       setSalvandoEdicao(false);
     }
@@ -198,12 +218,30 @@ export default function CompeticaoDetalhePage() {
   const modalidade = modalidades.find((m) => m.id_modalidade === competicao.id_modalidade)?.nome;
   const totalEdicoes = competicao.edicoes.length;
   const descricao = [modalidade, competicao.descricao].filter(Boolean).join(' · ');
+  const eventoDaEdicao = competicao.edicoes.find((e) => e.id_edicao_competicao === edicaoSelecionadaId)?.evento;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={<span className="block break-words">{competicao.nome}</span>}
-        description={descricao || undefined}
+        description={
+          descricao || eventoDaEdicao ? (
+            <span className="flex flex-wrap items-center gap-2">
+              {descricao ? <span>{descricao}</span> : null}
+              <SeloEvento
+                evento={
+                  eventoDaEdicao
+                    ? {
+                        id_evento: eventoDaEdicao.id_evento,
+                        nome: eventoDaEdicao.nome,
+                        identificacao_edicao: eventoDaEdicao.identificacao_edicao,
+                      }
+                    : null
+                }
+              />
+            </span>
+          ) : undefined
+        }
         actions={
           <>
             <Button
@@ -219,6 +257,10 @@ export default function CompeticaoDetalhePage() {
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
+                <DropdownMenuItem data-testid="btn-editar-competicao" onSelect={() => setModalEditarAberto(true)}>
+                  <Pencil className="size-4" aria-hidden="true" />
+                  Editar competição
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   tone="danger"
                   data-testid="btn-excluir-competicao"
@@ -240,7 +282,11 @@ export default function CompeticaoDetalhePage() {
               id="seletor-edicao"
               data-testid="seletor-edicao"
               value={edicaoSelecionadaId ?? ''}
-              onChange={(e) => setEdicaoSelecionadaId(Number(e.target.value))}
+              onChange={(e) => {
+                const id = Number(e.target.value);
+                setEdicaoSelecionadaId(id);
+                gravarParametroUrl('edicao', id);
+              }}
             >
               {competicao.edicoes.map((ed) => (
                 <option key={ed.id_edicao_competicao} value={ed.id_edicao_competicao}>
@@ -276,6 +322,13 @@ export default function CompeticaoDetalhePage() {
           }
         />
       )}
+
+      <ModalEditarCompeticao
+        competicao={competicao}
+        aberto={modalEditarAberto}
+        onFechar={() => setModalEditarAberto(false)}
+        onSalvo={() => void carregarCompeticao()}
+      />
 
       <ModalConfirmarExclusao
         aberto={modalExclusaoAberto}
@@ -318,7 +371,7 @@ export default function CompeticaoDetalhePage() {
             <section className="space-y-4">
               <h3 className="text-sm font-semibold text-fg">Dados da edição</h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Identificação da Edição" htmlFor="nova-edicao-identificacao" required>
+                <Field label="Identificação da Edição" htmlFor="nova-edicao-identificacao" required error={errosNovaEdicao.identificacao}>
                   <Input
                     id="nova-edicao-identificacao"
                     type="text"
@@ -328,7 +381,7 @@ export default function CompeticaoDetalhePage() {
                     onChange={(e) => setIdentificacaoNova(e.target.value)}
                   />
                 </Field>
-                <Field label="Categoria (Opcional)" htmlFor="nova-edicao-categoria">
+                <Field label="Categoria (Opcional)" htmlFor="nova-edicao-categoria" error={errosNovaEdicao.categoria}>
                   <Input
                     id="nova-edicao-categoria"
                     type="text"
@@ -337,7 +390,7 @@ export default function CompeticaoDetalhePage() {
                     onChange={(e) => setCategoriaNova(e.target.value)}
                   />
                 </Field>
-                <Field label="Data de Início" htmlFor="nova-edicao-data-inicio" required>
+                <Field label="Data de Início" htmlFor="nova-edicao-data-inicio" required error={errosNovaEdicao.data_inicio}>
                   <Input
                     id="nova-edicao-data-inicio"
                     type="date"
@@ -346,7 +399,7 @@ export default function CompeticaoDetalhePage() {
                     onChange={(e) => setDataInicioNova(e.target.value)}
                   />
                 </Field>
-                <Field label="Data de Término" htmlFor="nova-edicao-data-fim" required>
+                <Field label="Data de Término" htmlFor="nova-edicao-data-fim" required error={errosNovaEdicao.data_fim}>
                   <Input
                     id="nova-edicao-data-fim"
                     type="date"

@@ -197,7 +197,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
           {
             id_partida: idPartida,
             id_edicao_competicao: idEdicao,
-            numero_partida: 1,
+            numero_jogo: 1,
             ordem_jogo: 1,
             rodada: 1,
             id_equipe_mandante: 10,
@@ -239,7 +239,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
           partida: {
             id_partida: idPartida,
             id_edicao_competicao: idEdicao,
-            numero_partida: 1,
+            numero_jogo: 1,
             id_equipe_mandante: 10,
             nome_mandante: 'Falcões FC',
             sigla_mandante: 'FAL',
@@ -339,7 +339,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
           partida: {
             id_partida: idPartida,
             id_edicao_competicao: idEdicao,
-            numero_partida: 1,
+            numero_jogo: 1,
             id_equipe_mandante: 10,
             nome_mandante: 'Falcões FC',
             sigla_mandante: 'FAL',
@@ -367,7 +367,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
         body: JSON.stringify({
           id_partida: idPartida,
           id_edicao_competicao: idEdicao,
-          numero_partida: 1,
+          numero_jogo: 1,
           id_equipe_mandante: 10,
           nome_mandante: 'Falcões FC',
           id_equipe_visitante: 20,
@@ -386,7 +386,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     await expect(page.getByRole('heading', { level: 1, name: 'Copa Metropolitana 2026' })).toBeVisible();
 
     await page.getByTestId('tab-jogos').click();
-    await expect(page.getByText('Jogo #1')).toBeVisible();
+    await expect(page.getByText('Jogo 1', { exact: true })).toBeVisible();
 
     // 1. Abrir Modal de Súmula Detalhada
     const btnSumula = page.getByTestId(`btn-sumula-${idPartida}`);
@@ -394,7 +394,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     await btnSumula.click();
 
     // Verifica cabeçalho e alerta de suspenso informativo
-    await expect(page.getByRole('heading', { name: /Súmula Detalhada do Jogo #1/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Súmula Detalhada do Jogo 1/i })).toBeVisible();
     await expect(page.getByText(/Alerta Disciplinar: Atletas com Suspensão Ativa/i)).toBeVisible();
     await expect(page.getByText('Veiga')).toBeVisible();
 
@@ -515,7 +515,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
           {
             id_partida: idPartida,
             id_edicao_competicao: idEdicao,
-            numero_partida: 1,
+            numero_jogo: 1,
             id_equipe_mandante: 10,
             nome_mandante: 'Time Semifinal 1',
             id_equipe_visitante: 20,
@@ -564,7 +564,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     await expect(page.getByRole('heading', { level: 1, name: 'Copa Regional Mata-Mata' })).toBeVisible();
 
     await page.getByTestId('tab-jogos').click();
-    await expect(page.getByText('Jogo #1')).toBeVisible();
+    await expect(page.getByText('Jogo 1', { exact: true })).toBeVisible();
 
     // Partida finalizada deve exibir botão Reabrir Jogo
     const btnReabrir = page.getByTestId(`btn-reabrir-${idPartida}`);
@@ -572,7 +572,7 @@ test.describe('Fatia 3 — Súmula Detalhada, Reabertura Justificada e Desempate
     await btnReabrir.click();
 
     // Modal de Reabertura aberto
-    await expect(page.getByRole('heading', { name: /Reabrir Jogo #1/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Reabrir Jogo 1 /i })).toBeVisible();
 
     // Botão de confirmação deve iniciar desabilitado se motivo for vazio
     const btnConfirmar = page.getByTestId('btn-confirmar-reabertura');

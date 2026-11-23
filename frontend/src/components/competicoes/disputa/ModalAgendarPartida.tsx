@@ -35,6 +35,11 @@ export default function ModalAgendarPartida({
   const [limpando, setLimpando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  // DF-RT12-08: o erro anterior some quando o usuário altera os dados.
+  useEffect(() => {
+    setErro(null);
+  }, [data, hora, local, campo]);
+
   useEffect(() => {
     if (!isOpen || !p) return;
 
@@ -124,13 +129,13 @@ export default function ModalAgendarPartida({
     }
   };
 
-  const tituloJogo = `${p.nome_mandante || 'Mandante'} vs ${p.nome_visitante || 'Visitante'}`;
-  const numeroJogo = p.numero_partida || p.ordem_jogo || p.id_partida;
+  const tituloJogo = `${p.nome_mandante || 'Mandante'} × ${p.nome_visitante || 'Visitante'}`;
+  const numeroJogo = p.numero_jogo;
   const ocupado = salvando || limpando;
 
   return (
     <Dialog open={isOpen} onOpenChange={(aberto) => (!aberto && !ocupado ? onClose() : undefined)}>
-      <DialogContent title="Agendar Partida" description={`Jogo #${numeroJogo} · ${tituloJogo}`} size="md">
+      <DialogContent title="Agendar Partida" description={`Jogo ${numeroJogo} · ${tituloJogo}`} size="md">
         <form id="form-agendar-partida" onSubmit={handleSalvar} className="space-y-4">
           {erro && <Alert tone="danger">{erro}</Alert>}
 

@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Swords,
   Table2,
+  Trophy,
   UserX,
   Users,
 } from 'lucide-react';
@@ -23,10 +24,12 @@ import {
   obterArtilharia,
   obterClassificacao,
   obterPainelDisciplinar,
+  obterDisputa,
 } from '@/services/competicoes';
 import type {
   EquipeDetalhe,
   EstadoEdicao,
+  EstruturaDisputaDetalhe,
   FormatoCompeticao,
   LinhaClassificacao,
   PainelDisciplinarDetalhe,
@@ -49,6 +52,7 @@ interface VisaoGeralEdicaoProps {
 
 /** Resultado de uma busca: `undefined` = falhou (mostra "—"), sem derrubar a aba. */
 interface Dados {
+  disputa?: EstruturaDisputaDetalhe | null;
   equipes?: EquipeDetalhe[];
   partidas?: PartidaDetalhe[];
   classificacao?: TabelaClassificacaoDetalhe | null;
@@ -90,12 +94,14 @@ async function buscarDados(
   formato: FormatoCompeticao,
 ): Promise<{ dados: Dados; falha: boolean }> {
   const usaClassificacao = formato !== 'MATA_MATA';
-  const [equipes, partidas, classificacao, artilharia, disciplina] = await Promise.allSettled([
+  const usaChave = formato !== 'PONTOS_CORRIDOS';
+  const [equipes, partidas, classificacao, artilharia, disciplina, disputa] = await Promise.allSettled([
     listarEquipes(idEdicaoCompeticao),
     listarPartidas(idEdicaoCompeticao),
     usaClassificacao ? obterClassificacao(idEdicaoCompeticao) : Promise.resolve(null),
     obterArtilharia(idEdicaoCompeticao),
     obterPainelDisciplinar(idEdicaoCompeticao),
+    usaChave ? obterDisputa(idEdicaoCompeticao) : Promise.resolve(null),
   ]);
   return {
     falha: [equipes, partidas, classificacao, artilharia, disciplina].some((r) => r.status === 'rejected'),
@@ -105,8 +111,51 @@ async function buscarDados(
       classificacao: valor(classificacao),
       artilharia: valor(artilharia),
       disciplina: valor(disciplina),
+      disputa: valor(disputa),
     },
   };
+}
+
+interface Podio {
+  campeao: string;
+  vice?: string;
+  terceiro?: string;
+}
+
+type DueloApi = EstruturaDisputaDetalhe['duelos'][number];
+
+/**
+ * PD-RT12-02: campeão e pódio quando o resultado final existe. Mata-mata: vencedor da final
+ * (e da disputa de 3º); pontos corridos: os três primeiros com a edição finalizada.
+ */
+function obterPodio(
+  estado: EstadoEdicao,
+  formato: FormatoCompeticao,
+  disputa: EstruturaDisputaDetalhe | null | undefined,
+  classificacao: TabelaClassificacaoDetalhe | null | undefined,
+  equipes: EquipeDetalhe[] | undefined,
+): Podio | null {
+  const nome = (id: number | null | undefined) => equipes?.find((e) => e.id_equipe === id)?.nome;
+  if (formato === 'PONTOS_CORRIDOS') {
+    if (estado !== 'FINALIZADA' || !classificacao?.linhas?.length) return null;
+    const [p1, p2, p3] = [...classificacao.linhas].sort((a, b) => a.posicao - b.posicao);
+    return { campeao: p1.nome_equipe, vice: p2?.nome_equipe, terceiro: p3?.nome_equipe };
+  }
+  const duelos = (disputa?.duelos ?? []) as DueloApi[];
+  const final = duelos.find((d) => d.fase === 'FINAL');
+  if (!final?.id_equipe_vencedora) return null;
+  const equipesFinal = final.vagas.map((v) => v.id_equipe_resolvida ?? v.id_equipe);
+  const vice = equipesFinal.find((id) => id != null && id !== final.id_equipe_vencedora);
+  const terceiro = duelos.find((d) => d.fase === 'TERCEIRO_LUGAR')?.id_equipe_vencedora;
+  const campeao = nome(final.id_equipe_vencedora);
+  if (!campeao) return null;
+  return { campeao, vice: nome(vice), terceiro: nome(terceiro) };
+}
+
+function juntarNomes(nomes: string[]): string {
+  if (nomes.length <= 1) return nomes[0] ?? '';
+  if (nomes.length > 3) return `${nomes.slice(0, 2).join(', ')} e mais ${nomes.length - 2}`;
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
 }
 
 function NomeDestaque({ nome }: { nome: string }) {
@@ -162,7 +211,8 @@ export default function VisaoGeralEdicao({
     );
   }
 
-  const { equipes, partidas, classificacao, artilharia, disciplina } = dados;
+  const { equipes, partidas, classificacao, artilharia, disciplina, disputa } = dados;
+  const podio = obterPodio(estado, formato, disputa, classificacao, equipes);
 
   // Equipes
   const equipesAtivas = equipes?.filter((e) => e.situacao === 'ATIVA');
@@ -185,6 +235,10 @@ export default function VisaoGeralEdicao({
   const lider = classificacao ? obterLider(classificacao) : null;
   const liderComJogos = lider && lider.linha.jogos > 0 ? lider : null;
   const artilheiro = artilharia?.artilheiros.find((a) => a.gols > 0);
+  // DF-RT12-13: todos os empatados na liderança da artilharia.
+  const artilheirosLideres = artilheiro
+    ? (artilharia?.artilheiros ?? []).filter((a) => a.gols === artilheiro.gols)
+    : [];
 
   // Disciplina
   const emRevisao = disciplina?.suspensoes.filter((s) => s.situacao === 'EM_REVISAO').length;
@@ -286,6 +340,17 @@ export default function VisaoGeralEdicao({
               : undefined
           }
         />
+        {podio ? (
+          <StatCard
+            data-testid="visao-campeao"
+            label="Campeão"
+            icon={<Trophy />}
+            value={<NomeDestaque nome={podio.campeao} />}
+            hint={[podio.vice && `Vice: ${podio.vice}`, podio.terceiro && `3º: ${podio.terceiro}`]
+              .filter(Boolean)
+              .join(' · ') || undefined}
+          />
+        ) : (
         <StatCard
           data-testid="visao-lider"
           label="Líder da classificação"
@@ -303,14 +368,23 @@ export default function VisaoGeralEdicao({
                   : 'Nenhum jogo disputado'
           }
         />
+        )}
         <StatCard
           data-testid="visao-artilheiro"
           label="Artilheiro"
           icon={<Goal />}
-          value={artilheiro ? <NomeDestaque nome={artilheiro.nome_esportivo} /> : SEM_DADO}
+          value={
+            artilheiro ? (
+              <NomeDestaque nome={juntarNomes(artilheirosLideres.map((a) => a.nome_esportivo))} />
+            ) : (
+              SEM_DADO
+            )
+          }
           hint={
             artilheiro
-              ? `${plural(artilheiro.gols, 'gol', 'gols')} · ${artilheiro.nome_equipe}`
+              ? artilheirosLideres.length > 1
+                ? `${plural(artilheiro.gols, 'gol', 'gols')} cada · empatados`
+                : `${plural(artilheiro.gols, 'gol', 'gols')} · ${artilheiro.nome_equipe}`
               : falhou(artilharia)
                 ? undefined
                 : 'Nenhum gol registrado'
@@ -345,7 +419,7 @@ export default function VisaoGeralEdicao({
                   <span className="tabular-nums">{formatarDataHora(proximoJogo.data_hora)}</span>
                   {proximoJogo.local ? <span className="truncate">· {proximoJogo.local}</span> : null}
                 </p>
-                <p className="text-xs text-fg-subtle">Jogo #{proximoJogo.numero_partida}</p>
+                <p className="text-xs text-fg-subtle">Jogo {proximoJogo.numero_jogo}</p>
               </div>
             ) : (
               <p className="text-sm text-fg-muted">Nenhum jogo com data marcada.</p>

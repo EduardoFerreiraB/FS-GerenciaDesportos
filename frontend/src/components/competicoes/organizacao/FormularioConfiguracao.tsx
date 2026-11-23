@@ -11,11 +11,12 @@ import type {
   PontuacaoConfig,
   DisciplinaConfig,
 } from '@/types/competicoes';
-import { TriangleAlert } from 'lucide-react';
+import { ArrowDown, ArrowUp, TriangleAlert, X } from 'lucide-react';
 import { ROTULO_FORMATO } from '@/lib/rotulos';
 import {
   Button,
   Checkbox,
+  IconButton,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -44,6 +45,17 @@ export const DESEMPATES_PADRAO: CriterioDesempate[] = [
   'GOLS_PRO',
   'CONFRONTO_DIRETO',
 ];
+
+export const ROTULO_DESEMPATE: Record<CriterioDesempate, string> = {
+  VITORIAS: 'Número de vitórias',
+  SALDO_GOLS: 'Saldo de gols',
+  GOLS_PRO: 'Gols marcados',
+  CONFRONTO_DIRETO: 'Confronto direto',
+  MENOS_CARTOES_VERMELHOS: 'Menos cartões vermelhos',
+  MENOS_CARTOES_AMARELOS: 'Menos cartões amarelos',
+};
+
+const TODOS_DESEMPATES = Object.keys(ROTULO_DESEMPATE) as CriterioDesempate[];
 
 export function criarConfiguracaoPadrao(formato: FormatoCompeticao): Configuracao {
   switch (formato) {
@@ -335,6 +347,19 @@ export default function FormularioConfiguracao({
         </Bloco>
       )}
 
+      {formato !== 'MATA_MATA' && (
+        <Bloco
+          titulo="Ordem dos critérios de desempate"
+          descricao="Aplicados nesta ordem quando equipes empatam em pontos. Persistindo o empate, a organização registra uma decisão."
+        >
+          <OrdemDesempates
+            criterios={((configuracao as ConfiguracaoPontosCorridos | ConfiguracaoGruposMataMata).desempates ?? []) as CriterioDesempate[]}
+            desabilitado={desabilitado}
+            onChange={(desempates) => onChange({ ...configuracao, desempates } as Configuracao)}
+          />
+        </Bloco>
+      )}
+
       <Bloco titulo="Regras disciplinares" descricao="Quando um atleta passa a cumprir suspensão por cartões.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Limite para suspensão por cartões amarelos" htmlFor="limite_amarelos">
@@ -349,6 +374,38 @@ export default function FormularioConfiguracao({
                 onChange({
                   ...configuracao,
                   disciplina: { ...configuracao.disciplina, limite_amarelos: val },
+                });
+              }}
+            />
+          </Field>
+          <Field label="Jogos de suspensão por acúmulo de amarelos" htmlFor="jogos_por_acumulo">
+            <Input
+              id="jogos_por_acumulo"
+              type="number"
+              min={1}
+              disabled={desabilitado}
+              value={configuracao.disciplina?.jogos_por_acumulo ?? 1}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 1;
+                onChange({
+                  ...configuracao,
+                  disciplina: { ...configuracao.disciplina, jogos_por_acumulo: val },
+                });
+              }}
+            />
+          </Field>
+          <Field label="Jogos de suspensão por expulsão com o 2º amarelo" htmlFor="jogos_por_segundo_amarelo">
+            <Input
+              id="jogos_por_segundo_amarelo"
+              type="number"
+              min={1}
+              disabled={desabilitado}
+              value={configuracao.disciplina?.jogos_por_segundo_amarelo ?? 1}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 1;
+                onChange({
+                  ...configuracao,
+                  disciplina: { ...configuracao.disciplina, jogos_por_segundo_amarelo: val },
                 });
               }}
             />
@@ -426,5 +483,89 @@ function Opcao({
       <Checkbox checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       {rotulo}
     </label>
+  );
+}
+
+/** Lista ordenável dos critérios de desempate (DF-RT13-01, PD-RT13-02). */
+function OrdemDesempates({
+  criterios,
+  desabilitado,
+  onChange,
+}: {
+  criterios: CriterioDesempate[];
+  desabilitado?: boolean;
+  onChange: (criterios: CriterioDesempate[]) => void;
+}) {
+  const disponiveis = TODOS_DESEMPATES.filter((c) => !criterios.includes(c));
+
+  const mover = (indice: number, direcao: -1 | 1) => {
+    const destino = indice + direcao;
+    if (destino < 0 || destino >= criterios.length) return;
+    const nova = [...criterios];
+    [nova[indice], nova[destino]] = [nova[destino], nova[indice]];
+    onChange(nova);
+  };
+
+  return (
+    <div className="space-y-3">
+      <ol className="space-y-2" data-testid="lista-desempates">
+        {criterios.map((criterio, i) => (
+          <li
+            key={criterio}
+            className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg"
+          >
+            <span className="w-6 shrink-0 tabular-nums text-fg-subtle">{i + 1}º</span>
+            <span className="min-w-0 flex-1 truncate">{ROTULO_DESEMPATE[criterio] ?? criterio}</span>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={`Subir ${ROTULO_DESEMPATE[criterio] ?? criterio}`}
+              disabled={desabilitado || i === 0}
+              onClick={() => mover(i, -1)}
+            >
+              <ArrowUp aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={`Descer ${ROTULO_DESEMPATE[criterio] ?? criterio}`}
+              disabled={desabilitado || i === criterios.length - 1}
+              onClick={() => mover(i, 1)}
+            >
+              <ArrowDown aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={`Remover ${ROTULO_DESEMPATE[criterio] ?? criterio}`}
+              disabled={desabilitado || criterios.length <= 1}
+              onClick={() => onChange(criterios.filter((c) => c !== criterio))}
+            >
+              <X aria-hidden="true" />
+            </IconButton>
+          </li>
+        ))}
+      </ol>
+      {disponiveis.length > 0 && (
+        <Field label="Adicionar critério" htmlFor="adicionar-desempate">
+          <Select
+            id="adicionar-desempate"
+            value=""
+            disabled={desabilitado}
+            onChange={(e) => {
+              const valor = e.target.value as CriterioDesempate;
+              if (valor) onChange([...criterios, valor]);
+            }}
+          >
+            <option value="">Selecione…</option>
+            {disponiveis.map((c) => (
+              <option key={c} value={c}>
+                {ROTULO_DESEMPATE[c]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+    </div>
   );
 }
