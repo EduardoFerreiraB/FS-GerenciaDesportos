@@ -302,6 +302,10 @@ def test_professores_turmas_matriculas_presencas(client, db):
             "nome_completo": "Aluno PTMP", "data_nascimento": "2010-01-01", "escola": "E",
             "serie_ano": "9", "telefone_1": "123", "endereco": "Rua Principal 123", "ids_turmas": str(id_turma)
         },
+        files={
+            "documento": ("doc.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+            "atestado": ("ate.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+        },
         headers=coord_headers
     )
     assert res.status_code == 201
@@ -403,7 +407,11 @@ def test_alunos_atletas_and_files(client, db):
     res = client.post(
         "/alunos/",
         data={"nome_completo": "Aluno Err Extension", "data_nascimento": "2010-01-01", "telefone_1": "123", "endereco": "Rua Err", "ids_turmas": str(id_turma)},
-        files={"foto": ("foto.txt", io.BytesIO(b"fake txt"), "image/png")},
+        files={
+            "foto": ("foto.txt", io.BytesIO(b"fake txt"), "image/png"),
+            "documento": ("doc.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+            "atestado": ("ate.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+        },
         headers=coord_headers
     )
     assert res.status_code == 400
@@ -413,7 +421,11 @@ def test_alunos_atletas_and_files(client, db):
     res = client.post(
         "/alunos/",
         data={"nome_completo": "Aluno Err MIME", "data_nascimento": "2010-01-01", "telefone_1": "123", "endereco": "Rua Err", "ids_turmas": str(id_turma)},
-        files={"foto": ("foto.png", io.BytesIO(b"fake png"), "text/plain")},
+        files={
+            "foto": ("foto.png", io.BytesIO(b"fake png"), "text/plain"),
+            "documento": ("doc.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+            "atestado": ("ate.pdf", io.BytesIO(b"fake pdf"), "application/pdf"),
+        },
         headers=coord_headers
     )
     assert res.status_code == 400

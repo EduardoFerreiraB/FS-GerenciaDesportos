@@ -167,6 +167,12 @@ class AlunoUpdate(BaseModel):
     telefone_2: Optional[str] = None
     endereco: Optional[str] = None
     recomendacoes_medicas: Optional[str] = None
+    foto: Optional[str] = None
+
+
+class PreviaExclusao(BaseModel):
+    matriculas: int
+    presencas: int
 
 class Aluno(AlunoBase):
     id_aluno: int

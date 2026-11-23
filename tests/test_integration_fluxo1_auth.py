@@ -41,11 +41,12 @@ def test_integration_flow_auth(client, db):
         }
 
     # 3. Access matrix validation
-    # Admin can list users, others cannot
-    res = client.get("/users", headers=tokens["admin"]["headers"])
-    assert res.status_code == 200
-    
-    for role in ["coord", "prof", "assist"]:
+    # Admin and coordinator can list users, others cannot (PD-RT06-04)
+    for role in ["admin", "coord"]:
+        res = client.get("/users", headers=tokens[role]["headers"])
+        assert res.status_code == 200
+
+    for role in ["prof", "assist"]:
         res = client.get("/users", headers=tokens[role]["headers"])
         assert res.status_code == 403
 

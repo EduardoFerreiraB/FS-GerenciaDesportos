@@ -8,7 +8,6 @@ from security import (
     create_access_token,
     create_refresh_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
-    check_admin_role,
     check_coordenador_role,
     get_password_hash,
     get_current_user
@@ -108,7 +107,7 @@ def read_users(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(check_admin_role)
+    current_user: models.Usuario = Depends(check_coordenador_role)
 ):
     users = db.query(models.Usuario).offset(skip).limit(limit).all()
     return users
