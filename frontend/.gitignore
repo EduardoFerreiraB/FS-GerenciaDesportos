@@ -18,6 +18,9 @@
 # next.js
 /.next/
 /.next-e2e/
+/.next-e2e-*/
+/e2e-*.db
+/tsconfig.e2e-*.json
 /out/
 
 # production

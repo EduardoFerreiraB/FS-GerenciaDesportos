@@ -4,7 +4,9 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = Path(__file__).resolve().parent.parent / "e2e.db"
+# Um banco por porta da API, para execuções simultâneas do Playwright (uma por trilha).
+PORTA_API = os.environ.get("E2E_PORTA_API", "8001")
+DB_PATH = Path(__file__).resolve().parent.parent / f"e2e-{PORTA_API}.db"
 DB_URL = f"sqlite:///{DB_PATH}"
 
 os.environ["DATABASE_URL"] = DB_URL
