@@ -22,6 +22,14 @@ export interface DialogContentProps
   description?: ReactNode;
   size?: keyof typeof larguras;
   side?: 'center' | 'right';
+  /** Esconde o botão "×" (ex.: troca de senha obrigatória, DF-RT06-01). */
+  semFechar?: boolean;
+}
+
+/** Clique dentro de uma notificação não conta como "clique fora" do diálogo (DF-RT04-02). */
+function dentroDeNotificacao(evento: Event): boolean {
+  const alvo = evento.target;
+  return alvo instanceof Element && alvo.closest('[data-notificacao]') !== null;
 }
 
 export function DialogContent({
@@ -29,8 +37,11 @@ export function DialogContent({
   description,
   size = 'md',
   side = 'center',
+  semFechar = false,
   className,
   children,
+  onPointerDownOutside,
+  onInteractOutside,
   ...props
 }: DialogContentProps) {
   const posicao =
@@ -61,6 +72,14 @@ export function DialogContent({
           posicao,
           className,
         )}
+        onPointerDownOutside={(e) => {
+          if (dentroDeNotificacao(e)) e.preventDefault();
+          onPointerDownOutside?.(e);
+        }}
+        onInteractOutside={(e) => {
+          if (dentroDeNotificacao(e)) e.preventDefault();
+          onInteractOutside?.(e);
+        }}
         {...props}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
@@ -74,12 +93,12 @@ export function DialogContent({
               </DialogPrimitive.Description>
             ) : null}
           </div>
-          <DialogPrimitive.Close
+          {semFechar ? null : <DialogPrimitive.Close
             aria-label="Fechar"
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-fg-muted outline-none transition-colors duration-150 hover:bg-surface-muted hover:text-fg focus-visible:ring-4 focus-visible:ring-focus"
           >
             <X className="size-4" aria-hidden="true" />
-          </DialogPrimitive.Close>
+          </DialogPrimitive.Close>}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{corpo}</div>
         {rodape}

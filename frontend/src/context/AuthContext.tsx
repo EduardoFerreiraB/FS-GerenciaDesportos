@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import api from '@/lib/api';
+import api, { destinoSeguro } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 
 interface User {
@@ -21,6 +21,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
+function rotaDeLogin(): string {
+  const atual = `${window.location.pathname}${window.location.search}`;
+  return `/login?redirect=${encodeURIComponent(atual)}`;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!token) {
         setIsLoading(false);
         if (pathname.includes('/dashboard')) {
-          router.push('/login');
+          router.push(rotaDeLogin());
         }
         return;
       }
@@ -50,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('refresh_token');
         setUser(null);
         if (pathname.includes('/dashboard')) {
-          router.push('/login');
+          router.push(rotaDeLogin());
         }
       } finally {
         setIsLoading(false);
@@ -72,7 +77,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await api.get('/users/me');
         
         setUser(response.data);
-        router.push('/dashboard');
+        // Volta à rota que o usuário tentou abrir antes do login (DF-RT08-01).
+        const redirect = new URLSearchParams(window.location.search).get('redirect');
+        router.push(destinoSeguro(redirect));
     } catch (error) {
         console.error("Erro no login:", error);
         alert('Erro ao obter dados do usuário. Tente novamente.');

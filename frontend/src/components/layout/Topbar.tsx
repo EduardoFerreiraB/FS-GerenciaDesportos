@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, KeyRound, LogOut, Menu, Moon, Sun } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
   IconButton,
 } from '@/components/ui';
 import ChangePasswordModal from '../auth/ChangePasswordModal';
+import { EVENTO_TROCA_OBRIGATORIA } from '@/lib/api';
 
 const ROTULOS_ROTA: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -58,9 +59,18 @@ export default function Topbar({ onAbrirMenu }: TopbarProps) {
   const [senhaAberta, setSenhaAberta] = useState(false);
   const [trocaObrigatoria, setTrocaObrigatoria] = useState(false);
 
+  const avatarRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     setTrocaObrigatoria(Boolean(user?.must_change_password));
   }, [user]);
+
+  // A API recusa com 403 SENHA_TROCA_OBRIGATORIA quem ainda não trocou a senha.
+  useEffect(() => {
+    const abrir = () => setTrocaObrigatoria(true);
+    window.addEventListener(EVENTO_TROCA_OBRIGATORIA, abrir);
+    return () => window.removeEventListener(EVENTO_TROCA_OBRIGATORIA, abrir);
+  }, []);
 
   const trilha = publicados ?? trilhaPadrao(pathname);
   const inicial = (user?.username?.charAt(0) || '?').toUpperCase();
@@ -108,6 +118,7 @@ export default function Topbar({ onAbrirMenu }: TopbarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
+              ref={avatarRef}
               type="button"
               aria-label="Menu do usuário"
               data-testid="menu-usuario"
@@ -144,6 +155,7 @@ export default function Topbar({ onAbrirMenu }: TopbarProps) {
             window.location.reload();
           }}
           forceChange={trocaObrigatoria}
+          focoAoFechar={avatarRef}
         />
       )}
     </>

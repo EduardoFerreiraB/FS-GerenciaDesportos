@@ -6,6 +6,25 @@ const api = axios.create({
   baseURL: apiURL,
 });
 
+/** Evento disparado quando a API exige a troca de senha (403 SENHA_TROCA_OBRIGATORIA). */
+export const EVENTO_TROCA_OBRIGATORIA = 'senha-troca-obrigatoria';
+
+/** Rota interna para onde voltar depois do login; ignora qualquer coisa fora do app. */
+export function destinoSeguro(redirect: string | null | undefined): string {
+  if (!redirect || !redirect.startsWith('/') || redirect.startsWith('//') || redirect.startsWith('/login')) {
+    return '/dashboard';
+  }
+  return redirect;
+}
+
+/** Leva ao login guardando a rota atual para voltar depois (DF-RT08-01). */
+export function irParaLogin(): void {
+  if (typeof window === 'undefined') return;
+  const atual = `${window.location.pathname}${window.location.search}`;
+  const destino = atual.startsWith('/dashboard') ? `?redirect=${encodeURIComponent(atual)}` : '';
+  window.location.href = `/login${destino}`;
+}
+
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
@@ -59,7 +78,7 @@ api.interceptors.response.use(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
           localStorage.removeItem('refresh_token');
-          window.location.href = '/';
+          irParaLogin();
         }
         return Promise.reject(error);
       }
@@ -88,10 +107,18 @@ api.interceptors.response.use(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
           localStorage.removeItem('refresh_token');
-          window.location.href = '/';
+          irParaLogin();
         }
         return Promise.reject(refreshError);
       }
+    }
+
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.codigo === 'SENHA_TROCA_OBRIGATORIA' &&
+      typeof window !== 'undefined'
+    ) {
+      window.dispatchEvent(new Event(EVENTO_TROCA_OBRIGATORIA));
     }
 
     return Promise.reject(error);

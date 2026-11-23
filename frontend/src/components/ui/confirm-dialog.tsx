@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogFooter } from './dialog';
 import { Button } from './button';
 import { Input } from './input';
 import { Alert } from './alert';
+import { extrairErro } from '@/lib/erros';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -51,7 +52,9 @@ export function ConfirmDialog({
       await onConfirm();
       onOpenChange(false);
     } catch (e) {
-      setErro(e instanceof Error && e.message ? e.message : 'Não foi possível concluir a ação.');
+      // Erro lançado pela própria tela (new Error('texto')) mantém o texto; erro da API passa por extrairErro.
+      const proprio = e instanceof Error && !('response' in e) && !('codigo' in e) && e.message;
+      setErro(proprio || extrairErro(e, { padrao: 'Não foi possível concluir a ação.' }).mensagem);
     } finally {
       setCarregando(false);
     }

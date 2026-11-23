@@ -54,7 +54,7 @@ const GRUPOS: GrupoMenu[] = [
   },
   {
     rotulo: 'Administração',
-    itens: [{ icon: ShieldAlert, label: 'Usuários', href: '/dashboard/usuarios', roles: ['admin'] }],
+    itens: [{ icon: ShieldAlert, label: 'Usuários', href: '/dashboard/usuarios', roles: ['admin', 'coordenador'] }],
   },
 ];
 
