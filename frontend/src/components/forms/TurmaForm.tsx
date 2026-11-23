@@ -31,21 +31,35 @@ interface TurmaFormProps {
 export default function TurmaForm({ initialData, isEditing = false }: TurmaFormProps) {
   const router = useRouter();
   const { toast } = useNotification();
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, setValue, getValues, watch, trigger, formState: { errors, isSubmitting } } = useForm({
     mode: 'onChange'
   });
   const [selectedDias, setSelectedDias] = useState<string[]>([]);
   const [tentouEnviar, setTentouEnviar] = useState(false);
 
+  const horarioInicio = watch('horario_inicio');
+  const horarioFim = watch('horario_fim');
+
+  useEffect(() => {
+    if (horarioInicio && horarioFim) {
+      trigger('horario_fim');
+    }
+  }, [horarioInicio, horarioFim, trigger]);
+
   const nomeTurma = initialData?.descricao || (initialData?.id_turma ? `Turma #${initialData.id_turma}` : 'Turma');
   useBreadcrumb(
     isEditing && initialData
       ? [
+          { label: 'Dashboard', href: '/dashboard' },
           { label: 'Turmas', href: '/dashboard/turmas' },
           { label: nomeTurma, href: `/dashboard/turmas/${initialData.id_turma}` },
           { label: 'Editar' },
         ]
-      : [{ label: 'Turmas', href: '/dashboard/turmas' }, { label: 'Nova turma' }],
+      : [
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Turmas', href: '/dashboard/turmas' },
+          { label: 'Nova turma' },
+        ],
   );
 
   // Buscar dados reais para os selects
@@ -244,11 +258,30 @@ export default function TurmaForm({ initialData, isEditing = false }: TurmaFormP
             </fieldset>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <Field label="Horário de Início" htmlFor="horario_inicio" required error={errors.horario_inicio ? 'Campo obrigatório' : undefined}>
-                <Input id="horario_inicio" type="time" className="tabular-nums" {...register('horario_inicio', { required: 'Obrigatório' })} />
+              <Field label="Horário de Início" htmlFor="horario_inicio" required error={errors.horario_inicio?.message as string | undefined}>
+                <Input
+                  id="horario_inicio"
+                  type="time"
+                  className="tabular-nums"
+                  {...register('horario_inicio', { required: 'Campo obrigatório' })}
+                />
               </Field>
-              <Field label="Horário de Fim" htmlFor="horario_fim" required error={errors.horario_fim ? 'Campo obrigatório' : undefined}>
-                <Input id="horario_fim" type="time" className="tabular-nums" {...register('horario_fim', { required: 'Obrigatório' })} />
+              <Field label="Horário de Fim" htmlFor="horario_fim" required error={errors.horario_fim?.message as string | undefined}>
+                <Input
+                  id="horario_fim"
+                  type="time"
+                  className="tabular-nums"
+                  {...register('horario_fim', {
+                    required: 'Campo obrigatório',
+                    validate: (value) => {
+                      const inicio = getValues('horario_inicio');
+                      if (inicio && value && value <= inicio) {
+                        return 'O horário de término deve ser posterior ao horário de início.';
+                      }
+                      return true;
+                    },
+                  })}
+                />
               </Field>
             </div>
           </CardBody>

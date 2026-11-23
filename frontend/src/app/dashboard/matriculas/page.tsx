@@ -43,12 +43,19 @@ function descreverDias(dias: unknown): string {
 
 export default function MatriculasPage() {
   const { toast } = useNotification();
-  useBreadcrumb([{ label: 'Matrículas' }]);
+  useBreadcrumb([{ label: 'Dashboard', href: '/dashboard' }, { label: 'Matrículas' }]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAluno, setSelectedAluno] = useState<any>(null);
   const [turmaEmEnvio, setTurmaEmEnvio] = useState<number | null>(null);
   const { data: alunos, error: errorAlunos, isLoading: isLoadingAlunos, mutate: recarregarAlunos } = useSWR('/alunos/', fetcher);
   const { data: turmas, error: errorTurmas, isLoading: isLoadingTurmas, mutate: recarregarTurmas } = useSWR('/turmas/', fetcher);
+
+  const turmasMatriculadasIds = new Set<number>(
+    (selectedAluno?.matriculas ?? [])
+      .filter((m: any) => m.ativo !== false)
+      .map((m: any) => m.turma?.id_turma ?? m.id_turma)
+      .filter((id: unknown): id is number => typeof id === 'number'),
+  );
 
   const filteredAlunos = alunos?.filter((a: any) =>
     a.nome_completo.toLowerCase().includes(searchTerm.toLowerCase())
@@ -62,6 +69,7 @@ export default function MatriculasPage() {
         id_aluno: selectedAluno.id_aluno,
         id_turma: turma.id_turma
       });
+      await recarregarAlunos();
       toast(`Aluno ${selectedAluno.nome_completo} matriculado na turma ${turma.descricao} com sucesso!`, 'success');
       setSelectedAluno(null);
     } catch (error: any) {
@@ -171,14 +179,21 @@ export default function MatriculasPage() {
               <ul className="divide-y divide-line rounded-xl border border-line">
                 {turmas.map((turma: any) => {
                   const nome = turma.descricao || `Turma ${turma.id_turma}`;
+                  const jaMatriculado = turmasMatriculadasIds.has(turma.id_turma);
                   return (
-                    <li key={turma.id_turma} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <li
+                      key={turma.id_turma}
+                      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
                       <div className="flex min-w-0 items-center gap-3">
                         <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-fg-muted">
                           <GraduationCap className="size-4" />
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-fg" title={nome}>{nome}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate font-medium text-fg" title={nome}>{nome}</p>
+                            {jaMatriculado ? <Badge tone="success">Já matriculado</Badge> : null}
+                          </div>
                           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
                             {turma.modalidade?.nome ? <Badge tone="primary">{turma.modalidade.nome}</Badge> : null}
                             <span>{descreverDias(turma.dias_semana)}</span>
@@ -188,12 +203,13 @@ export default function MatriculasPage() {
                       </div>
                       <Button
                         size="sm"
+                        variant={jaMatriculado ? 'secondary' : 'primary'}
                         className="self-start sm:self-auto"
                         loading={turmaEmEnvio === turma.id_turma}
-                        disabled={turmaEmEnvio !== null && turmaEmEnvio !== turma.id_turma}
+                        disabled={jaMatriculado || (turmaEmEnvio !== null && turmaEmEnvio !== turma.id_turma)}
                         onClick={() => handleMatricular(turma)}
                       >
-                        Matricular
+                        {jaMatriculado ? 'Já matriculado' : 'Matricular'}
                       </Button>
                     </li>
                   );

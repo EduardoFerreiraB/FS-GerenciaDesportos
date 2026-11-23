@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR, { mutate } from 'swr';
 import { GraduationCap, MoreHorizontal, Plus, Search } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { useBreadcrumb } from '@/context/BreadcrumbContext';
 import { useNotification } from '@/context/NotificationContext';
 import { formatarHora } from '@/lib/formatos';
@@ -40,12 +41,42 @@ function iniciais(nome: string) {
 
 export default function TurmasPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const { toast } = useNotification();
-  useBreadcrumb([{ label: 'Turmas' }]);
+  useBreadcrumb([{ label: 'Dashboard', href: '/dashboard' }, { label: 'Turmas' }]);
   const [searchTerm, setSearchTerm] = useState('');
   const { data: turmas, error, isLoading, mutate: recarregar } = useSWR('/turmas/', fetcher);
 
   const [turmaToDelete, setTurmaToDelete] = useState<any>(null);
+  const [previaExclusao, setPreviaExclusao] = useState<{ matriculas: number; presencas: number } | null>(null);
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false);
+
+  const podeGerenciar = user?.role !== 'professor';
+
+  useEffect(() => {
+    if (!turmaToDelete) {
+      setPreviaExclusao(null);
+      setCarregandoPrevia(false);
+      return;
+    }
+    let ativo = true;
+    setCarregandoPrevia(true);
+    setPreviaExclusao(null);
+    api
+      .get(`/turmas/${turmaToDelete.id_turma}/exclusao/previa`)
+      .then((res) => {
+        if (ativo) setPreviaExclusao(res.data);
+      })
+      .catch(() => {
+        if (ativo) setPreviaExclusao(null);
+      })
+      .finally(() => {
+        if (ativo) setCarregandoPrevia(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [turmaToDelete]);
 
   const filteredTurmas = turmas?.filter((t: any) =>
     (t.descricao || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -56,13 +87,28 @@ export default function TurmasPage() {
     if (!turmaToDelete) return;
     try {
       await api.delete(`/turmas/${turmaToDelete.id_turma}`);
-    } catch {
-      throw new Error('Erro ao excluir turma.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = Array.isArray(detail) ? detail[0]?.msg : detail;
+      throw new Error(msg || 'Erro ao excluir turma.');
     }
     mutate('/turmas/');
     toast('Turma excluída.', 'success');
     setTurmaToDelete(null);
   };
+
+  const descricaoExclusao = (() => {
+    if (carregandoPrevia) {
+      return 'Verificando matrículas e presenças vinculadas a esta turma...';
+    }
+    if (previaExclusao) {
+      const { matriculas, presencas } = previaExclusao;
+      const txtMatriculas = `${matriculas} ${matriculas === 1 ? 'matrícula' : 'matrículas'}`;
+      const txtPresencas = `${presencas} ${presencas === 1 ? 'presença' : 'presenças'}`;
+      return `Ao excluir esta turma, serão apagadas ${txtMatriculas} e ${txtPresencas} vinculadas. Esta ação não pode ser desfeita.`;
+    }
+    return 'Isso removerá os vínculos com os alunos matriculados e os registros de presença. Esta ação não pode ser desfeita.';
+  })();
 
   return (
     <div>
@@ -70,9 +116,11 @@ export default function TurmasPage() {
         title="Turmas"
         description="Organize horários, professores e categorias das aulas."
         actions={
-          <Button asChild leftIcon={<Plus className="size-4" />}>
-            <Link href="/dashboard/turmas/novo">Nova turma</Link>
-          </Button>
+          podeGerenciar ? (
+            <Button asChild leftIcon={<Plus className="size-4" />}>
+              <Link href="/dashboard/turmas/novo">Nova turma</Link>
+            </Button>
+          ) : undefined
         }
       />
 
@@ -103,8 +151,14 @@ export default function TurmasPage() {
         <EmptyState
           icon={<GraduationCap />}
           title={searchTerm ? 'Nenhuma turma encontrada' : 'Nenhuma turma cadastrada'}
-          description={searchTerm ? 'Tente outro termo de busca.' : 'Crie a primeira turma para começar a matricular alunos.'}
-          action={!searchTerm ? <Button asChild><Link href="/dashboard/turmas/novo">Nova turma</Link></Button> : undefined}
+          description={
+            searchTerm
+              ? 'Tente outro termo de busca.'
+              : podeGerenciar
+                ? 'Crie a primeira turma para começar a matricular alunos.'
+                : 'Nenhuma turma atribuída no momento.'
+          }
+          action={!searchTerm && podeGerenciar ? <Button asChild><Link href="/dashboard/turmas/novo">Nova turma</Link></Button> : undefined}
         />
       ) : (
         <Table>
@@ -144,8 +198,12 @@ export default function TurmasPage() {
                       <DropdownMenuContent>
                         <DropdownMenuItem onSelect={() => router.push(`/dashboard/turmas/${turma.id_turma}`)}>Ver detalhes</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => router.push(`/dashboard/turmas/${turma.id_turma}/editar`)}>Editar</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem tone="danger" onSelect={() => setTurmaToDelete(turma)}>Excluir</DropdownMenuItem>
+                        {podeGerenciar ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem tone="danger" onSelect={() => setTurmaToDelete(turma)}>Excluir</DropdownMenuItem>
+                          </>
+                        ) : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TD>
@@ -160,7 +218,7 @@ export default function TurmasPage() {
         open={!!turmaToDelete}
         onOpenChange={(v) => { if (!v) setTurmaToDelete(null); }}
         title="Excluir turma"
-        description="Isso removerá os vínculos com os alunos matriculados. Esta ação não pode ser desfeita."
+        description={descricaoExclusao}
         confirmText={turmaToDelete?.descricao || `Turma #${turmaToDelete?.id_turma}`}
         confirmLabel="Excluir turma"
         onConfirm={confirmDelete}

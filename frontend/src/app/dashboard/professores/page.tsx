@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import useSWR, { mutate } from 'swr';
-import { UserCheck, Users, Search, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import useSWR from 'swr';
+import { Users, Search, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useNotification } from '@/context/NotificationContext';
 import {
@@ -35,23 +35,60 @@ function iniciais(nome: string) {
   return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
 }
 
+function formatarCpf(valor: string | null | undefined): string {
+  const d = (valor || '').replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function formatarTelefone(valor: string | null | undefined): string {
+  const d = (valor || '').replace(/\D/g, '').slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
 export default function ProfessoresPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { data: professores, error, isLoading, mutate: recarregar } = useSWR('/professores/', fetcher);
   const { toast } = useNotification();
   const [professorToDelete, setProfessorToDelete] = useState<any>(null);
 
+  const termo = searchTerm.trim().toLowerCase();
+  const termoDigitos = searchTerm.replace(/\D/g, '');
+
   const filteredProfessores =
-    professores?.filter((prof: any) => prof.nome.toLowerCase().includes(searchTerm.toLowerCase())) || [];
+    professores?.filter((prof: any) => {
+      if (!termo) return true;
+      const nomeMatch = (prof.nome || '').toLowerCase().includes(termo);
+      const usuarioMatch = (prof.usuario?.username || '').toLowerCase().includes(termo);
+      const cpfDigitos = (prof.cpf || '').replace(/\D/g, '');
+      const cpfFormatado = formatarCpf(prof.cpf).toLowerCase();
+      const cpfMatch =
+        cpfFormatado.includes(termo) ||
+        (termoDigitos.length > 0 && cpfDigitos.includes(termoDigitos));
+      return nomeMatch || usuarioMatch || cpfMatch;
+    }) || [];
 
   const confirmDelete = async () => {
     if (!professorToDelete) return;
     try {
       await api.delete(`/professores/${professorToDelete.id_professor}`);
-      mutate('/professores/', filteredProfessores.filter((a: any) => a.id_professor !== professorToDelete.id_professor), false);
+      await recarregar(
+        (atual: any[] | undefined) =>
+          (atual ?? []).filter((a: any) => a.id_professor !== professorToDelete.id_professor),
+        { revalidate: true },
+      );
       toast('Professor excluído com sucesso.', 'success');
-    } catch {
-      throw new Error('Erro ao excluir professor. Verifique se ele não possui turmas vinculadas.');
+      setProfessorToDelete(null);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = Array.isArray(detail) ? detail[0]?.msg : detail;
+      throw new Error(msg || 'Erro ao excluir professor. Verifique se ele não possui turmas vinculadas.');
     }
   };
 
@@ -71,8 +108,8 @@ export default function ProfessoresPage() {
         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" />
         <Input
           type="search"
-          aria-label="Buscar professor por nome"
-          placeholder="Buscar professor por nome..."
+          aria-label="Buscar professor por nome, CPF ou usuário"
+          placeholder="Buscar professor por nome, CPF ou usuário..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-9"
@@ -143,8 +180,8 @@ export default function ProfessoresPage() {
                       </Link>
                     </div>
                   </TD>
-                  <TD className="tabular-nums text-fg-muted">{prof.cpf || '—'}</TD>
-                  <TD className="tabular-nums text-fg-muted">{prof.contato || '—'}</TD>
+                  <TD className="tabular-nums text-fg-muted">{prof.cpf ? formatarCpf(prof.cpf) : '—'}</TD>
+                  <TD className="tabular-nums text-fg-muted">{prof.contato ? formatarTelefone(prof.contato) : '—'}</TD>
                   <TD>
                     {prof.usuario ? (
                       <span className="text-fg-muted">@{prof.usuario.username}</span>

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import useSWR, { mutate } from 'swr';
-import { Dumbbell, MoreHorizontal, Plus, Search } from 'lucide-react';
+import { Dumbbell, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useBreadcrumb } from '@/context/BreadcrumbContext';
 import { useNotification } from '@/context/NotificationContext';
@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   EmptyState,
   Field,
@@ -39,12 +40,24 @@ function iniciais(nome: string) {
   return (nome || '?').trim().split(/\s+/).slice(0, 2).map(p => p.charAt(0).toUpperCase()).join('');
 }
 
+function extrairMensagemApi(error: any, fallback: string): string {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    return detail[0]?.msg || fallback;
+  }
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+  return fallback;
+}
+
 export default function ModalidadesPage() {
   const { toast } = useNotification();
-  useBreadcrumb([{ label: 'Modalidades' }]);
+  useBreadcrumb([{ label: 'Dashboard', href: '/dashboard' }, { label: 'Modalidades' }]);
   const { data: modalidades, error, isLoading, mutate: recarregar } = useSWR('/modalidades/', fetcher);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalidadeToEdit, setModalidadeToEdit] = useState<any>(null);
   const [modalidadeToDelete, setModalidadeToDelete] = useState<any>(null);
 
   const filteredModalidades = modalidades?.filter((m: any) =>
@@ -55,23 +68,37 @@ export default function ModalidadesPage() {
     if (!modalidadeToDelete) return;
     try {
       await api.delete(`/modalidades/${modalidadeToDelete.id_modalidade}`);
-    } catch {
-      throw new Error('Erro ao excluir modalidade. Verifique se existem turmas vinculadas.');
+    } catch (err: any) {
+      throw new Error(
+        extrairMensagemApi(err, 'Erro ao excluir modalidade. Verifique se existem turmas vinculadas.'),
+      );
     }
     mutate('/modalidades/');
     toast('Modalidade excluída.', 'success');
     setModalidadeToDelete(null);
   };
 
-  const handleAddModalidade = async (data: any) => {
+  const handleSaveModalidade = async (data: any) => {
     try {
-      await api.post('/modalidades/', data);
-      mutate('/modalidades/');
-      setIsModalOpen(false);
-      toast('Modalidade cadastrada.', 'success');
-    } catch (error: any) {
-      console.error(error);
-      toast('Erro ao criar modalidade.', 'error');
+      if (modalidadeToEdit) {
+        await api.put(`/modalidades/${modalidadeToEdit.id_modalidade}`, data);
+        mutate('/modalidades/');
+        setModalidadeToEdit(null);
+        toast('Modalidade atualizada.', 'success');
+      } else {
+        await api.post('/modalidades/', data);
+        mutate('/modalidades/');
+        setIsModalOpen(false);
+        toast('Modalidade cadastrada.', 'success');
+      }
+    } catch (err: any) {
+      console.error(err);
+      const msg = extrairMensagemApi(
+        err,
+        modalidadeToEdit ? 'Erro ao atualizar modalidade.' : 'Erro ao criar modalidade.',
+      );
+      toast(msg, 'error');
+      throw new Error(msg);
     }
   };
 
@@ -148,7 +175,13 @@ export default function ModalidadesPage() {
                       <IconButton aria-label={`Mais ações de ${modalidade.nome}`} size="sm"><MoreHorizontal /></IconButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem tone="danger" onSelect={() => setModalidadeToDelete(modalidade)}>Excluir</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setModalidadeToEdit(modalidade)}>
+                        <Pencil className="size-4" /> Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem tone="danger" onSelect={() => setModalidadeToDelete(modalidade)}>
+                        <Trash2 className="size-4" /> Excluir
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TD>
@@ -158,9 +191,24 @@ export default function ModalidadesPage() {
         </Table>
       )}
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        {isModalOpen ? (
-          <ModalCadastro onClose={() => setIsModalOpen(false)} onSave={handleAddModalidade} />
+      <Dialog
+        open={isModalOpen || !!modalidadeToEdit}
+        onOpenChange={(v) => {
+          if (!v) {
+            setIsModalOpen(false);
+            setModalidadeToEdit(null);
+          }
+        }}
+      >
+        {isModalOpen || modalidadeToEdit ? (
+          <ModalModalidade
+            initialData={modalidadeToEdit}
+            onClose={() => {
+              setIsModalOpen(false);
+              setModalidadeToEdit(null);
+            }}
+            onSave={handleSaveModalidade}
+          />
         ) : null}
       </Dialog>
 
@@ -177,14 +225,41 @@ export default function ModalidadesPage() {
   );
 }
 
-function ModalCadastro({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => Promise<void> }) {
+function ModalModalidade({
+  initialData,
+  onClose,
+  onSave,
+}: {
+  initialData?: any;
+  onClose: () => void;
+  onSave: (data: any) => Promise<void>;
+}) {
+  const isEditing = Boolean(initialData);
+  const [erroEnvio, setErroEnvio] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-    mode: 'onChange'
+    mode: 'onChange',
+    defaultValues: {
+      nome: initialData?.nome ?? '',
+      descricao: initialData?.descricao ?? '',
+    },
   });
 
+  const onSubmit = async (data: any) => {
+    setErroEnvio(null);
+    try {
+      await onSave(data);
+    } catch (err: any) {
+      setErroEnvio(err?.message || 'Erro ao salvar modalidade.');
+    }
+  };
+
   return (
-    <DialogContent title="Nova modalidade" description="Adicione um novo esporte ao sistema.">
-      <form id="form-modalidade" onSubmit={handleSubmit(onSave)} className="space-y-4">
+    <DialogContent
+      title={isEditing ? 'Editar modalidade' : 'Nova modalidade'}
+      description={isEditing ? 'Atualize o nome e a descrição da modalidade.' : 'Adicione um novo esporte ao sistema.'}
+    >
+      <form id="form-modalidade" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {erroEnvio ? <Alert tone="danger">{erroEnvio}</Alert> : null}
         <Field label="Nome da Modalidade" htmlFor="modalidade-nome" required error={errors.nome ? 'Campo obrigatório' : undefined}>
           <Input id="modalidade-nome" placeholder="Ex: Judô" {...register('nome', { required: true })} />
         </Field>
@@ -193,8 +268,10 @@ function ModalCadastro({ onClose, onSave }: { onClose: () => void; onSave: (data
         </Field>
       </form>
       <DialogFooter>
-        <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button type="submit" form="form-modalidade" loading={isSubmitting}>Salvar</Button>
+        <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>Cancelar</Button>
+        <Button type="submit" form="form-modalidade" loading={isSubmitting}>
+          {isEditing ? 'Salvar alterações' : 'Salvar'}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );
