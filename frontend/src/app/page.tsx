@@ -7,8 +7,9 @@ import { PaginaPublica } from '@/components/publico/CabecalhoPublico';
 import AtualizadoHa from '@/components/publico/AtualizadoHa';
 import EstadoCarga from '@/components/publico/EstadoCarga';
 import LinhaViva from '@/components/publico/LinhaViva';
+import SeloEstadoEdicaoPublica from '@/components/publico/SeloEstadoEdicaoPublica';
 import { usarPublico } from '@/components/publico/usarPublico';
-import { EmptyState, Input, StatusBadge } from '@/components/ui';
+import { EmptyState, Input } from '@/components/ui';
 import { formatarPeriodo } from '@/lib/formatos';
 import { ROTULO_FORMATO } from '@/lib/rotulos';
 import { servicoPublico } from '@/services/publico';
@@ -45,7 +46,7 @@ function CartaoEdicao({ item }: { item: EdicaoDaVitrine }) {
             </p>
             <p className="text-sm text-fg-muted">{competicao.modalidade}</p>
           </div>
-          <StatusBadge tipo="edicao" valor={edicao.estado} />
+          <SeloEstadoEdicaoPublica estado={edicao.estado} />
         </div>
         <p className="text-sm text-fg-muted">
           {edicao.identificacao}

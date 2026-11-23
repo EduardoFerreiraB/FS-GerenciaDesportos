@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import type { EdicaoPublicaResumo } from '@/types/publico';
 import { formatarPeriodo } from '@/lib/formatos';
 import { ROTULO_FORMATO } from '@/lib/rotulos';
-import { StatusBadge } from '@/components/ui';
+import SeloEstadoEdicaoPublica from './SeloEstadoEdicaoPublica';
 
 interface ListaEdicoesProps {
   edicoes: (EdicaoPublicaResumo & { competicao?: { nome: string } })[];
@@ -25,7 +25,7 @@ export default function ListaEdicoes({ edicoes }: ListaEdicoesProps) {
                 {edicao.identificacao}
                 {edicao.categoria ? ` · ${edicao.categoria}` : ''}
               </p>
-              <StatusBadge tipo="edicao" valor={edicao.estado} />
+              <SeloEstadoEdicaoPublica estado={edicao.estado} />
             </div>
             <p className="flex items-center justify-between gap-2 text-sm text-fg-muted">
               <span>

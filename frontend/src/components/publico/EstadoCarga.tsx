@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { AlertTriangle, RefreshCw, SearchX } from 'lucide-react';
 import { ehNaoEncontrado } from '@/services/publico';
 import { Alert, Button, EmptyState, Skeleton } from '@/components/ui';
@@ -43,6 +44,11 @@ export default function EstadoCarga({
             icon={<SearchX />}
             title="Não encontrado"
             description="Este conteúdo não existe ou não está publicado."
+            action={
+              <Button asChild variant="secondary">
+                <Link href="/">Competições</Link>
+              </Button>
+            }
           />
         </div>
       );

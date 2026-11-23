@@ -13,7 +13,8 @@ import ClassificacaoPublica from '@/components/publico/ClassificacaoPublica';
 import ChaveamentoPublico from '@/components/publico/ChaveamentoPublico';
 import ArtilhariaPublica from '@/components/publico/ArtilhariaPublica';
 import EquipesPublicas from '@/components/publico/EquipesPublicas';
-import { EmptyState, PageHeader, StatusBadge, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
+import SeloEstadoEdicaoPublica from '@/components/publico/SeloEstadoEdicaoPublica';
+import { Button, EmptyState, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
 import { formatarPeriodo } from '@/lib/formatos';
 import { ROTULO_FORMATO } from '@/lib/rotulos';
 import { servicoPublico } from '@/services/publico';
@@ -114,7 +115,7 @@ function Cabecalho({ edicao }: { edicao: EdicaoPublicaDetalhe }) {
               <CalendarRange aria-hidden="true" className="size-4 text-fg-subtle" />
               {formatarPeriodo(edicao.data_inicio, edicao.data_fim)}
             </span>
-            <StatusBadge tipo="edicao" valor={edicao.estado} />
+            <SeloEstadoEdicaoPublica estado={edicao.estado} />
           </span>
           {edicao.edicao_evento ? (
             <Link
@@ -137,6 +138,11 @@ function NaoEncontrado() {
         icon={<SearchX />}
         title="Não encontrado"
         description="Este conteúdo não existe ou não está publicado."
+        action={
+          <Button asChild variant="secondary">
+            <Link href="/">Competições</Link>
+          </Button>
+        }
       />
     </div>
   );
