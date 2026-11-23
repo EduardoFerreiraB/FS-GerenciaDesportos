@@ -20,11 +20,14 @@ from competicoes.contratos.organizacao import (
     EventoAtualizar,
     EventoComEdicaoCriar,
     EventoDetalhe,
+    EventoResumo,
     PaginaCompeticoes,
     PaginaEventos,
+    PreviaExclusaoEvento,
 )
 from competicoes.erros import (
     ConfiguracaoInvalida,
+    ConfirmacaoInvalida,
     ConflitoEstado,
     Duplicidade,
     NaoEncontrado,
@@ -37,6 +40,7 @@ from competicoes.infra import (
     transacao,
 )
 from competicoes.modelos import (
+    AuditoriaCompeticao,
     Competicao,
     DueloEliminatorio,
     EdicaoCompeticao,
@@ -48,7 +52,12 @@ from competicoes.modelos import (
     Partida,
 )
 from competicoes.servicos.classificacao import obter_classificacao_edicao
-from competicoes.servicos.exclusao import apagar_competicao, apagar_edicao
+from competicoes.servicos.exclusao import (
+    apagar_competicao,
+    apagar_edicao,
+    apagar_edicao_evento,
+    apagar_evento,
+)
 
 
 def _slugify(texto: str) -> str:
@@ -93,7 +102,18 @@ def _normalizar_configuracao_edicao(edicao: EdicaoCompeticao) -> dict:
 
 def _para_edicao_competicao_detalhe(edicao: EdicaoCompeticao) -> EdicaoCompeticaoDetalhe:
     config = _normalizar_configuracao_edicao(edicao)
+    vinculo = edicao.edicao_evento
+    evento = (
+        EventoResumo(
+            id_evento=vinculo.id_evento,
+            nome=vinculo.evento.nome,
+            identificacao_edicao=vinculo.identificacao,
+        )
+        if vinculo is not None
+        else None
+    )
     return EdicaoCompeticaoDetalhe(
+        evento=evento,
         id_edicao_competicao=edicao.id_edicao_competicao,
         id_competicao=edicao.id_competicao,
         id_edicao_evento=edicao.id_edicao_evento,
@@ -127,16 +147,55 @@ def _para_competicao_detalhe(competicao: Competicao) -> CompeticaoDetalhe:
 # Eventos e Edições de Evento
 # =========================================================================
 
+def normalizar_nome(nome: str) -> str:
+    """Forma de comparação de nomes: sem acentos, sem caixa e com espaços colapsados."""
+    sem_acento = "".join(
+        c for c in unicodedata.normalize("NFKD", nome) if not unicodedata.combining(c)
+    )
+    return " ".join(sem_acento.casefold().split())
+
+
+def _garantir_nome_unico(db: Session, modelo, nome: str, id_atual: int | None = None) -> None:
+    """Evento e competição têm nome único (PD-RT15-02, PD-RT09-03), inclusive arquivados."""
+    coluna_id = modelo.id_evento if modelo is Evento else modelo.id_competicao
+    alvo = normalizar_nome(nome)
+    for id_existente, nome_existente in db.execute(select(coluna_id, modelo.nome)).all():
+        if id_existente != id_atual and normalizar_nome(nome_existente) == alvo:
+            mensagem = (
+                f"Já existe um evento chamado '{nome_existente}'." if modelo is Evento
+                else f"Já existe uma competição chamada '{nome_existente}'."
+            )
+            raise Duplicidade(mensagem, campos=["nome"])
+
+
+def _soltar_objetos_apagados(db: Session) -> None:
+    """Tira da sessão os objetos de competições apagados por DELETE em lote.
+
+    Os DELETE usam ``synchronize_session=False``; sem isso a sessão guardaria
+    instâncias de linhas que não existem mais. A auditoria recém-gravada fica.
+    """
+    for objeto in list(db.identity_map.values()):
+        if type(objeto).__module__.startswith("competicoes.modelos") and not isinstance(
+            objeto, AuditoriaCompeticao
+        ):
+            db.expunge(objeto)
+
+
+def _formatar_data(valor) -> str:
+    return valor.strftime("%d/%m/%Y")
+
+
 def criar_evento_com_edicao(
     db: Session, dados: EventoComEdicaoCriar, responsavel: Usuario
 ) -> EventoDetalhe:
     with transacao(db):
         if dados.edicao.data_inicio > dados.edicao.data_fim:
             raise ConfiguracaoInvalida(
-                "A data de inicio deve ser anterior ou igual a data de fim.",
+                "A data de término deve ser igual ou posterior à data de início.",
                 campos=["edicao.data_inicio", "edicao.data_fim"],
             )
 
+        _garantir_nome_unico(db, Evento, dados.nome)
         slug = _gerar_slug_unico(db, Evento, dados.nome)
         evento = Evento(
             nome=dados.nome,
@@ -206,7 +265,7 @@ def obter_evento(db: Session, id_evento: int) -> EventoDetalhe:
     with transacao(db):
         evento = db.get(Evento, id_evento)
         if evento is None:
-            raise NaoEncontrado("Evento nao encontrado.", campos=["id_evento"])
+            raise NaoEncontrado("Evento não encontrado.", campos=["id_evento"])
         return EventoDetalhe.model_validate(evento)
 
 
@@ -216,7 +275,7 @@ def atualizar_evento(
     with transacao(db):
         evento = db.get(Evento, id_evento)
         if evento is None:
-            raise NaoEncontrado("Evento nao encontrado.", campos=["id_evento"])
+            raise NaoEncontrado("Evento não encontrado.", campos=["id_evento"])
 
         antes = {
             "nome": evento.nome,
@@ -224,8 +283,9 @@ def atualizar_evento(
             "arquivado": evento.arquivado,
         }
         if dados.nome is not None:
+            _garantir_nome_unico(db, Evento, dados.nome, evento.id_evento)
             evento.nome = dados.nome
-        if dados.descricao is not None:
+        if "descricao" in dados.model_fields_set:  # null apaga a descrição (DF-RT15-08)
             evento.descricao = dados.descricao
         if dados.arquivado is not None:
             evento.arquivado = dados.arquivado
@@ -257,32 +317,197 @@ def arquivar_evento(
     )
 
 
-def excluir_evento(db: Session, id_evento: int, responsavel: Usuario) -> None:
+def previa_exclusao_evento(db: Session, id_evento: int) -> PreviaExclusaoEvento:
+    """Quanto some ao excluir o evento (mostrado no diálogo de confirmação)."""
+    evento = db.get(Evento, id_evento)
+    if evento is None:
+        raise NaoEncontrado("Evento não encontrado.", campos=["id_evento"])
+    ids_edicoes_evento = [e.id_edicao_evento for e in evento.edicoes]
+    edicoes = db.execute(
+        select(EdicaoCompeticao).where(EdicaoCompeticao.id_edicao_evento.in_(ids_edicoes_evento))
+    ).scalars().all() if ids_edicoes_evento else []
+    ids_edicoes = [e.id_edicao_competicao for e in edicoes]
+
+    def contar(modelo, coluna) -> int:
+        if not ids_edicoes:
+            return 0
+        return db.scalar(select(func.count()).select_from(modelo).where(coluna.in_(ids_edicoes))) or 0
+
+    return PreviaExclusaoEvento(
+        edicoes_evento=len(ids_edicoes_evento),
+        edicoes_competicao=len(ids_edicoes),
+        partidas=contar(Partida, Partida.id_edicao_competicao),
+        equipes=contar(Equipe, Equipe.id_edicao_competicao),
+        publicadas=sum(1 for e in edicoes if e.publicada),
+    )
+
+
+def _bloquear_edicoes_vinculadas(db: Session, ids_edicoes_evento: list[int]) -> list[dict]:
+    if not ids_edicoes_evento:
+        return []
+    ids = db.scalars(
+        select(EdicaoCompeticao.id_edicao_competicao)
+        .where(EdicaoCompeticao.id_edicao_evento.in_(ids_edicoes_evento))
+    ).all()
+    resumo = []
+    for id_edicao in ids:
+        edicao = bloquear_edicao(db, id_edicao)
+        resumo.append({
+            "id_edicao_competicao": edicao.id_edicao_competicao,
+            "id_competicao": edicao.id_competicao,
+            "identificacao": edicao.identificacao,
+            "estado": edicao.estado,
+        })
+    return resumo
+
+
+def excluir_evento(
+    db: Session, id_evento: int, confirmacao_nome: str, responsavel: Usuario
+) -> None:
+    """Exclui o evento em cascata (PD-RT15-01): edições do evento, edições de competição
+    vinculadas com todo o conteúdo e as competições que ficarem sem edições.
+
+    Confirmação reforçada: ``confirmacao_nome`` precisa ser idêntico ao nome cadastrado.
+    """
     with transacao(db):
         evento = db.get(Evento, id_evento)
         if evento is None:
-            raise NaoEncontrado("Evento nao encontrado.", campos=["id_evento"])
-        if len(evento.edicoes) > 0:
-            raise ConflitoEstado(
-                "Nao e permitido excluir evento que possui edicoes.",
-                campos=["edicoes"],
+            raise NaoEncontrado("Evento não encontrado.", campos=["id_evento"])
+        if confirmacao_nome != evento.nome:
+            raise ConfirmacaoInvalida(
+                "Digite o nome do evento exatamente como está cadastrado para confirmar a exclusão.",
+                campos=["confirmacao_nome"],
             )
-        antes = {
-            "id_evento": evento.id_evento,
-            "nome": evento.nome,
-            "slug": evento.slug,
-        }
+        ids_edicoes_evento = [e.id_edicao_evento for e in evento.edicoes]
         registrar_auditoria(
             db,
             entidade="eventos",
             id_entidade=evento.id_evento,
             acao="EXCLUIR",
-            antes=antes,
+            antes={
+                "id_evento": evento.id_evento,
+                "nome": evento.nome,
+                "slug": evento.slug,
+                "edicoes_evento": [
+                    {"id_edicao_evento": e.id_edicao_evento, "identificacao": e.identificacao}
+                    for e in evento.edicoes
+                ],
+                "edicoes_competicao": _bloquear_edicoes_vinculadas(db, ids_edicoes_evento),
+            },
             depois=None,
             id_edicao_competicao=None,
             responsavel=responsavel,
         )
-        db.delete(evento)
+        apagar_evento(db, id_evento)
+        _soltar_objetos_apagados(db)
+
+
+def excluir_edicao_evento(
+    db: Session, id_edicao_evento: int, confirmacao_identificacao: str, responsavel: Usuario
+) -> None:
+    """Exclui uma edição de evento com a mesma cascata do evento, restrita a ela."""
+    with transacao(db):
+        edicao_evento = db.get(EdicaoEvento, id_edicao_evento)
+        if edicao_evento is None:
+            raise NaoEncontrado("Edição de evento não encontrada.", campos=["id_edicao_evento"])
+        if confirmacao_identificacao != edicao_evento.identificacao:
+            raise ConfirmacaoInvalida(
+                "Digite a identificação da edição exatamente como está cadastrada para confirmar a exclusão.",
+                campos=["confirmacao_identificacao"],
+            )
+        registrar_auditoria(
+            db,
+            entidade="edicoes_evento",
+            id_entidade=edicao_evento.id_edicao_evento,
+            acao="EXCLUIR",
+            antes={
+                "id_evento": edicao_evento.id_evento,
+                "identificacao": edicao_evento.identificacao,
+                "edicoes_competicao": _bloquear_edicoes_vinculadas(db, [id_edicao_evento]),
+            },
+            depois=None,
+            id_edicao_competicao=None,
+            responsavel=responsavel,
+        )
+        apagar_edicao_evento(db, id_edicao_evento)
+        _soltar_objetos_apagados(db)
+
+
+def vincular_edicao_competicao(
+    db: Session, id_edicao_evento: int, id_edicao_competicao: int, responsavel: Usuario
+) -> EdicaoEventoDetalhe:
+    """Liga uma edição de competição existente à edição do evento (DF-RT15-02)."""
+    with transacao(db):
+        edicao_evento = db.get(EdicaoEvento, id_edicao_evento)
+        if edicao_evento is None:
+            raise NaoEncontrado("Edição de evento não encontrada.", campos=["id_edicao_evento"])
+        edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
+        if edicao is None:
+            raise NaoEncontrado("Edição de competição não encontrada.", campos=["id_edicao_competicao"])
+        edicao = bloquear_edicao(db, id_edicao_competicao)
+
+        if edicao.id_edicao_evento == id_edicao_evento:
+            return EdicaoEventoDetalhe.model_validate(edicao_evento)
+        if edicao.id_edicao_evento is not None:
+            atual = edicao.edicao_evento
+            raise ConflitoEstado(
+                f"Esta edição já está vinculada ao evento '{atual.evento.nome}' ({atual.identificacao}). "
+                "Desvincule antes de ligar a outro evento.",
+                campos=["id_edicao_competicao"],
+            )
+        if not (edicao_evento.data_inicio <= edicao.data_inicio and edicao.data_fim <= edicao_evento.data_fim):
+            raise ConfiguracaoInvalida(
+                f"O período da edição ({_formatar_data(edicao.data_inicio)} a {_formatar_data(edicao.data_fim)}) "
+                f"precisa estar dentro do período do evento ({_formatar_data(edicao_evento.data_inicio)} a "
+                f"{_formatar_data(edicao_evento.data_fim)}).",
+                campos=["id_edicao_competicao"],
+            )
+        edicao.id_edicao_evento = id_edicao_evento
+        incrementar_revisao(edicao)
+        db.flush()
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=edicao.id_edicao_competicao,
+            acao="VINCULAR_EVENTO",
+            antes={"id_edicao_evento": None},
+            depois={"id_edicao_evento": id_edicao_evento},
+            id_edicao_competicao=edicao.id_edicao_competicao,
+            responsavel=responsavel,
+        )
+        db.refresh(edicao_evento)
+        return EdicaoEventoDetalhe.model_validate(edicao_evento)
+
+
+def desvincular_edicao_competicao(
+    db: Session, id_edicao_evento: int, id_edicao_competicao: int, responsavel: Usuario
+) -> EdicaoEventoDetalhe:
+    with transacao(db):
+        edicao_evento = db.get(EdicaoEvento, id_edicao_evento)
+        if edicao_evento is None:
+            raise NaoEncontrado("Edição de evento não encontrada.", campos=["id_edicao_evento"])
+        edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
+        if edicao is None or edicao.id_edicao_evento != id_edicao_evento:
+            raise NaoEncontrado(
+                "Esta edição de competição não está vinculada a esta edição do evento.",
+                campos=["id_edicao_competicao"],
+            )
+        edicao = bloquear_edicao(db, id_edicao_competicao)
+        edicao.id_edicao_evento = None
+        incrementar_revisao(edicao)
+        db.flush()
+        registrar_auditoria(
+            db,
+            entidade="edicoes_competicao",
+            id_entidade=edicao.id_edicao_competicao,
+            acao="DESVINCULAR_EVENTO",
+            antes={"id_edicao_evento": id_edicao_evento},
+            depois={"id_edicao_evento": None},
+            id_edicao_competicao=edicao.id_edicao_competicao,
+            responsavel=responsavel,
+        )
+        db.refresh(edicao_evento)
+        return EdicaoEventoDetalhe.model_validate(edicao_evento)
 
 
 def criar_edicao_evento(
@@ -291,11 +516,11 @@ def criar_edicao_evento(
     with transacao(db):
         evento = db.get(Evento, id_evento)
         if evento is None:
-            raise NaoEncontrado("Evento nao encontrado.", campos=["id_evento"])
+            raise NaoEncontrado("Evento não encontrado.", campos=["id_evento"])
 
         if dados.data_inicio > dados.data_fim:
             raise ConfiguracaoInvalida(
-                "A data de inicio deve ser anterior ou igual a data de fim.",
+                "A data de término deve ser igual ou posterior à data de início.",
                 campos=["data_inicio", "data_fim"],
             )
 
@@ -309,7 +534,7 @@ def criar_edicao_evento(
         )
         if duplicada is not None:
             raise Duplicidade(
-                "Ja existe uma edicao com esta identificacao para este evento.",
+                "Já existe uma edição com esta identificação para este evento.",
                 campos=["identificacao"],
             )
 
@@ -350,7 +575,7 @@ def atualizar_edicao_evento(
         edicao_evento = db.get(EdicaoEvento, id_edicao_evento)
         if edicao_evento is None:
             raise NaoEncontrado(
-                "Edicao de evento nao encontrada.", campos=["id_edicao_evento"]
+                "Edição de evento não encontrada.", campos=["id_edicao_evento"]
             )
 
         if dados.identificacao is not None:
@@ -365,7 +590,7 @@ def atualizar_edicao_evento(
             )
             if duplicada is not None:
                 raise Duplicidade(
-                    "Ja existe uma edicao com esta identificacao para este evento.",
+                    "Já existe uma edição com esta identificação para este evento.",
                     campos=["identificacao"],
                 )
 
@@ -381,7 +606,7 @@ def atualizar_edicao_evento(
         )
         if nova_data_inicio > nova_data_fim:
             raise ConfiguracaoInvalida(
-                "A data de inicio deve ser anterior ou igual a data de fim.",
+                "A data de término deve ser igual ou posterior à data de início.",
                 campos=["data_inicio", "data_fim"],
             )
 
@@ -397,7 +622,7 @@ def atualizar_edicao_evento(
         for filha in filhas:
             if filha.data_inicio < nova_data_inicio or filha.data_fim > nova_data_fim:
                 raise ConflitoEstado(
-                    "O novo periodo do evento nao comporta as datas das edicoes esportivas vinculadas.",
+                    "O novo período do evento não comporta as datas das edições esportivas vinculadas.",
                     campos=["data_inicio", "data_fim"],
                 )
 
@@ -443,12 +668,12 @@ def criar_competicao_com_edicao(
         modalidade = db.get(Modalidade, dados.id_modalidade)
         if modalidade is None:
             raise NaoEncontrado(
-                "Modalidade nao encontrada.", campos=["id_modalidade"]
+                "Modalidade não encontrada.", campos=["id_modalidade"]
             )
 
         if dados.edicao.data_inicio > dados.edicao.data_fim:
             raise ConfiguracaoInvalida(
-                "A data de inicio deve ser anterior ou igual a data de fim.",
+                "A data de término deve ser igual ou posterior à data de início.",
                 campos=["edicao.data_inicio", "edicao.data_fim"],
             )
 
@@ -456,7 +681,7 @@ def criar_competicao_com_edicao(
             edicao_evento = db.get(EdicaoEvento, dados.edicao.id_edicao_evento)
             if edicao_evento is None:
                 raise NaoEncontrado(
-                    "Edicao de evento nao encontrada.",
+                    "Edição de evento não encontrada.",
                     campos=["edicao.id_edicao_evento"],
                 )
             if not (
@@ -464,7 +689,7 @@ def criar_competicao_com_edicao(
                 and dados.edicao.data_fim <= edicao_evento.data_fim
             ):
                 raise ConfiguracaoInvalida(
-                    "O periodo da edicao da competicao deve estar contido no periodo da edicao do evento.",
+                    "O período da edição da competição deve estar contido no período da edição do evento.",
                     campos=["edicao.data_inicio", "edicao.data_fim"],
                 )
 
@@ -476,6 +701,7 @@ def criar_competicao_com_edicao(
         )
         config_dict = config_validada.model_dump(mode="json")
 
+        _garantir_nome_unico(db, Competicao, dados.nome)
         slug = _gerar_slug_unico(db, Competicao, dados.nome)
         competicao = Competicao(
             nome=dados.nome,
@@ -559,7 +785,7 @@ def obter_competicao(db: Session, id_competicao: int) -> CompeticaoDetalhe:
         comp = db.get(Competicao, id_competicao)
         if comp is None:
             raise NaoEncontrado(
-                "Competicao nao encontrada.", campos=["id_competicao"]
+                "Competição não encontrada.", campos=["id_competicao"]
             )
         return _para_competicao_detalhe(comp)
 
@@ -574,7 +800,7 @@ def atualizar_competicao(
         competicao = db.get(Competicao, id_competicao)
         if competicao is None:
             raise NaoEncontrado(
-                "Competicao nao encontrada.", campos=["id_competicao"]
+                "Competição não encontrada.", campos=["id_competicao"]
             )
 
         if (
@@ -584,7 +810,7 @@ def atualizar_competicao(
             modalidade = db.get(Modalidade, dados.id_modalidade)
             if modalidade is None:
                 raise NaoEncontrado(
-                    "Modalidade nao encontrada.", campos=["id_modalidade"]
+                    "Modalidade não encontrada.", campos=["id_modalidade"]
                 )
             if (
                 db.query(EdicaoCompeticao)
@@ -593,7 +819,7 @@ def atualizar_competicao(
                 > 0
             ):
                 raise ConflitoEstado(
-                    "Nao e permitido alterar a modalidade de uma competicao que ja possui edicoes.",
+                    "Não é permitido alterar a modalidade de uma competição que já possui edições.",
                     campos=["id_modalidade"],
                 )
             competicao.id_modalidade = dados.id_modalidade
@@ -605,8 +831,9 @@ def atualizar_competicao(
             "id_modalidade": competicao.id_modalidade,
         }
         if dados.nome is not None:
+            _garantir_nome_unico(db, Competicao, dados.nome, competicao.id_competicao)
             competicao.nome = dados.nome
-        if dados.descricao is not None:
+        if "descricao" in dados.model_fields_set:
             competicao.descricao = dados.descricao
         if dados.arquivado is not None:
             competicao.arquivado = dados.arquivado
@@ -649,12 +876,12 @@ def criar_edicao_competicao(
         competicao = db.get(Competicao, id_competicao)
         if competicao is None:
             raise NaoEncontrado(
-                "Competicao nao encontrada.", campos=["id_competicao"]
+                "Competição não encontrada.", campos=["id_competicao"]
             )
 
         if dados.data_inicio > dados.data_fim:
             raise ConfiguracaoInvalida(
-                "A data de inicio deve ser anterior ou igual a data de fim.",
+                "A data de término deve ser igual ou posterior à data de início.",
                 campos=["data_inicio", "data_fim"],
             )
 
@@ -668,7 +895,7 @@ def criar_edicao_competicao(
         )
         if duplicada is not None:
             raise Duplicidade(
-                "Ja existe uma edicao com esta identificacao para esta competicao.",
+                "Já existe uma edição com esta identificação para esta competição.",
                 campos=["identificacao"],
             )
 
@@ -676,14 +903,14 @@ def criar_edicao_competicao(
             edicao_evento = db.get(EdicaoEvento, dados.id_edicao_evento)
             if edicao_evento is None:
                 raise NaoEncontrado(
-                    "Edicao de evento nao encontrada.", campos=["id_edicao_evento"]
+                    "Edição de evento não encontrada.", campos=["id_edicao_evento"]
                 )
             if not (
                 edicao_evento.data_inicio <= dados.data_inicio
                 and dados.data_fim <= edicao_evento.data_fim
             ):
                 raise ConfiguracaoInvalida(
-                    "O periodo da edicao da competicao deve estar contido no periodo da edicao do evento.",
+                    "O período da edição da competição deve estar contido no período da edição do evento.",
                     campos=["data_inicio", "data_fim"],
                 )
 
@@ -735,7 +962,7 @@ def obter_edicao_competicao(
         edicao = db.get(EdicaoCompeticao, id_edicao_competicao)
         if edicao is None:
             raise NaoEncontrado(
-                "Edicao de competicao nao encontrada.",
+                "Edição de competição não encontrada.",
                 campos=["id_edicao_competicao"],
             )
         return _para_edicao_competicao_detalhe(edicao)
@@ -776,7 +1003,7 @@ def atualizar_edicao_competicao(
 
         if dados.data_inicio > dados.data_fim:
             raise ConfiguracaoInvalida(
-                "A data de inicio deve ser anterior ou igual a data de fim.",
+                "A data de término deve ser igual ou posterior à data de início.",
                 campos=["data_inicio", "data_fim"],
             )
 
@@ -791,7 +1018,7 @@ def atualizar_edicao_competicao(
         )
         if outra is not None:
             raise Duplicidade(
-                "Ja existe uma edicao com esta identificacao para esta competicao.",
+                "Já existe uma edição com esta identificação para esta competição.",
                 campos=["identificacao"],
             )
 
@@ -799,14 +1026,14 @@ def atualizar_edicao_competicao(
             edicao_evento = db.get(EdicaoEvento, dados.id_edicao_evento)
             if edicao_evento is None:
                 raise NaoEncontrado(
-                    "Edicao de evento nao encontrada.", campos=["id_edicao_evento"]
+                    "Edição de evento não encontrada.", campos=["id_edicao_evento"]
                 )
             if not (
                 edicao_evento.data_inicio <= dados.data_inicio
                 and dados.data_fim <= edicao_evento.data_fim
             ):
                 raise ConfiguracaoInvalida(
-                    "O periodo da edicao da competicao deve estar contido no periodo da edicao do evento.",
+                    "O período da edição da competição deve estar contido no período da edição do evento.",
                     campos=["data_inicio", "data_fim"],
                 )
 
@@ -954,7 +1181,7 @@ def excluir_competicao(db: Session, id_competicao: int, responsavel: Usuario) ->
     with transacao(db):
         competicao = db.get(Competicao, id_competicao)
         if competicao is None:
-            raise NaoEncontrado("Competicao nao encontrada.", campos=["id_competicao"])
+            raise NaoEncontrado("Competição não encontrada.", campos=["id_competicao"])
         edicoes = [bloquear_edicao(db, e.id_edicao_competicao) for e in competicao.edicoes]
         registrar_auditoria(
             db,
@@ -1096,10 +1323,14 @@ def finalizar_edicao_competicao(
 
         if edicao.formato == "PONTOS_CORRIDOS":
             tabela = obter_classificacao_edicao(db, id_edicao_competicao)
-            linhas_titulo = (tabela.linhas or [])[:2]
-            if any(l.empate_persistente for l in linhas_titulo):
+            linhas = tabela.linhas or []
+            empatada = next((l for l in linhas[:2] if l.empate_persistente), None)
+            if empatada is not None:
+                nomes = [l.nome_equipe for l in linhas if l.posicao == empatada.posicao and l.empate_persistente]
+                lista = nomes[0] if len(nomes) == 1 else f"{', '.join(nomes[:-1])} e {nomes[-1]}"
+                disputa = "pelo título" if empatada.posicao == 1 else f"pela {empatada.posicao}ª posição"
                 raise ConflitoEstado(
-                    "Existe empate persistente não resolvido na disputa pelo título. Registre uma decisão de desempate antes de finalizar.",
+                    f"Há empate não resolvido {disputa} ({lista}). Registre a decisão antes de finalizar.",
                     campos=["classificacao"],
                 )
 

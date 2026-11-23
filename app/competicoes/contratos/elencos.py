@@ -1,9 +1,9 @@
-"""Contratos administrativos de competidores e inscricoes por edicao."""
+"""Contratos administrativos de competidores e inscrições por edição."""
 
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import Field, StrictBool
+from pydantic import Field, StrictBool, field_validator
 
 from .comuns import Contrato, Id, Nome, Pagina
 
@@ -51,6 +51,20 @@ class EquipeCriar(Contrato):
     sigla: Sigla | None = None
 
 
+class EquipeAtualizar(Contrato):
+    """Nome e sigla não são estruturais: editáveis em qualquer estado da edição."""
+
+    nome: Nome | None = None
+    sigla: Sigla | None = None
+
+    @field_validator("nome")
+    @classmethod
+    def nome_nao_nulo(cls, nome: str | None) -> str | None:
+        if nome is None:
+            raise ValueError("Informe o nome da equipe.")
+        return nome
+
+
 class IntegranteCriar(Contrato):
     id_competidor: Id
     nome_esportivo: Nome
@@ -59,7 +73,19 @@ class IntegranteCriar(Contrato):
 
 
 class IntegranteAtualizar(Contrato):
-    situacao: SituacaoIntegrante
+    """Atualização parcial: só os campos enviados mudam; ``null`` limpa camisa e posição."""
+
+    situacao: SituacaoIntegrante | None = None
+    nome_esportivo: Nome | None = None
+    numero_camisa: NumeroCamisa | None = None
+    posicao: Posicao | None = None
+
+    @field_validator("situacao", "nome_esportivo")
+    @classmethod
+    def obrigatorio_se_enviado(cls, valor: str | None) -> str | None:
+        if valor is None:
+            raise ValueError("Campo obrigatório.")
+        return valor
 
 
 class IntegranteDetalhe(IntegranteCriar):
@@ -80,3 +106,11 @@ class EquipeDetalhe(EquipeCriar):
 
 class EquipesCopiar(Contrato):
     id_edicao_origem: Id
+
+
+class OrigemCopiaEquipes(Contrato):
+    """Edição que pode servir de origem para copiar equipes (seletor sem ID interno)."""
+
+    id_edicao_competicao: Id
+    rotulo: str
+    equipes: int

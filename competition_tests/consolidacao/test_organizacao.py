@@ -21,6 +21,7 @@ from competicoes.contratos.organizacao import (
 )
 from competicoes.erros import (
     ConfiguracaoInvalida,
+    ConfirmacaoInvalida,
     ConflitoEstado,
     ConflitoRevisao,
     Duplicidade,
@@ -118,7 +119,9 @@ def test_criar_evento_cria_identidade_e_primeira_edicao(db, usuario, dados_event
 
 def test_slug_unico_gera_sufixo_se_necessario(db, usuario, dados_evento_com_edicao):
     detalhe1 = criar_evento_com_edicao(db, dados_evento_com_edicao, usuario)
-    detalhe2 = criar_evento_com_edicao(db, dados_evento_com_edicao, usuario)
+    # Nome diferente (nomes são únicos) que gera o mesmo slug.
+    outro_nome = dados_evento_com_edicao.model_copy(update={"nome": "Jogos Universitários – 2026"})
+    detalhe2 = criar_evento_com_edicao(db, outro_nome, usuario)
     assert detalhe1.slug == "jogos-universitarios-2026"
     assert detalhe2.slug == "jogos-universitarios-2026-2"
 
@@ -241,10 +244,14 @@ def test_encurtar_periodo_do_evento_que_nao_cabe_nos_filhos_falha_sem_alterar(
     assert ed_comp.data_fim == date(2026, 6, 30)
 
 
-def test_excluir_evento_com_edicoes_e_conflito(db, usuario, dados_evento_com_edicao):
+def test_excluir_evento_com_edicoes_em_cascata(db, usuario, dados_evento_com_edicao):
+    # PD-RT15-01: exclusão em cascata com confirmação pelo nome exato.
     evento = criar_evento_com_edicao(db, dados_evento_com_edicao, usuario)
-    with pytest.raises(ConflitoEstado):
-        excluir_evento(db, evento.id_evento, usuario)
+    with pytest.raises(ConfirmacaoInvalida):
+        excluir_evento(db, evento.id_evento, evento.nome.upper(), usuario)
+    excluir_evento(db, evento.id_evento, evento.nome, usuario)
+    with pytest.raises(NaoEncontrado):
+        obter_evento(db, evento.id_evento)
 
 
 # -------------------------------------------------------------------------
@@ -763,7 +770,7 @@ def test_atualizar_edicao_competicao_duplicidade(db, usuario, modalidade_padrao)
 def test_excluir_evento_sem_edicoes_sucesso(db, usuario):
     ev = factory_criar_evento(db, nome="Evento Vazio")
     db.commit()
-    excluir_evento(db, ev.id_evento, usuario)
+    excluir_evento(db, ev.id_evento, "Evento Vazio", usuario)
     with pytest.raises(NaoEncontrado):
         obter_evento(db, ev.id_evento)
 

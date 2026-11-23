@@ -21,7 +21,9 @@ from competicoes.modelos import (
     DecisaoClassificacao,
     DueloEliminatorio,
     EdicaoCompeticao,
+    EdicaoEvento,
     Equipe,
+    Evento,
     GrupoCompeticao,
     IntegranteEquipe,
     OcorrenciaPartida,
@@ -60,6 +62,8 @@ def _apagar_disciplina(db: Session, ids_suspensoes: list[int], ids_partidas: Ite
 
 def apagar_integrantes_de_equipes(db: Session, ids_equipes: list[int]) -> None:
     """Apaga as inscricoes (atletas) das equipes; competidores permanecem."""
+    if not ids_equipes:
+        return
     ids_integrantes = _ids(db, IntegranteEquipe.id_integrante, IntegranteEquipe.id_equipe.in_(ids_equipes))
     _apagar_disciplina(
         db, _ids(db, SuspensaoCompeticao.id_suspensao, SuspensaoCompeticao.id_integrante.in_(ids_integrantes))
@@ -110,3 +114,28 @@ def apagar_competicao(db: Session, id_competicao: int) -> None:
     for id_edicao in _ids(db, EdicaoCompeticao.id_edicao_competicao, EdicaoCompeticao.id_competicao == id_competicao):
         apagar_edicao(db, id_edicao)
     _apagar(db, Competicao, Competicao.id_competicao == id_competicao)
+
+
+def apagar_edicao_evento(db: Session, id_edicao_evento: int) -> None:
+    """Apaga a edição de evento e, em cascata, as edições de competição vinculadas.
+
+    A competição que fica sem nenhuma edição também é apagada (PD-RT15-01); a que
+    ainda tem edições fora do evento permanece.
+    """
+    vinculadas = db.execute(
+        select(EdicaoCompeticao.id_edicao_competicao, EdicaoCompeticao.id_competicao)
+        .where(EdicaoCompeticao.id_edicao_evento == id_edicao_evento)
+    ).all()
+    for id_edicao, _ in vinculadas:
+        apagar_edicao(db, id_edicao)
+    for id_competicao in {id_competicao for _, id_competicao in vinculadas}:
+        if not _ids(db, EdicaoCompeticao.id_edicao_competicao, EdicaoCompeticao.id_competicao == id_competicao):
+            _apagar(db, Competicao, Competicao.id_competicao == id_competicao)
+    _apagar(db, EdicaoEvento, EdicaoEvento.id_edicao_evento == id_edicao_evento)
+
+
+def apagar_evento(db: Session, id_evento: int) -> None:
+    """Apaga o evento com todas as suas edições (e o que estiver vinculado a elas)."""
+    for id_edicao_evento in _ids(db, EdicaoEvento.id_edicao_evento, EdicaoEvento.id_evento == id_evento):
+        apagar_edicao_evento(db, id_edicao_evento)
+    _apagar(db, Evento, Evento.id_evento == id_evento)
