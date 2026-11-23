@@ -1,7 +1,8 @@
 """Entradas e saidas para identidades permanentes e suas edicoes."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
+from typing_extensions import Self
 
 from pydantic import AliasChoices, AliasPath, Field, StrictBool, ValidationInfo, field_validator, model_validator
 
